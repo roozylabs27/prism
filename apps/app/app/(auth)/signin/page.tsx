@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { useForm } from 'react-hook-form';
 import { useTheme } from 'next-themes';
 import { useQuery } from '@tanstack/react-query';
@@ -283,6 +284,16 @@ export default function SignInPage() {
               )}
               <span>GitHub</span>
             </Button>
+          </div>
+
+          <div className="mt-6 text-center text-xs text-muted-foreground">
+            Don&apos;t have an account?{' '}
+            <Link
+              href={AppRoutes.SIGNUP}
+              className="font-medium text-foreground hover:text-violet-400 underline underline-offset-4 transition-colors"
+            >
+              Sign up
+            </Link>
           </div>
         </CardContent>
       </Card>
