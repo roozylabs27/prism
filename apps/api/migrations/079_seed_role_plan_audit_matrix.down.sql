@@ -1,10 +1,19 @@
 -- Rollback Migration 079
 
-DELETE FROM workspace_members WHERE workspace_id IN ('ws_free_eng', 'ws_free_finance', 'ws_pro_eng', 'ws_pro_finance', 'ws_team_eng', 'ws_team_finance', 'ws_enterprise_eng', 'ws_enterprise_finance');
-DELETE FROM organization_members WHERE org_id IN ('org_matrix_free', 'org_matrix_pro', 'org_matrix_team', 'org_matrix_enterprise');
-DELETE FROM account WHERE user_id LIKE 'usr_%_free' OR user_id LIKE 'usr_%_pro' OR user_id LIKE 'usr_%_team' OR user_id LIKE 'usr_%_enterprise';
-DELETE FROM "user" WHERE id LIKE 'usr_%_free' OR id LIKE 'usr_%_pro' OR id LIKE 'usr_%_team' OR id LIKE 'usr_%_enterprise';
-DELETE FROM tenant_quotas WHERE id IN ('quota_matrix_free', 'quota_matrix_pro', 'quota_matrix_team', 'quota_matrix_enterprise');
-DELETE FROM projects WHERE id IN ('proj_free_eng', 'proj_free_finance', 'proj_pro_eng', 'proj_pro_finance', 'proj_team_eng', 'proj_team_finance', 'proj_enterprise_eng', 'proj_enterprise_finance');
-DELETE FROM workspaces WHERE id IN ('ws_free_eng', 'ws_free_finance', 'ws_pro_eng', 'ws_pro_finance', 'ws_team_eng', 'ws_team_finance', 'ws_enterprise_eng', 'ws_enterprise_finance');
-DELETE FROM organizations WHERE id IN ('org_matrix_free', 'org_matrix_pro', 'org_matrix_team', 'org_matrix_enterprise');
+DELETE FROM workspace_members WHERE user_id IN (SELECT id FROM "user" WHERE email LIKE '%.prism.local');
+DELETE FROM organization_members WHERE org_id IN (SELECT id FROM organizations WHERE slug LIKE 'org-matrix-%');
+DELETE FROM account WHERE account_id LIKE '%.prism.local';
+DELETE FROM "user" WHERE email LIKE '%.prism.local';
+DELETE FROM tenant_quotas WHERE organization_id IN (SELECT id FROM organizations WHERE slug LIKE 'org-matrix-%');
+DELETE FROM projects WHERE workspace_id IN (SELECT id FROM workspaces WHERE slug IN ('ws-free-eng', 'ws-free-finance', 'ws-pro-eng', 'ws-pro-finance', 'ws-team-eng', 'ws-team-finance', 'ws-enterprise-eng', 'ws-enterprise-finance'));
+DELETE FROM workspaces WHERE org_id IN (SELECT id FROM organizations WHERE slug LIKE 'org-matrix-%');
+DELETE FROM organizations WHERE slug IN ('org-matrix-free', 'org-matrix-pro', 'org-matrix-team', 'org-matrix-enterprise');
+
+-- Restore original CHECK constraints
+ALTER TABLE organization_members DROP CONSTRAINT IF EXISTS organization_members_role_check;
+ALTER TABLE organization_members ADD CONSTRAINT organization_members_role_check 
+    CHECK (role IN ('owner', 'admin', 'developer', 'billing_manager', 'auditor'));
+
+ALTER TABLE workspace_members DROP CONSTRAINT IF EXISTS workspace_members_role_check;
+ALTER TABLE workspace_members ADD CONSTRAINT workspace_members_role_check 
+    CHECK (role IN ('admin', 'developer', 'operator', 'viewer'));
