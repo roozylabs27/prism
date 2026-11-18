@@ -30,7 +30,7 @@ export interface ApiClientAppStat {
   requests: number;
   tokens: number;
   costUsd: number;
-  errorRate: number;
+  errorRate?: number;
 }
 
 export interface ApiModelStat {
@@ -38,14 +38,19 @@ export interface ApiModelStat {
   requests: number;
   tokens: number;
   costUsd: number;
+  avgTtftMs?: number;
   avgLatencyMs: number;
-  errorRate: number;
+  errorRate?: number;
 }
 
 export interface ApiLogAnalytics {
-  timeWindow: string;
-  totalRequests: number;
-  successRate: number;
+  timeWindow?: string;
+  totalRequests?: number;
+  successRate?: number;
+  totalSpendUsd?: number;
+  estimatedSavingsUsd?: number;
+  avgTtftMs?: number;
+  avgLatencyMs?: number;
   clientApps: ApiClientAppStat[];
   models: ApiModelStat[];
 }

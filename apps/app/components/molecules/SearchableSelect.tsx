@@ -106,7 +106,7 @@ function SearchableSelect({
           aria-invalid={isInvalid ? true : undefined}
           data-invalid={isInvalid ? 'true' : undefined}
           className={cn(
-            'flex h-9 w-full items-center justify-between gap-2 rounded-none border border-input bg-transparent px-3 py-2 text-xs shadow-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50 [&>span]:line-clamp-1',
+            'flex h-9 w-full items-center justify-between gap-2 rounded-lg border border-input bg-transparent px-3 py-2 text-xs shadow-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50 [&>span]:line-clamp-1',
             'aria-invalid:border-destructive aria-invalid:focus:ring-destructive data-[invalid=true]:border-destructive data-[invalid=true]:focus:ring-destructive',
             isInvalid && 'border-destructive focus:ring-destructive',
             className
@@ -134,7 +134,7 @@ function SearchableSelect({
 
       <PopoverPrimitive.Portal>
         <PopoverPrimitive.Content
-          className="z-50 min-w-[var(--radix-popover-trigger-width)] overflow-hidden rounded-none border border-border bg-popover text-popover-foreground shadow-md animate-in fade-in-0 zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=top]:slide-in-from-bottom-2"
+          className="z-50 min-w-[var(--radix-popover-trigger-width)] overflow-hidden rounded-lg border border-border bg-popover text-popover-foreground shadow-lg animate-in fade-in-0 zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=top]:slide-in-from-bottom-2"
           sideOffset={4}
           align="start"
           style={{ width: 'var(--radix-popover-trigger-width)' }}
@@ -171,7 +171,7 @@ function SearchableSelect({
                   type="button"
                   disabled={option.disabled}
                   className={cn(
-                    'relative flex w-full cursor-pointer select-none items-center rounded-none py-1.5 pl-8 pr-2 text-xs outline-none transition-colors hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground',
+                    'relative flex w-full cursor-pointer select-none items-center rounded-md py-1.5 pl-8 pr-2 text-xs outline-none transition-colors hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground',
                     option.disabled && 'pointer-events-none opacity-50',
                     value === option.value && 'font-medium'
                   )}

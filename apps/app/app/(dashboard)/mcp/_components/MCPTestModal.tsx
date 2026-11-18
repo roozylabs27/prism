@@ -466,7 +466,7 @@ export function MCPTestModal({
                   <FormLabel>Tool</FormLabel>
                   <FormControl>
                     {toolsLoading ? (
-                      <div className="flex h-9 items-center gap-2 px-3 border border-input rounded-none text-xs text-muted-foreground">
+                      <div className="flex h-9 items-center gap-2 px-3 border border-input rounded-lg text-xs text-muted-foreground">
                         <Loader2 className="h-3.5 w-3.5 animate-spin" />
                         <span>Loading synced tools…</span>
                       </div>
@@ -517,8 +517,8 @@ export function MCPTestModal({
                       onClick={() => setMode("guided")}
                       className={
                         mode === "guided"
-                          ? "rounded-none border border-border bg-muted px-2 py-1 text-[11px] font-medium"
-                          : "rounded-none px-2 py-1 text-[11px] text-muted-foreground hover:text-foreground"
+                          ? "rounded-md border border-border bg-muted px-2 py-1 text-[11px] font-medium"
+                          : "rounded-md px-2 py-1 text-[11px] text-muted-foreground hover:text-foreground"
                       }
                     >
                       Guided
@@ -531,8 +531,8 @@ export function MCPTestModal({
                       }}
                       className={
                         mode === "raw"
-                          ? "rounded-none border border-border bg-muted px-2 py-1 text-[11px] font-medium"
-                          : "rounded-none px-2 py-1 text-[11px] text-muted-foreground hover:text-foreground"
+                          ? "rounded-md border border-border bg-muted px-2 py-1 text-[11px] font-medium"
+                          : "rounded-md px-2 py-1 text-[11px] text-muted-foreground hover:text-foreground"
                       }
                     >
                       Raw JSON
@@ -541,7 +541,7 @@ export function MCPTestModal({
                 </div>
                 {mode === "guided" && selectedTool ? (
                   Object.keys(props).length > 0 ? (
-                    <div className="space-y-3 border border-border p-3 rounded-none">
+                    <div className="space-y-3 border border-border p-3 rounded-lg">
                       {Object.entries(props).map(([name, prop]) => (
                         <SchemaField
                           key={name}
@@ -629,7 +629,7 @@ export function MCPTestModal({
                     Status {testResult.statusCode} ({testResult.latencyMs}ms)
                   </Badge>
                 </div>
-                <div className="p-3 rounded-none border border-border bg-muted/40 font-mono text-xs overflow-y-auto max-h-48 whitespace-pre-wrap">
+                <div className="p-3 rounded-lg border border-border bg-muted/40 font-mono text-xs overflow-y-auto max-h-48 whitespace-pre-wrap">
                   {typeof testResult.result === "object"
                     ? JSON.stringify(testResult.result, null, 2)
                     : String(testResult.result)}

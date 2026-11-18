@@ -26,7 +26,7 @@ export function SecretReveal({ label, secret }: SecretRevealProps) {
   };
 
   return (
-    <div className="rounded-none border border-border bg-card/80 p-3.5 font-mono text-xs text-left space-y-2">
+    <div className="rounded-xl border border-border bg-card/80 p-3.5 font-mono text-xs text-left space-y-2">
       <div className="flex items-center justify-between">
         <span className="text-muted-foreground text-[10px] uppercase font-semibold">{label}</span>
         <Button
@@ -36,14 +36,14 @@ export function SecretReveal({ label, secret }: SecretRevealProps) {
           onClick={handleCopy}
           className="h-6 px-2 text-[11px] gap-1 cursor-pointer font-sans"
         >
-          {copied ? <Check className="h-3 w-3 text-emerald-400" /> : <Copy className="h-3 w-3" />}
+          {copied ? <Check className="h-3 w-3 text-emerald-700 dark:text-emerald-400" /> : <Copy className="h-3 w-3" />}
           <span>{copied ? 'Copied' : 'Copy Key'}</span>
         </Button>
       </div>
-      <p className="font-mono text-xs text-emerald-400 bg-background/60 p-2.5 rounded border border-border/60 break-all select-all">
+      <p className="font-mono text-xs text-emerald-700 dark:text-emerald-400 bg-background/60 p-2.5 rounded-lg border border-border/60 break-all select-all">
         {secret}
       </p>
-      <div className="flex items-start gap-1.5 text-[11px] text-amber-400/90 font-sans mt-2 bg-amber-500/10 p-2 rounded border border-amber-500/20">
+      <div className="flex items-start gap-1.5 text-[11px] text-amber-700 dark:text-amber-400/90 font-sans mt-2 bg-amber-500/10 p-2 rounded-lg border border-amber-500/20">
         <ShieldAlert className="h-4 w-4 shrink-0 mt-0.5" />
         <span>
           Please copy your API key now and store it securely. For security reasons, you will not be able to view this

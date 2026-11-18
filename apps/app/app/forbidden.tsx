@@ -21,7 +21,7 @@ export default function ForbiddenPage() {
 
       {/* Brand Header */}
       <div className="relative z-10 mb-6 flex items-center gap-2.5">
-        <div className="flex h-10 w-10 items-center justify-center rounded-none bg-amber-600 text-white shadow-md border border-amber-400/30">
+        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-600 text-white shadow-sm border border-amber-400/30">
           <ShieldAlert className="h-5 w-5" />
         </div>
         <div className="flex flex-col">
@@ -58,7 +58,7 @@ export default function ForbiddenPage() {
           </CardHeader>
 
           <CardContent className="space-y-4">
-            <div className="rounded-none border border-amber-500/20 bg-amber-500/5 p-3 font-mono text-xs space-y-1">
+            <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 p-3 font-mono text-xs space-y-1">
               <div className="flex items-center justify-between text-[11px] text-muted-foreground">
                 <span className="uppercase font-semibold text-amber-400">Security Policy:</span>
                 <span className="text-muted-foreground">TENANT_POLICY_REJECT</span>

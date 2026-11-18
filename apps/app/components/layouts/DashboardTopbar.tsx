@@ -2,6 +2,7 @@
 
 import { FeatureGate } from '@/components/molecules/FeatureGate';
 import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 import { ThemeToggle } from '@/components/molecules/ThemeToggle';
 import { StatusDot } from '@/components/atoms/Badge';
 import { TenantSelector } from '@/components/TenantSelector';
@@ -16,8 +17,36 @@ import {
 } from '@/components/molecules/DropdownMenu';
 import { useAuth } from '@/context/AuthContext';
 import { useDashboardHealthQuery } from '@/hooks/queries/useDashboardQuery';
+import { useSidebarStore } from '@/stores/useSidebarStore';
 import { AppRoutes } from '@/constants/routes';
-import { Building, CreditCard, LogOut, Users } from 'lucide-react';
+import { Building, CreditCard, LogOut, Menu, Users } from 'lucide-react';
+
+const ROUTE_TITLES: Array<{ prefix: string; label: string }> = [
+  { prefix: AppRoutes.SANDBOX, label: 'AI Sandbox' },
+  { prefix: AppRoutes.LOGS, label: 'Request Logs' },
+  { prefix: AppRoutes.AUDIT_TRAIL, label: 'Audit Trail' },
+  { prefix: AppRoutes.PROVIDERS, label: 'Providers' },
+  { prefix: AppRoutes.CREDENTIALS, label: 'Credentials' },
+  { prefix: AppRoutes.MODELS, label: 'Models' },
+  { prefix: AppRoutes.POLICIES, label: 'Routing Policies' },
+  { prefix: AppRoutes.GATEWAY_KEYS, label: 'Gateway Keys' },
+  { prefix: AppRoutes.AGENTS, label: 'Agent Gateway' },
+  { prefix: AppRoutes.TOOLS, label: 'Tool Gateway' },
+  { prefix: AppRoutes.RESOURCES, label: 'Resource Gateway' },
+  { prefix: AppRoutes.MCP, label: 'MCP Gateway' },
+  { prefix: AppRoutes.PLAYGROUND, label: 'Routing Simulator' },
+  { prefix: AppRoutes.GOVERNANCE, label: 'Governance & RBAC' },
+  { prefix: AppRoutes.BUDGETS, label: 'Budgets & Quotas' },
+  { prefix: AppRoutes.SETTINGS_MEMBERS, label: 'Team Members' },
+  { prefix: AppRoutes.BILLING, label: 'Billing & Plans' },
+  { prefix: AppRoutes.SETTINGS_ORGANIZATION, label: 'Settings' },
+];
+
+function getRouteLabel(pathname: string): string {
+  if (pathname === AppRoutes.HOME) return 'Overview';
+  const match = ROUTE_TITLES.find((r) => pathname.startsWith(r.prefix));
+  return match?.label || 'Overview';
+}
 
 function getUserInitials(name?: string, email?: string): string {
   if (name && name.trim()) {
@@ -34,8 +63,10 @@ function getUserInitials(name?: string, email?: string): string {
 }
 
 export function DashboardTopbar() {
+  const pathname = usePathname();
   const { user, logout } = useAuth();
   const { data: healthData, isError: isHealthError } = useDashboardHealthQuery();
+  const { toggleMobileOpen } = useSidebarStore();
 
   const isAnyProviderDegraded =
     isHealthError ||
@@ -51,22 +82,43 @@ export function DashboardTopbar() {
   const role = user?.role || 'Admin';
   const initials = getUserInitials(user?.name, user?.email);
   const avatarSrc = user?.avatarUrl || user?.image;
+  const routeLabel = getRouteLabel(pathname);
 
   return (
-    <header className="sticky top-0 z-30 flex h-14 items-center justify-between border-b border-border bg-background/95 px-6 backdrop-blur">
-      <div className="flex items-center gap-4">
+    <header className="sticky top-0 z-30 flex h-14 items-center justify-between gap-3 border-b border-border bg-background/95 px-4 sm:px-6 backdrop-blur">
+      <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+        <button
+          type="button"
+          onClick={toggleMobileOpen}
+          className="inline-flex md:hidden min-h-[40px] items-center gap-1.5 rounded-lg border border-border bg-card px-2.5 text-xs font-medium text-foreground hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring cursor-pointer"
+          aria-label="Open navigation menu"
+        >
+          <Menu className="h-4 w-4" />
+          <span>Menu</span>
+        </button>
+
         <TenantSelector />
-        <StatusDot status={systemStatus} label={systemStatusLabel} />
+
+        <span className="hidden sm:inline text-muted-foreground/60" aria-hidden="true">
+          /
+        </span>
+        <span className="hidden sm:inline truncate text-xs font-medium text-foreground">
+          {routeLabel}
+        </span>
       </div>
 
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-2.5 sm:gap-3 shrink-0">
+        <div className="hidden md:flex items-center rounded-lg border border-border bg-card px-2.5 py-1.5">
+          <StatusDot status={systemStatus} label={systemStatusLabel} />
+        </div>
+
         <ThemeToggle />
 
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <button
               type="button"
-              className="flex items-center rounded-full p-0.5 transition-all hover:ring-2 hover:ring-primary/40 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-background cursor-pointer"
+              className="flex items-center rounded-full p-0.5 transition-all hover:ring-2 hover:ring-violet-500/40 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background cursor-pointer"
               aria-label="User account menu"
             >
               <Avatar className="h-8 w-8">
@@ -84,7 +136,7 @@ export function DashboardTopbar() {
                 <p className="text-xs font-semibold leading-none text-foreground truncate">{displayName}</p>
                 <p className="text-[11px] leading-none text-muted-foreground truncate">{email}</p>
                 <div className="pt-1">
-                  <span className="inline-flex items-center rounded-none px-1.5 py-0.5 text-[10px] font-medium font-mono bg-secondary text-muted-foreground border border-border">
+                  <span className="inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-medium font-mono bg-secondary text-muted-foreground border border-border">
                     {role}
                   </span>
                 </div>

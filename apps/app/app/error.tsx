@@ -35,7 +35,7 @@ export default function ErrorBoundaryPage({
 
       {/* Brand Header */}
       <div className="relative z-10 mb-6 flex items-center gap-2.5">
-        <div className="flex h-10 w-10 items-center justify-center rounded-none bg-red-600 text-white shadow-md border border-red-400/30">
+        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-rose-600 text-white shadow-sm border border-rose-400/30">
           <Shield className="h-5 w-5" />
         </div>
         <div className="flex flex-col">
@@ -68,12 +68,12 @@ export default function ErrorBoundaryPage({
 
           <CardContent className="space-y-4">
             {/* Error Message Box */}
-            <div className="rounded-none border border-red-500/20 bg-red-500/5 p-3.5 font-mono text-xs">
+            <div className="rounded-lg border border-rose-500/20 bg-rose-500/5 p-3.5 font-mono text-xs">
               <div className="flex items-center justify-between text-[11px] text-muted-foreground mb-1.5">
-                <span className="uppercase font-semibold text-red-400">Error Digest:</span>
+                <span className="uppercase font-semibold text-rose-600 dark:text-rose-400">Error Digest:</span>
                 <span className="text-muted-foreground">{error.digest || 'ERR_RUNTIME_FAULT'}</span>
               </div>
-              <p className="font-semibold text-foreground break-all bg-background/80 p-2 border border-border/60">
+              <p className="font-semibold text-foreground break-all bg-background/80 p-2 rounded-md border border-border/60">
                 {error.message || 'An unexpected client-side error occurred.'}
               </p>
 
@@ -90,7 +90,7 @@ export default function ErrorBoundaryPage({
                   </button>
 
                   {showDetails && (
-                    <pre className="mt-2 max-h-36 overflow-auto bg-black/70 text-emerald-400 p-2 text-[10px] leading-relaxed border border-border">
+                    <pre className="mt-2 max-h-36 overflow-auto rounded-md bg-console text-emerald-400 p-2 text-[10px] leading-relaxed border border-border">
                       {error.stack}
                     </pre>
                   )}
@@ -99,7 +99,7 @@ export default function ErrorBoundaryPage({
             </div>
 
             {/* Quick Diagnostic Tips */}
-            <div className="rounded-none border border-border bg-muted/30 p-3 text-xs space-y-1.5">
+            <div className="rounded-lg border border-border bg-muted/30 p-3 text-xs space-y-1.5">
               <p className="font-semibold font-mono text-[11px] text-foreground flex items-center gap-1.5">
                 <Activity className="h-3.5 w-3.5 text-muted-foreground" />
                 Automatic Recovery Suggestions:

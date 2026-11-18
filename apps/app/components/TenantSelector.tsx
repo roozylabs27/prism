@@ -76,10 +76,10 @@ export function TenantSelector() {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="outline" size="sm" className="h-8 gap-2 px-2.5 text-xs font-medium">
-          <Building2 className="h-3.5 w-3.5 text-primary" />
+        <Button variant="outline" size="sm" className="h-8 gap-2 rounded-lg border-border/80 bg-card px-2.5 text-xs font-medium hover:bg-accent">
+          <Building2 className="h-3.5 w-3.5 text-prism-violet" />
           <span className="max-w-[140px] truncate">{currentDisplayName || 'Select Organization'}</span>
-          <ChevronDown className="h-3 w-3 opacity-50" />
+          <ChevronDown className="h-3 w-3 opacity-60" />
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="w-60">

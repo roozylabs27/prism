@@ -15,7 +15,7 @@ export async function apiGetLogs(params?: {
   return response.data;
 }
 
-export async function apiGetLogAnalytics(params?: { window?: string; limit?: number }): Promise<ApiLogAnalytics> {
+export async function apiGetLogAnalytics(params?: { days?: number; window?: string; limit?: number }): Promise<ApiLogAnalytics> {
   const response = await api.get<ApiLogAnalytics | { data: ApiLogAnalytics }>('/analytics/logs', { params });
   if (response.data && typeof response.data === 'object' && 'data' in response.data) {
     return response.data.data;
