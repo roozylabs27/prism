@@ -444,7 +444,7 @@ export default function AgentDetailPage() {
             </div>
           </CardHeader>
           <CardContent className="pt-0">
-            <div className="relative rounded-none border border-border bg-muted/40 p-4 font-mono text-xs leading-relaxed text-foreground whitespace-pre-wrap max-h-64 overflow-y-auto">
+            <div className="relative rounded-lg border border-border bg-muted/40 p-4 font-mono text-xs leading-relaxed text-foreground whitespace-pre-wrap max-h-64 overflow-y-auto">
               {agent.systemPromptOverride || "No system prompt configured. Default router prompt will be applied."}
             </div>
           </CardContent>
@@ -501,7 +501,7 @@ export default function AgentDetailPage() {
                   return (
                     <div
                       key={sName}
-                      className="flex items-center justify-between rounded-none border border-border bg-muted/40 p-2.5 text-xs"
+                      className="flex items-center justify-between rounded-lg border border-border bg-muted/40 p-2.5 text-xs"
                     >
                       <div className="flex items-center gap-2 min-w-0">
                         <Cpu className="h-3.5 w-3.5 text-muted-foreground shrink-0" />

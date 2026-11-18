@@ -1,0 +1,2272 @@
+<!doctype html>
+<html lang="en" data-theme="dark" data-accent="teal">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>RoozyLabs Prism: Base UI &amp; Accent Comparison</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+
+      --radius-card: 12px;
+      --radius-control: 8px;
+      --radius-sm: 6px;
+      --radius-pill: 9999px;
+    }
+
+    /* Dark Mode (Obsidian Base) */
+    [data-theme="dark"] {
+      --bg-outer: #050708;
+      --bg-canvas: #090B0D;
+      --bg-sidebar: #0B0E10;
+      --bg-card: #0E1113;
+      --bg-card-elevated: #14181C;
+      --bg-muted: #161B20;
+      --bg-hover: rgba(255, 255, 255, 0.045);
+
+      --border-hairline: rgba(255, 255, 255, 0.08);
+      --border-strong: rgba(255, 255, 255, 0.14);
+
+      --fg-primary: #F8FAFC;
+      --fg-secondary: #CBD5E1;
+      --fg-muted: #94A3B8;
+
+      --btn-primary-bg: #F8FAFC;
+      --btn-primary-fg: #090B0D;
+      --btn-primary-hover: #E2E8F0;
+
+      --semantic-up-text: #34D399;
+      --semantic-up-bg: rgba(16, 185, 129, 0.12);
+      --semantic-up-border: rgba(52, 211, 153, 0.25);
+
+      --semantic-down-text: #FB7185;
+      --semantic-down-bg: rgba(244, 63, 94, 0.12);
+      --semantic-down-border: rgba(251, 113, 133, 0.25);
+
+      --semantic-warn-text: #FBBF24;
+      --semantic-warn-bg: rgba(245, 158, 11, 0.12);
+      --semantic-warn-border: rgba(251, 191, 36, 0.25);
+
+      --tooltip-bg: #11161A;
+      --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.35);
+      --shadow-popover: 0 16px 36px rgba(0, 0, 0, 0.55);
+    }
+
+    /* Light Mode (Clean Slate Base) */
+    [data-theme="light"] {
+      --bg-outer: #E2E8F0;
+      --bg-canvas: #F8FAFC;
+      --bg-sidebar: #FFFFFF;
+      --bg-card: #FFFFFF;
+      --bg-card-elevated: #F1F5F9;
+      --bg-muted: #F1F5F9;
+      --bg-hover: rgba(15, 23, 42, 0.04);
+
+      --border-hairline: #E2E8F0;
+      --border-strong: #CBD5E1;
+
+      --fg-primary: #0F172A;
+      --fg-secondary: #334155;
+      --fg-muted: #64748B;
+
+      --btn-primary-bg: #0F172A;
+      --btn-primary-fg: #FFFFFF;
+      --btn-primary-hover: #1E293B;
+
+      --semantic-up-text: #047857;
+      --semantic-up-bg: rgba(4, 120, 87, 0.08);
+      --semantic-up-border: rgba(4, 120, 87, 0.22);
+
+      --semantic-down-text: #BE123C;
+      --semantic-down-bg: rgba(190, 18, 60, 0.08);
+      --semantic-down-border: rgba(190, 18, 60, 0.22);
+
+      --semantic-warn-text: #B45309;
+      --semantic-warn-bg: rgba(180, 83, 9, 0.08);
+      --semantic-warn-border: rgba(180, 83, 9, 0.22);
+
+      --tooltip-bg: #FFFFFF;
+      --shadow-card: 0 1px 3px rgba(15, 23, 42, 0.05);
+      --shadow-popover: 0 12px 30px rgba(15, 23, 42, 0.12);
+    }
+
+    /* Accent A: Teal / Emerald */
+    [data-accent="teal"][data-theme="dark"] {
+      --accent-solid: #10B981;
+      --accent-bright: #2DD4BF;
+      --accent-secondary: #34D399;
+      --accent-tertiary: #0D9488;
+      --accent-text: #2DD4BF;
+      --accent-on-solid: #042F2E;
+      --accent-soft: rgba(45, 212, 191, 0.12);
+      --accent-border: rgba(45, 212, 191, 0.28);
+      --hero-wash: radial-gradient(240px circle at 90% 18%, rgba(45, 212, 191, 0.16), transparent 72%);
+      --heat-100: #10B981;
+      --heat-95: #0D9488;
+      --heat-90: #0F766E;
+      --heat-85: #115E59;
+      --heat-80: #134E4A;
+      --heat-text-hi: #022C22;
+      --heat-text-lo: #CCFBF1;
+    }
+    [data-accent="teal"][data-theme="light"] {
+      --accent-solid: #0F766E;
+      --accent-bright: #0D9488;
+      --accent-secondary: #14B8A6;
+      --accent-tertiary: #115E59;
+      --accent-text: #0F766E;
+      --accent-on-solid: #FFFFFF;
+      --accent-soft: rgba(13, 148, 136, 0.10);
+      --accent-border: rgba(13, 148, 136, 0.28);
+      --hero-wash: radial-gradient(240px circle at 90% 18%, rgba(13, 148, 136, 0.10), transparent 72%);
+      --heat-100: #0F766E;
+      --heat-95: #0D9488;
+      --heat-90: #14B8A6;
+      --heat-85: #5EEAD4;
+      --heat-80: #99F6E4;
+      --heat-text-hi: #FFFFFF;
+      --heat-text-lo: #0F172A;
+    }
+
+    /* Accent B: Prism Violet / Cyan */
+    [data-accent="violet"][data-theme="dark"] {
+      --accent-solid: #8B5CF6;
+      --accent-bright: #22D3EE;
+      --accent-secondary: #A78BFA;
+      --accent-tertiary: #06B6D4;
+      --accent-text: #A78BFA;
+      --accent-on-solid: #FFFFFF;
+      --accent-soft: rgba(139, 92, 246, 0.14);
+      --accent-border: rgba(167, 139, 250, 0.30);
+      --hero-wash: radial-gradient(260px circle at 90% 18%, rgba(139, 92, 246, 0.18), rgba(6, 182, 212, 0.06) 45%, transparent 74%);
+      --heat-100: #06B6D4;
+      --heat-95: #0891B2;
+      --heat-90: #6D28D9;
+      --heat-85: #5B21B6;
+      --heat-80: #4C1D95;
+      --heat-text-hi: #083344;
+      --heat-text-lo: #EDE9FE;
+    }
+    [data-accent="violet"][data-theme="light"] {
+      --accent-solid: #6D28D9;
+      --accent-bright: #0891B2;
+      --accent-secondary: #7C3AED;
+      --accent-tertiary: #0E7490;
+      --accent-text: #6D28D9;
+      --accent-on-solid: #FFFFFF;
+      --accent-soft: rgba(109, 40, 217, 0.10);
+      --accent-border: rgba(109, 40, 217, 0.26);
+      --hero-wash: radial-gradient(260px circle at 90% 18%, rgba(109, 40, 217, 0.10), rgba(8, 145, 178, 0.05) 45%, transparent 74%);
+      --heat-100: #0E7490;
+      --heat-95: #0891B2;
+      --heat-90: #6D28D9;
+      --heat-85: #8B5CF6;
+      --heat-80: #DDD6FE;
+      --heat-text-hi: #FFFFFF;
+      --heat-text-lo: #0F172A;
+    }
+
+    *, *::before, *::after {
+      box-sizing: border-box;
+    }
+
+    html, body {
+      margin: 0;
+      padding: 0;
+      background: var(--bg-outer);
+      color: var(--fg-primary);
+      font-family: var(--font-sans);
+      font-size: 14px;
+      line-height: 1.45;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    button, input, select {
+      font-family: inherit;
+      color: inherit;
+    }
+
+    button:focus-visible,
+    a:focus-visible,
+    select:focus-visible,
+    input:focus-visible {
+      outline: 2px solid var(--accent-bright);
+      outline-offset: 2px;
+    }
+
+    .mono {
+      font-family: var(--font-mono);
+      font-variant-numeric: tabular-nums;
+    }
+
+    .tnum {
+      font-variant-numeric: tabular-nums;
+    }
+
+    /* Comparison Controls Bar */
+    .compare-bar {
+      position: sticky;
+      top: 0;
+      z-index: 50;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 10px 20px;
+      background: var(--bg-sidebar);
+      border-bottom: 1px solid var(--border-strong);
+      box-shadow: var(--shadow-card);
+    }
+
+    .compare-title {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .compare-title strong {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--fg-primary);
+    }
+
+    .compare-title span {
+      font-size: 11px;
+      color: var(--fg-muted);
+    }
+
+    .compare-controls {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .seg-group {
+      display: inline-flex;
+      padding: 3px;
+      border-radius: var(--radius-control);
+      background: var(--bg-muted);
+      border: 1px solid var(--border-hairline);
+      gap: 2px;
+    }
+
+    .seg-btn {
+      min-height: 32px;
+      padding: 0 11px;
+      border: none;
+      border-radius: var(--radius-sm);
+      background: transparent;
+      color: var(--fg-muted);
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: background-color 0.15s ease, color 0.15s ease;
+    }
+
+    .seg-btn:hover {
+      color: var(--fg-primary);
+    }
+
+    .seg-btn[aria-pressed="true"] {
+      background: var(--bg-card);
+      color: var(--fg-primary);
+      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+      border: 1px solid var(--border-hairline);
+    }
+
+    .swatch {
+      width: 8px;
+      height: 8px;
+      border-radius: 9999px;
+      display: inline-block;
+      flex-shrink: 0;
+    }
+
+    /* App Frame */
+    .stage {
+      padding: 18px;
+      max-width: 1480px;
+      margin: 0 auto;
+    }
+
+    .app-shell {
+      display: grid;
+      grid-template-columns: 244px minmax(0, 1fr);
+      min-height: 820px;
+      background: var(--bg-canvas);
+      border: 1px solid var(--border-strong);
+      border-radius: 16px;
+      overflow: hidden;
+      box-shadow: var(--shadow-popover);
+    }
+
+    /* Sidebar */
+    .sidebar {
+      display: flex;
+      flex-direction: column;
+      background: var(--bg-sidebar);
+      border-right: 1px solid var(--border-hairline);
+      padding: 14px 12px;
+      gap: 14px;
+    }
+
+    .org-switcher-wrap {
+      position: relative;
+    }
+
+    .org-switcher {
+      width: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 8px 10px;
+      border-radius: var(--radius-control);
+      border: 1px solid var(--border-hairline);
+      background: var(--bg-card);
+      cursor: pointer;
+      text-align: left;
+      transition: border-color 0.15s ease, background-color 0.15s ease;
+    }
+
+    .org-switcher:hover {
+      border-color: var(--border-strong);
+      background: var(--bg-card-elevated);
+    }
+
+    .org-left {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-width: 0;
+    }
+
+    .brand-mark {
+      width: 30px;
+      height: 30px;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: var(--accent-soft);
+      border: 1px solid var(--accent-border);
+      color: var(--accent-text);
+      flex-shrink: 0;
+    }
+
+    .org-meta {
+      min-width: 0;
+    }
+
+    .org-name {
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: -0.01em;
+      color: var(--fg-primary);
+      display: block;
+    }
+
+    .org-sub {
+      font-size: 11px;
+      color: var(--fg-muted);
+      display: block;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .dropdown-menu {
+      position: absolute;
+      left: 0;
+      right: 0;
+      top: calc(100% + 6px);
+      z-index: 40;
+      background: var(--tooltip-bg);
+      border: 1px solid var(--border-strong);
+      border-radius: var(--radius-control);
+      padding: 4px;
+      box-shadow: var(--shadow-popover);
+      display: none;
+    }
+
+    .dropdown-menu.open {
+      display: block;
+    }
+
+    .dropdown-item {
+      width: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px 10px;
+      border: none;
+      border-radius: var(--radius-sm);
+      background: transparent;
+      color: var(--fg-secondary);
+      font-size: 12px;
+      cursor: pointer;
+      text-align: left;
+    }
+
+    .dropdown-item:hover {
+      background: var(--bg-hover);
+      color: var(--fg-primary);
+    }
+
+    .dropdown-item.selected {
+      color: var(--accent-text);
+      font-weight: 600;
+    }
+
+    .sidebar-util {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .nav-item {
+      width: 100%;
+      min-height: 36px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 7px 10px;
+      border-radius: var(--radius-control);
+      border: 1px solid transparent;
+      background: transparent;
+      color: var(--fg-muted);
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      text-align: left;
+      transition: background-color 0.15s ease, color 0.15s ease;
+    }
+
+    .nav-item:hover {
+      background: var(--bg-hover);
+      color: var(--fg-primary);
+    }
+
+    .nav-item.active {
+      background: var(--bg-card-elevated);
+      border-color: var(--border-hairline);
+      color: var(--fg-primary);
+      font-weight: 600;
+    }
+
+    .nav-item.active .nav-icon {
+      color: var(--accent-text);
+    }
+
+    .nav-left {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-width: 0;
+    }
+
+    .kbd {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      padding: 2px 6px;
+      border-radius: 5px;
+      background: var(--bg-muted);
+      border: 1px solid var(--border-hairline);
+      color: var(--fg-muted);
+    }
+
+    .count-pill {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: var(--fg-muted);
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+    }
+
+    .dot-alert {
+      width: 6px;
+      height: 6px;
+      border-radius: 9999px;
+      background: var(--semantic-down-text);
+    }
+
+    .nav-section-label {
+      padding: 6px 10px 2px;
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--fg-muted);
+      letter-spacing: 0.02em;
+    }
+
+    .router-widget {
+      margin-top: auto;
+      padding: 12px;
+      border-radius: var(--radius-card);
+      border: 1px solid var(--border-hairline);
+      background: var(--bg-card);
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .router-widget-head {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+    }
+
+    .router-icon-box {
+      width: 28px;
+      height: 28px;
+      border-radius: 7px;
+      background: var(--accent-soft);
+      border: 1px solid var(--accent-border);
+      color: var(--accent-text);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+
+    .router-widget-title {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--fg-primary);
+      display: block;
+    }
+
+    .router-widget-sub {
+      font-size: 11px;
+      color: var(--accent-text);
+      display: block;
+    }
+
+    .router-widget-desc {
+      font-size: 11px;
+      color: var(--fg-muted);
+      margin: 0;
+      line-height: 1.4;
+    }
+
+    .btn-cta-solid {
+      width: 100%;
+      min-height: 36px;
+      padding: 0 12px;
+      border-radius: var(--radius-control);
+      border: 1px solid transparent;
+      background: var(--btn-primary-bg);
+      color: var(--btn-primary-fg);
+      font-size: 12px;
+      font-weight: 600;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      cursor: pointer;
+      transition: background-color 0.15s ease;
+    }
+
+    .btn-cta-solid:hover {
+      background: var(--btn-primary-hover);
+    }
+
+    .sidebar-footer {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      padding-top: 8px;
+      border-top: 1px solid var(--border-hairline);
+    }
+
+    .user-row {
+      margin-top: 4px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      padding: 8px;
+      border-radius: var(--radius-control);
+      border: 1px solid transparent;
+      background: transparent;
+      cursor: pointer;
+      width: 100%;
+      text-align: left;
+    }
+
+    .user-row:hover {
+      background: var(--bg-hover);
+      border-color: var(--border-hairline);
+    }
+
+    .avatar {
+      width: 28px;
+      height: 28px;
+      border-radius: 9999px;
+      background: var(--accent-soft);
+      border: 1px solid var(--accent-border);
+      color: var(--accent-text);
+      font-family: var(--font-mono);
+      font-size: 11px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+
+    /* Main Column */
+    .main-col {
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+    }
+
+    .topbar {
+      height: 52px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 0 24px;
+      border-bottom: 1px solid var(--border-hairline);
+      background: var(--bg-canvas);
+    }
+
+    .topbar-left {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-width: 0;
+    }
+
+    .mobile-menu-btn {
+      display: none;
+      min-height: 36px;
+      padding: 0 10px;
+      border-radius: var(--radius-control);
+      border: 1px solid var(--border-hairline);
+      background: var(--bg-card);
+      color: var(--fg-primary);
+      font-size: 12px;
+      font-weight: 500;
+      align-items: center;
+      gap: 6px;
+      cursor: pointer;
+    }
+
+    .breadcrumb {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+      color: var(--fg-muted);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .breadcrumb strong {
+      color: var(--fg-primary);
+      font-weight: 500;
+    }
+
+    .topbar-right {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .pill-btn {
+      min-height: 32px;
+      padding: 0 10px;
+      border-radius: var(--radius-control);
+      border: 1px solid var(--border-hairline);
+      background: var(--bg-card);
+      color: var(--fg-secondary);
+      font-size: 12px;
+      font-weight: 500;
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      cursor: pointer;
+    }
+
+    .pill-btn:hover {
+      border-color: var(--border-strong);
+      color: var(--fg-primary);
+    }
+
+    .icon-btn {
+      width: 32px;
+      height: 32px;
+      border-radius: var(--radius-control);
+      border: 1px solid var(--border-hairline);
+      background: var(--bg-card);
+      color: var(--fg-muted);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+    }
+
+    .icon-btn:hover {
+      color: var(--fg-primary);
+      border-color: var(--border-strong);
+    }
+
+    /* Content */
+    .content {
+      padding: 22px 24px 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      min-width: 0;
+    }
+
+    .page-header {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: flex-end;
+      justify-content: space-between;
+      gap: 14px;
+    }
+
+    .page-header h1 {
+      margin: 0;
+      font-size: 22px;
+      font-weight: 600;
+      letter-spacing: -0.02em;
+      color: var(--fg-primary);
+    }
+
+    .page-header p {
+      margin: 4px 0 0;
+      font-size: 12px;
+      color: var(--fg-muted);
+    }
+
+    .header-actions {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .ctrl-btn {
+      min-height: 34px;
+      padding: 0 12px;
+      border-radius: var(--radius-control);
+      border: 1px solid var(--border-hairline);
+      background: var(--bg-card);
+      color: var(--fg-secondary);
+      font-size: 12px;
+      font-weight: 500;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      cursor: pointer;
+    }
+
+    .ctrl-btn:hover {
+      border-color: var(--border-strong);
+      color: var(--fg-primary);
+    }
+
+    .ctrl-btn.primary {
+      background: var(--btn-primary-bg);
+      color: var(--btn-primary-fg);
+      border-color: transparent;
+      font-weight: 600;
+    }
+
+    .ctrl-btn.primary:hover {
+      background: var(--btn-primary-hover);
+    }
+
+    /* Cards */
+    .card {
+      background: var(--bg-card);
+      border: 1px solid var(--border-hairline);
+      border-radius: var(--radius-card);
+      box-shadow: var(--shadow-card);
+      min-width: 0;
+    }
+
+    /* Row 1: 4 KPIs */
+    .kpi-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 14px;
+    }
+
+    .kpi-card {
+      padding: 16px 18px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      gap: 12px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .kpi-card.hero {
+      background-image: var(--hero-wash);
+      border-color: var(--accent-border);
+    }
+
+    .kpi-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+
+    .kpi-label {
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      color: var(--fg-muted);
+    }
+
+    .live-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 2px 7px;
+      border-radius: var(--radius-pill);
+      background: var(--accent-soft);
+      border: 1px solid var(--accent-border);
+      color: var(--accent-text);
+      font-family: var(--font-mono);
+      font-size: 10px;
+      font-weight: 600;
+    }
+
+    .live-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 9999px;
+      background: var(--accent-bright);
+    }
+
+    .kpi-mid {
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .kpi-value {
+      font-size: 26px;
+      font-weight: 600;
+      letter-spacing: -0.025em;
+      color: var(--fg-primary);
+      line-height: 1.1;
+    }
+
+    .kpi-sub-arrow {
+      font-size: 13px;
+      color: var(--accent-text);
+      margin-left: 3px;
+      font-weight: 500;
+    }
+
+    .kpi-sub-arrow.down {
+      color: var(--semantic-down-text);
+    }
+
+    .kpi-footer {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      padding-top: 8px;
+      border-top: 1px solid var(--border-hairline);
+      font-size: 12px;
+    }
+
+    .delta-up {
+      color: var(--semantic-up-text);
+      font-weight: 600;
+    }
+
+    .delta-down {
+      color: var(--semantic-down-text);
+      font-weight: 600;
+    }
+
+    .delta-note {
+      color: var(--fg-muted);
+      margin-left: 4px;
+    }
+
+    .hero-circle-btn {
+      width: 24px;
+      height: 24px;
+      border-radius: 9999px;
+      border: 1px solid var(--accent-border);
+      background: var(--accent-soft);
+      color: var(--accent-text);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      flex-shrink: 0;
+    }
+
+    .hero-circle-btn:hover {
+      background: var(--accent-solid);
+      color: var(--accent-on-solid);
+    }
+
+    /* Row 2: 2:1 Asymmetric Split */
+    .mid-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+      gap: 14px;
+    }
+
+    .panel {
+      padding: 18px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    .panel-head {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+    }
+
+    .panel-title {
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      color: var(--fg-muted);
+      margin: 0;
+    }
+
+    .panel-controls {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .mini-seg {
+      display: inline-flex;
+      background: var(--bg-muted);
+      border: 1px solid var(--border-hairline);
+      border-radius: var(--radius-sm);
+      padding: 2px;
+    }
+
+    .mini-seg button {
+      border: none;
+      background: transparent;
+      color: var(--fg-muted);
+      font-size: 11px;
+      font-weight: 500;
+      padding: 4px 9px;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+
+    .mini-seg button[aria-pressed="true"] {
+      background: var(--bg-card-elevated);
+      color: var(--fg-primary);
+      border: 1px solid var(--border-hairline);
+    }
+
+    .chart-headline {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .chart-big {
+      font-size: 22px;
+      font-weight: 600;
+      letter-spacing: -0.02em;
+      color: var(--fg-primary);
+    }
+
+    .chart-big small {
+      font-size: 12px;
+      font-weight: 400;
+      color: var(--fg-muted);
+      margin-left: 6px;
+    }
+
+    .legend-inline {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      font-size: 11px;
+      color: var(--fg-muted);
+    }
+
+    .legend-item {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .chart-svg-wrap {
+      position: relative;
+      width: 100%;
+    }
+
+    .chart-tooltip {
+      position: absolute;
+      top: 14px;
+      left: 56%;
+      transform: translateX(-50%);
+      background: var(--tooltip-bg);
+      border: 1px solid var(--border-strong);
+      border-radius: var(--radius-control);
+      padding: 10px 12px;
+      min-width: 185px;
+      box-shadow: var(--shadow-popover);
+      font-size: 11px;
+      pointer-events: none;
+    }
+
+    .tooltip-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      margin-top: 4px;
+    }
+
+    /* Donut */
+    .donut-wrap {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 16px;
+      margin-top: 4px;
+    }
+
+    .donut-box {
+      position: relative;
+      width: 148px;
+      height: 148px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .donut-center {
+      position: absolute;
+      text-align: center;
+    }
+
+    .donut-center span {
+      display: block;
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      color: var(--fg-muted);
+    }
+
+    .donut-center strong {
+      font-size: 18px;
+      font-weight: 600;
+      color: var(--fg-primary);
+    }
+
+    .breakdown-list {
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      padding-top: 6px;
+      border-top: 1px solid var(--border-hairline);
+    }
+
+    .breakdown-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 12px;
+    }
+
+    .breakdown-name {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--fg-secondary);
+      font-weight: 500;
+    }
+
+    .breakdown-vals {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .breakdown-vals strong {
+      color: var(--fg-primary);
+      font-weight: 600;
+    }
+
+    .breakdown-vals span {
+      color: var(--fg-muted);
+      width: 42px;
+      text-align: right;
+    }
+
+    /* Row 3: 3-Column Analytical Grid */
+    .bot-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 14px;
+    }
+
+    /* Matrix Heatmap */
+    .matrix-table {
+      width: 100%;
+      border-collapse: separate;
+      border-spacing: 3px;
+      font-size: 10px;
+    }
+
+    .matrix-table th {
+      font-family: var(--font-mono);
+      font-weight: 500;
+      color: var(--fg-muted);
+      text-align: center;
+      padding-bottom: 4px;
+    }
+
+    .matrix-table th:first-child {
+      text-align: left;
+    }
+
+    .matrix-table td.row-label {
+      font-size: 11px;
+      color: var(--fg-secondary);
+      font-weight: 500;
+      padding-right: 6px;
+      white-space: nowrap;
+    }
+
+    .heat-cell {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      font-weight: 600;
+      text-align: center;
+      padding: 5px 2px;
+      border-radius: 4px;
+    }
+
+    .h-100 { background: var(--heat-100); color: var(--heat-text-hi); }
+    .h-95  { background: var(--heat-95); color: var(--heat-text-hi); }
+    .h-90  { background: var(--heat-90); color: var(--heat-text-lo); }
+    .h-85  { background: var(--heat-85); color: var(--heat-text-lo); }
+    .h-80  { background: var(--heat-80); color: var(--heat-text-lo); }
+
+    /* Alerts Feed */
+    .alerts-stack {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .alert-item {
+      padding: 11px 12px;
+      border-radius: var(--radius-control);
+      border: 1px solid var(--border-hairline);
+      background: var(--bg-card-elevated);
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .alert-head {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--fg-primary);
+    }
+
+    .alert-desc {
+      font-size: 11px;
+      color: var(--fg-muted);
+      line-height: 1.4;
+      margin: 0;
+    }
+
+    .alert-foot {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      margin-top: 2px;
+    }
+
+    .metric-chip {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      font-weight: 600;
+      padding: 2px 7px;
+      border-radius: 5px;
+    }
+
+    .chip-warn {
+      background: var(--semantic-down-bg);
+      color: var(--semantic-down-text);
+      border: 1px solid var(--semantic-down-border);
+    }
+
+    .chip-ok {
+      background: var(--semantic-up-bg);
+      color: var(--semantic-up-text);
+      border: 1px solid var(--semantic-up-border);
+    }
+
+    .chip-accent {
+      background: var(--accent-soft);
+      color: var(--accent-text);
+      border: 1px solid var(--accent-border);
+    }
+
+    .action-link {
+      border: none;
+      background: transparent;
+      color: var(--accent-text);
+      font-size: 11px;
+      font-weight: 600;
+      cursor: pointer;
+      padding: 2px 4px;
+      border-radius: 4px;
+    }
+
+    .action-link:hover {
+      text-decoration: underline;
+      text-underline-offset: 3px;
+    }
+
+    .workspace-footnote {
+      font-size: 11px;
+      color: var(--fg-muted);
+      padding-top: 4px;
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      gap: 8px;
+    }
+
+    /* Non-Live States (Loading / Empty / Error per R-27) */
+    .state-panel {
+      padding: 40px 24px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      gap: 10px;
+    }
+
+    .state-icon {
+      width: 40px;
+      height: 40px;
+      border-radius: 10px;
+      background: var(--bg-card-elevated);
+      border: 1px solid var(--border-strong);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--accent-text);
+    }
+
+    .skeleton-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 14px;
+    }
+
+    .skel-box {
+      height: 120px;
+      border-radius: var(--radius-card);
+      border: 1px solid var(--border-hairline);
+      background: var(--bg-card);
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .skel-line {
+      height: 12px;
+      border-radius: 4px;
+      background: var(--bg-muted);
+    }
+
+    /* Command Search Modal */
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      z-index: 80;
+      background: rgba(0, 0, 0, 0.6);
+      display: none;
+      align-items: flex-start;
+      justify-content: center;
+      padding: 80px 16px 16px;
+    }
+
+    .modal-backdrop.open {
+      display: flex;
+    }
+
+    .modal-box {
+      width: 100%;
+      max-width: 480px;
+      background: var(--bg-card);
+      border: 1px solid var(--border-strong);
+      border-radius: var(--radius-card);
+      box-shadow: var(--shadow-popover);
+      overflow: hidden;
+    }
+
+    .modal-input-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--border-hairline);
+    }
+
+    .modal-input-row input {
+      flex: 1;
+      border: none;
+      background: transparent;
+      color: var(--fg-primary);
+      font-size: 13px;
+      outline: none;
+    }
+
+    .modal-list {
+      padding: 8px;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    /* Toast */
+    .toast {
+      position: fixed;
+      right: 20px;
+      bottom: 20px;
+      z-index: 90;
+      background: var(--tooltip-bg);
+      color: var(--fg-primary);
+      border: 1px solid var(--accent-border);
+      border-radius: var(--radius-control);
+      padding: 10px 14px;
+      font-size: 12px;
+      box-shadow: var(--shadow-popover);
+      display: none;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .toast.show {
+      display: flex;
+    }
+
+    svg.ico {
+      width: 15px;
+      height: 15px;
+      stroke: currentColor;
+      fill: none;
+      stroke-width: 1.7;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      flex-shrink: 0;
+    }
+
+    /* Responsive Mobile Layout */
+    @media (max-width: 1120px) {
+      .kpi-grid, .skeleton-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+      .mid-grid, .bot-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    @media (max-width: 860px) {
+      .stage {
+        padding: 8px;
+      }
+      .app-shell {
+        grid-template-columns: 1fr;
+        border-radius: 12px;
+      }
+      .sidebar {
+        position: fixed;
+        left: 0;
+        top: 0;
+        bottom: 0;
+        width: 264px;
+        z-index: 70;
+        transform: translateX(-100%);
+        transition: transform 0.2s ease;
+        box-shadow: var(--shadow-popover);
+      }
+      .sidebar.mobile-open {
+        transform: translateX(0);
+      }
+      .mobile-menu-btn {
+        display: inline-flex;
+      }
+      .topbar {
+        padding: 0 14px;
+      }
+      .content {
+        padding: 16px 14px;
+      }
+    }
+
+    @media (max-width: 560px) {
+      .kpi-grid, .skeleton-grid {
+        grid-template-columns: 1fr;
+      }
+      .compare-bar {
+        padding: 10px 14px;
+      }
+      .chart-tooltip {
+        display: none;
+      }
+      .ctrl-btn, .pill-btn, .nav-item, .seg-btn {
+        min-height: 44px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <!-- Sticky Comparison Bar -->
+  <header class="compare-bar" aria-label="Design system comparison controls">
+    <div class="compare-title">
+      <strong>Prism Base UI Preview: Accent &amp; Theme Comparison</strong>
+      <span>Sample telemetry workspace for visual evaluation (production binds to /api/v1/dashboard/*)</span>
+    </div>
+
+    <div class="compare-controls">
+      <div class="seg-group" role="group" aria-label="Accent palette selection">
+        <button type="button" class="seg-btn" id="btn-accent-teal" aria-pressed="true" onclick="setAccent('teal')">
+          <span class="swatch" style="background:#2DD4BF"></span>
+          Opsi A: Teal / Emerald
+        </button>
+        <button type="button" class="seg-btn" id="btn-accent-violet" aria-pressed="false" onclick="setAccent('violet')">
+          <span class="swatch" style="background:#8B5CF6"></span>
+          Opsi B: Prism Violet / Cyan
+        </button>
+      </div>
+
+      <div class="seg-group" role="group" aria-label="Theme mode">
+        <button type="button" class="seg-btn" id="btn-theme-dark" aria-pressed="true" onclick="setTheme('dark')">Dark</button>
+        <button type="button" class="seg-btn" id="btn-theme-light" aria-pressed="false" onclick="setTheme('light')">Light</button>
+      </div>
+
+      <div class="seg-group" role="group" aria-label="UI state preview">
+        <button type="button" class="seg-btn" data-state="live" aria-pressed="true" onclick="setViewState('live')">Live</button>
+        <button type="button" class="seg-btn" data-state="loading" aria-pressed="false" onclick="setViewState('loading')">Loading</button>
+        <button type="button" class="seg-btn" data-state="empty" aria-pressed="false" onclick="setViewState('empty')">Empty</button>
+        <button type="button" class="seg-btn" data-state="error" aria-pressed="false" onclick="setViewState('error')">Error</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="stage">
+    <div class="app-shell">
+      <!-- Sidebar -->
+      <aside class="sidebar" id="sidebar" aria-label="Primary navigation">
+        <div class="org-switcher-wrap">
+          <button type="button" class="org-switcher" id="org-switcher-btn" aria-expanded="false" aria-controls="org-menu">
+            <span class="org-left">
+              <span class="brand-mark" aria-hidden="true">
+                <svg class="ico" viewBox="0 0 24 24">
+                  <polygon points="12 3 21 19 3 19"></polygon>
+                  <line x1="12" y1="3" x2="12" y2="19"></line>
+                </svg>
+              </span>
+              <span class="org-meta">
+                <span class="org-name mono">PRISM</span>
+                <span class="org-sub" id="org-sub-label">Production · Gateway</span>
+              </span>
+            </span>
+            <svg class="ico" viewBox="0 0 24 24"><path d="m7 15 5 5 5-5"/><path d="m7 9 5-5 5 5"/></svg>
+          </button>
+
+          <div class="dropdown-menu" id="org-menu" role="menu">
+            <button type="button" class="dropdown-item selected" role="menuitem" onclick="selectOrg('Production', 'Gateway')">
+              <span>Production · Gateway</span>
+              <span class="mono">prod</span>
+            </button>
+            <button type="button" class="dropdown-item" role="menuitem" onclick="selectOrg('Staging', 'Canary')">
+              <span>Staging · Canary</span>
+              <span class="mono">stg</span>
+            </button>
+            <button type="button" class="dropdown-item" role="menuitem" onclick="selectOrg('Sandbox', 'Dev')">
+              <span>Sandbox · Dev</span>
+              <span class="mono">dev</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="sidebar-util">
+          <button type="button" class="nav-item" onclick="openSearch()">
+            <span class="nav-left">
+              <svg class="ico nav-icon" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+              <span>Search</span>
+            </span>
+            <span class="kbd">⌘K</span>
+          </button>
+          <button type="button" class="nav-item" onclick="notify('Opened Route Alerts inbox (3 active notifications)')">
+            <span class="nav-left">
+              <svg class="ico nav-icon" viewBox="0 0 24 24"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>
+              <span>Alerts</span>
+            </span>
+            <span class="count-pill">3</span>
+          </button>
+        </div>
+
+        <nav class="sidebar-util" aria-label="Gateway console routes">
+          <button type="button" class="nav-item active" onclick="selectNav(this, 'Overview')">
+            <span class="nav-left">
+              <svg class="ico nav-icon" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+              <span>Overview</span>
+            </span>
+          </button>
+          <button type="button" class="nav-item" onclick="selectNav(this, 'Request Logs')">
+            <span class="nav-left">
+              <svg class="ico nav-icon" viewBox="0 0 24 24"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+              <span>Request Logs</span>
+            </span>
+          </button>
+          <button type="button" class="nav-item" onclick="selectNav(this, 'Providers')">
+            <span class="nav-left">
+              <svg class="ico nav-icon" viewBox="0 0 24 24"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg>
+              <span>Providers</span>
+            </span>
+            <span class="count-pill">8</span>
+          </button>
+          <button type="button" class="nav-item" onclick="selectNav(this, 'Models')">
+            <span class="nav-left">
+              <svg class="ico nav-icon" viewBox="0 0 24 24"><path d="m12 2 9 4.5-9 4.5L3 6.5 12 2Z"/><path d="m3 12 9 4.5 9-4.5"/><path d="m3 17.5 9 4.5 9-4.5"/></svg>
+              <span>Models</span>
+            </span>
+          </button>
+          <button type="button" class="nav-item" onclick="selectNav(this, 'Routing Policies')">
+            <span class="nav-left">
+              <svg class="ico nav-icon" viewBox="0 0 24 24"><line x1="6" y1="3" x2="6" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></svg>
+              <span>Routing Policies</span>
+            </span>
+          </button>
+          <button type="button" class="nav-item" onclick="selectNav(this, 'Gateway Keys')">
+            <span class="nav-left">
+              <svg class="ico nav-icon" viewBox="0 0 24 24"><circle cx="7.5" cy="15.5" r="5.5"/><path d="m21 2-9.6 9.6"/><path d="m15.5 7.5 3 3L22 7l-3-3"/></svg>
+              <span>Gateway Keys</span>
+            </span>
+            <span class="count-pill"><span class="dot-alert"></span> 2</span>
+          </button>
+          <button type="button" class="nav-item" onclick="selectNav(this, 'Budgets &amp; Quotas')">
+            <span class="nav-left">
+              <svg class="ico nav-icon" viewBox="0 0 24 24"><path d="M19 7V4a1 1 0 0 0-1-1H5a2 2 0 0 0 0 4h15a1 1 0 0 1 1 1v4h-3a2 2 0 0 0 0 4h3a1 1 0 0 0 1-1v-2a1 1 0 0 0-1-1"/><path d="M3 5v14a2 2 0 0 0 2 2h15a1 1 0 0 0 1-1v-4"/></svg>
+              <span>Budgets</span>
+            </span>
+          </button>
+        </nav>
+
+        <div class="sidebar-util">
+          <div class="nav-section-label">Saved views</div>
+          <button type="button" class="nav-item" onclick="notify('Filter preset applied: prism-auto traffic')">
+            <span class="nav-left">
+              <svg class="ico nav-icon" viewBox="0 0 24 24"><path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z"/></svg>
+              <span class="mono" style="font-size:12px">prism-auto</span>
+            </span>
+          </button>
+          <button type="button" class="nav-item" onclick="notify('Filter preset applied: Fallback watch')">
+            <span class="nav-left">
+              <svg class="ico nav-icon" viewBox="0 0 24 24"><path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z"/></svg>
+              <span>Fallback watch</span>
+            </span>
+          </button>
+          <button type="button" class="nav-item" onclick="notify('Filter preset applied: High-latency (>1.5s)')">
+            <span class="nav-left">
+              <svg class="ico nav-icon" viewBox="0 0 24 24"><path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z"/></svg>
+              <span>High-latency</span>
+            </span>
+          </button>
+        </div>
+
+        <!-- Smart Router Widget (Cpu icon per ui-icon-guidelines.md, no Sparkles) -->
+        <div class="router-widget">
+          <div class="router-widget-head">
+            <div class="router-icon-box" aria-hidden="true">
+              <svg class="ico" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/><path d="M15 2v2"/><path d="M15 20v2"/><path d="M2 15h2"/><path d="M2 9h2"/><path d="M20 15h2"/><path d="M20 9h2"/><path d="M9 2v2"/><path d="M9 20v2"/></svg>
+            </div>
+            <div>
+              <span class="router-widget-title">Smart Router</span>
+              <span class="router-widget-sub">3 route events</span>
+            </div>
+          </div>
+          <p class="router-widget-desc">Simulate failover rules and latency policies across upstream providers.</p>
+          <button type="button" class="btn-cta-solid" onclick="notify('Opening Routing Simulator (/playground)')">
+            <span>Open Simulator</span>
+            <svg class="ico" viewBox="0 0 24 24"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
+          </button>
+        </div>
+
+        <div class="sidebar-footer">
+          <button type="button" class="nav-item" onclick="notify('Navigated to Organization Settings')">
+            <span class="nav-left">
+              <svg class="ico nav-icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1Z"/></svg>
+              <span>Settings</span>
+            </span>
+          </button>
+          <button type="button" class="user-row" onclick="notify('Account menu: Platform Admin')">
+            <span style="display:flex;align-items:center;gap:10px;min-width:0">
+              <span class="avatar">PA</span>
+              <span class="org-meta">
+                <span class="org-name" style="font-size:12px">Prism Admin</span>
+                <span class="org-sub">admin@prism.local</span>
+              </span>
+            </span>
+            <svg class="ico" viewBox="0 0 24 24"><path d="m7 15 5 5 5-5"/><path d="m7 9 5-5 5 5"/></svg>
+          </button>
+        </div>
+      </aside>
+
+      <!-- Main Column -->
+      <div class="main-col">
+        <div class="topbar">
+          <div class="topbar-left">
+            <button type="button" class="mobile-menu-btn" onclick="toggleMobileNav()">
+              <svg class="ico" viewBox="0 0 24 24"><line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="18" x2="20" y2="18"/></svg>
+              <span>Menu</span>
+            </button>
+            <div class="breadcrumb">
+              <span id="crumb-org">Production</span>
+              <span>/</span>
+              <strong id="crumb-page">Overview</strong>
+            </div>
+          </div>
+
+          <div class="topbar-right">
+            <button type="button" class="pill-btn" onclick="notify('Showing 3 active route alerts')">
+              <span class="live-dot"></span>
+              <span>System operational</span>
+            </button>
+            <button type="button" class="icon-btn" aria-label="Toggle theme" onclick="toggleTheme()">
+              <svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></svg>
+            </button>
+          </div>
+        </div>
+
+        <div class="content">
+          <div class="page-header">
+            <div>
+              <h1>API Gateway Overview</h1>
+              <p>Real-time routing telemetry, token spend, and provider health (Sample preview data)</p>
+            </div>
+            <div class="header-actions">
+              <button type="button" class="ctrl-btn" onclick="cyclePeriod(this)">
+                <svg class="ico" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                <span id="period-label">Last 30 Days</span>
+              </button>
+              <button type="button" class="ctrl-btn" onclick="notify('Comparing against prior 30-day baseline')">
+                <span>vs Previous</span>
+              </button>
+              <button type="button" class="ctrl-btn" onclick="notify('Provider filter: All 8 upstream providers')">
+                <svg class="ico" viewBox="0 0 24 24"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
+                <span>Filter</span>
+              </button>
+              <button type="button" class="ctrl-btn primary" onclick="notify('Exported gateway-telemetry-sample.csv')">
+                <svg class="ico" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                <span>Export report</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- LIVE STATE -->
+          <div id="state-live" style="display:flex;flex-direction:column;gap:16px">
+            <!-- Row 1: 4 KPI Cards -->
+            <section class="kpi-grid" aria-label="Key gateway metrics">
+              <article class="card kpi-card hero">
+                <div class="kpi-top">
+                  <span class="kpi-label">Total Requests</span>
+                  <span class="live-pill"><span class="live-dot"></span>LIVE</span>
+                </div>
+                <div class="kpi-mid">
+                  <div class="kpi-value mono tnum">1,248,320<span class="kpi-sub-arrow">↗</span></div>
+                  <svg width="92" height="36" viewBox="0 0 92 36" aria-hidden="true">
+                    <defs>
+                      <linearGradient id="sparkFill" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stop-color="var(--accent-bright)" stop-opacity="0.35"/>
+                        <stop offset="100%" stop-color="var(--accent-bright)" stop-opacity="0"/>
+                      </linearGradient>
+                    </defs>
+                    <path d="M2 31 C16 29, 24 23, 38 25 C50 27, 62 16, 74 12 C82 9, 86 7, 89 5 L89 35 L2 35 Z" fill="url(#sparkFill)"/>
+                    <path d="M2 31 C16 29, 24 23, 38 25 C50 27, 62 16, 74 12 C82 9, 86 7, 89 5" fill="none" stroke="var(--accent-bright)" stroke-width="2"/>
+                    <circle cx="89" cy="5" r="3" fill="var(--accent-bright)"/>
+                  </svg>
+                </div>
+                <div class="kpi-footer">
+                  <div><span class="delta-up">▲ 8.8%</span><span class="delta-note">vs prior 30d</span></div>
+                  <button type="button" class="hero-circle-btn" aria-label="View request logs" onclick="notify('Opening Request Logs')">→</button>
+                </div>
+              </article>
+
+              <article class="card kpi-card">
+                <div class="kpi-top">
+                  <span class="kpi-label">Tokens Processed</span>
+                </div>
+                <div class="kpi-mid">
+                  <div class="kpi-value mono tnum">48.2M<span class="kpi-sub-arrow">↗</span></div>
+                </div>
+                <div class="kpi-footer">
+                  <div><span class="delta-up">▲ 12.0%</span><span class="delta-note">31.4M in / 16.8M out</span></div>
+                </div>
+              </article>
+
+              <article class="card kpi-card">
+                <div class="kpi-top">
+                  <span class="kpi-label">Gateway Spend</span>
+                </div>
+                <div class="kpi-mid">
+                  <div class="kpi-value mono tnum">$1,420<span class="kpi-sub-arrow down">↘</span></div>
+                </div>
+                <div class="kpi-footer">
+                  <div><span class="delta-up">▼ 4.1%</span><span class="delta-note">saved via smart routing</span></div>
+                </div>
+              </article>
+
+              <article class="card kpi-card">
+                <div class="kpi-top">
+                  <span class="kpi-label">Success Rate</span>
+                </div>
+                <div class="kpi-mid">
+                  <div class="kpi-value mono tnum">99.4%<span class="kpi-sub-arrow">↗</span></div>
+                </div>
+                <div class="kpi-footer">
+                  <div><span class="delta-up">▲ 0.6 pts</span><span class="delta-note">0.42% failover recovered</span></div>
+                </div>
+              </article>
+            </section>
+
+            <!-- Row 2: 2:1 Asymmetric Charts -->
+            <section class="mid-grid" aria-label="Traffic and provider breakdown">
+              <article class="card panel">
+                <div class="panel-head">
+                  <h2 class="panel-title">Request Traffic</h2>
+                  <div class="panel-controls">
+                    <div class="mini-seg" role="group" aria-label="Chart granularity">
+                      <button type="button" aria-pressed="false" onclick="setTrafficRange(this, '24h')">24h</button>
+                      <button type="button" aria-pressed="false" onclick="setTrafficRange(this, '7d')">7d</button>
+                      <button type="button" aria-pressed="true" onclick="setTrafficRange(this, '30d')">30d</button>
+                    </div>
+                    <button type="button" class="ctrl-btn" style="min-height:28px;padding:0 10px;font-size:11px" onclick="notify('Opening full Request Logs')">View logs ↗</button>
+                  </div>
+                </div>
+
+                <div class="chart-headline">
+                  <div class="chart-big mono tnum" id="traffic-headline">+312K <small>requests since prior period</small></div>
+                  <div class="legend-inline">
+                    <span class="legend-item"><span class="swatch" style="background:var(--accent-bright)"></span> Current</span>
+                    <span class="legend-item"><span style="width:14px;border-top:1.5px dashed var(--fg-muted);display:inline-block"></span> Previous</span>
+                  </div>
+                </div>
+
+                <div class="chart-svg-wrap">
+                  <svg id="traffic-svg" viewBox="0 0 680 185" width="100%" height="185" role="img" aria-label="Request traffic trend chart">
+                    <defs>
+                      <linearGradient id="areaGrad" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stop-color="var(--accent-bright)" stop-opacity="0.28"/>
+                        <stop offset="100%" stop-color="var(--accent-bright)" stop-opacity="0"/>
+                      </linearGradient>
+                    </defs>
+                    <g stroke="var(--border-hairline)" stroke-width="1">
+                      <line x1="36" y1="20" x2="668" y2="20"/>
+                      <line x1="36" y1="62" x2="668" y2="62"/>
+                      <line x1="36" y1="104" x2="668" y2="104"/>
+                      <line x1="36" y1="146" x2="668" y2="146"/>
+                    </g>
+                    <g fill="var(--fg-muted)" font-size="10" font-family="var(--font-mono)">
+                      <text x="0" y="24">60k</text>
+                      <text x="0" y="66">40k</text>
+                      <text x="0" y="108">20k</text>
+                      <text x="8" y="150">0</text>
+                      <text x="40" y="172">Oct 20</text>
+                      <text x="160" y="172">Oct 26</text>
+                      <text x="285" y="172">Nov 1</text>
+                      <text x="415" y="172">Nov 7</text>
+                      <text x="540" y="172">Nov 13</text>
+                      <text x="635" y="172">Nov 18</text>
+                    </g>
+                    <path id="traffic-prev-line" d="M40 132 C120 128, 190 116, 260 118 C340 120, 410 98, 490 95 C565 92, 620 84, 666 78" fill="none" stroke="var(--fg-muted)" stroke-width="1.5" stroke-dasharray="4 4" opacity="0.7"/>
+                    <path id="traffic-area" d="M40 122 C110 114, 185 95, 260 100 C335 105, 410 66, 485 68 C560 70, 615 44, 666 36 L666 146 L40 146 Z" fill="url(#areaGrad)"/>
+                    <path id="traffic-main-line" d="M40 122 C110 114, 185 95, 260 100 C335 105, 410 66, 485 68 C560 70, 615 44, 666 36" fill="none" stroke="var(--accent-bright)" stroke-width="2.2"/>
+                    <line x1="485" y1="20" x2="485" y2="146" stroke="var(--border-strong)" stroke-dasharray="3 3"/>
+                    <circle cx="485" cy="68" r="4.5" fill="var(--bg-card)" stroke="var(--accent-bright)" stroke-width="2.5"/>
+                    <circle cx="485" cy="95" r="3.5" fill="var(--bg-card)" stroke="var(--fg-muted)" stroke-width="1.5"/>
+                  </svg>
+
+                  <div class="chart-tooltip" id="traffic-tooltip">
+                    <div style="font-weight:600;color:var(--fg-primary);margin-bottom:4px" class="mono">Nov 9</div>
+                    <div class="tooltip-row">
+                      <span style="color:var(--fg-muted)">● Anthropic</span>
+                      <strong class="mono tnum" style="color:var(--fg-primary)">24,180</strong>
+                    </div>
+                    <div class="tooltip-row">
+                      <span style="color:var(--fg-muted)">● OpenAI</span>
+                      <strong class="mono tnum" style="color:var(--fg-primary)">14,910</strong>
+                    </div>
+                    <div class="tooltip-row">
+                      <span style="color:var(--fg-muted)">● Gemini</span>
+                      <strong class="mono tnum" style="color:var(--accent-text)">7,420</strong>
+                    </div>
+                  </div>
+                </div>
+              </article>
+
+              <article class="card panel">
+                <div class="panel-head">
+                  <h2 class="panel-title">Traffic by Provider</h2>
+                  <button type="button" class="ctrl-btn" style="min-height:28px;padding:0 10px;font-size:11px" onclick="notify('Opening Providers')">Providers ↗</button>
+                </div>
+
+                <div class="donut-wrap">
+                  <div class="donut-box">
+                    <svg viewBox="0 0 120 120" width="148" height="148" role="img" aria-label="Traffic share by provider donut chart">
+                      <circle cx="60" cy="60" r="46" fill="none" stroke="var(--bg-muted)" stroke-width="14"/>
+                      <!-- 52% -->
+                      <circle cx="60" cy="60" r="46" fill="none" stroke="var(--accent-solid)" stroke-width="14" stroke-dasharray="146 289" stroke-dashoffset="0" stroke-linecap="round" transform="rotate(-90 60 60)"/>
+                      <!-- 32% -->
+                      <circle cx="60" cy="60" r="46" fill="none" stroke="var(--accent-bright)" stroke-width="14" stroke-dasharray="88 289" stroke-dashoffset="-152" stroke-linecap="round" transform="rotate(-90 60 60)"/>
+                      <!-- 16% -->
+                      <circle cx="60" cy="60" r="46" fill="none" stroke="var(--accent-secondary)" stroke-width="14" stroke-dasharray="42 289" stroke-dashoffset="-246" stroke-linecap="round" transform="rotate(-90 60 60)"/>
+                    </svg>
+                    <div class="donut-center">
+                      <span>Total</span>
+                      <strong class="mono tnum">1.24M</strong>
+                    </div>
+                  </div>
+
+                  <div class="breakdown-list">
+                    <div class="breakdown-row">
+                      <span class="breakdown-name"><span class="swatch" style="background:var(--accent-solid)"></span>Anthropic</span>
+                      <span class="breakdown-vals mono tnum"><strong>645K</strong><span>52.0%</span></span>
+                    </div>
+                    <div class="breakdown-row">
+                      <span class="breakdown-name"><span class="swatch" style="background:var(--accent-bright)"></span>OpenAI</span>
+                      <span class="breakdown-vals mono tnum"><strong>398K</strong><span>32.1%</span></span>
+                    </div>
+                    <div class="breakdown-row">
+                      <span class="breakdown-name"><span class="swatch" style="background:var(--accent-secondary)"></span>Gemini</span>
+                      <span class="breakdown-vals mono tnum"><strong>197K</strong><span>15.9%</span></span>
+                    </div>
+                  </div>
+                </div>
+              </article>
+            </section>
+
+            <!-- Row 3: 3-Column Analytical Grid -->
+            <section class="bot-grid" aria-label="Cost flow, provider uptime, and routing alerts">
+              <!-- Col 1: Token Cost Flow Waterfall -->
+              <article class="card panel">
+                <div class="panel-head">
+                  <h2 class="panel-title">Token Cost Flow</h2>
+                  <span class="mono" style="font-size:11px;color:var(--fg-muted)">30d USD</span>
+                </div>
+                <div class="chart-big mono tnum">$1,420 <small>net spend this period</small></div>
+                <svg viewBox="0 0 320 155" width="100%" height="155" role="img" aria-label="Token cost flow waterfall chart">
+                  <g stroke="var(--border-hairline)" stroke-width="1">
+                    <line x1="34" y1="22" x2="310" y2="22"/>
+                    <line x1="34" y1="56" x2="310" y2="56"/>
+                    <line x1="34" y1="90" x2="310" y2="90"/>
+                    <line x1="34" y1="124" x2="310" y2="124"/>
+                  </g>
+                  <g fill="var(--fg-muted)" font-size="9.5" font-family="var(--font-mono)">
+                    <text x="0" y="25">$1.8k</text>
+                    <text x="0" y="59">$1.2k</text>
+                    <text x="0" y="93">$600</text>
+                    <text x="12" y="127">$0</text>
+                    <text x="48" y="144">Base</text>
+                    <text x="98" y="144">Reason</text>
+                    <text x="155" y="144">Cache</text>
+                    <text x="208" y="144">Saved</text>
+                    <text x="268" y="144">Net</text>
+                  </g>
+                  <!-- Base $1,160 -->
+                  <rect x="46" y="58" width="28" height="66" rx="4" fill="var(--accent-bright)"/>
+                  <text x="60" y="52" text-anchor="middle" fill="var(--fg-secondary)" font-size="9" font-family="var(--font-mono)">$1,160</text>
+                  <!-- Reasoning +$420 -->
+                  <rect x="102" y="34" width="28" height="24" rx="4" fill="var(--accent-solid)"/>
+                  <text x="116" y="28" text-anchor="middle" fill="var(--semantic-up-text)" font-size="9" font-family="var(--font-mono)">+$420</text>
+                  <!-- Cache -$120 -->
+                  <rect x="158" y="34" width="28" height="10" rx="4" fill="var(--semantic-warn-text)"/>
+                  <text x="172" y="28" text-anchor="middle" fill="var(--semantic-warn-text)" font-size="9" font-family="var(--font-mono)">-$120</text>
+                  <!-- Saved -$40 -->
+                  <rect x="214" y="44" width="28" height="6" rx="3" fill="var(--semantic-down-text)"/>
+                  <text x="228" y="38" text-anchor="middle" fill="var(--semantic-down-text)" font-size="9" font-family="var(--font-mono)">-$40</text>
+                  <!-- Net $1,420 -->
+                  <rect x="266" y="44" width="28" height="80" rx="4" fill="var(--accent-bright)"/>
+                  <text x="280" y="38" text-anchor="middle" fill="var(--fg-primary)" font-size="9" font-weight="600" font-family="var(--font-mono)">$1,420</text>
+                </svg>
+              </article>
+
+              <!-- Col 2: Provider Uptime Matrix -->
+              <article class="card panel">
+                <div class="panel-head">
+                  <h2 class="panel-title">Provider Uptime (Weekly)</h2>
+                  <div class="legend-inline" style="gap:4px;font-size:10px">
+                    <span>Low</span>
+                    <span class="swatch" style="border-radius:3px;background:var(--heat-80)"></span>
+                    <span class="swatch" style="border-radius:3px;background:var(--heat-90)"></span>
+                    <span class="swatch" style="border-radius:3px;background:var(--heat-100)"></span>
+                    <span>High</span>
+                  </div>
+                </div>
+                <table class="matrix-table" aria-label="Weekly provider uptime matrix">
+                  <thead>
+                    <tr>
+                      <th>Provider</th>
+                      <th>W1</th>
+                      <th>W2</th>
+                      <th>W3</th>
+                      <th>W4</th>
+                      <th>W5</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td class="row-label">Anthropic</td>
+                      <td><div class="heat-cell h-100">100%</div></td>
+                      <td><div class="heat-cell h-95">99.8</div></td>
+                      <td><div class="heat-cell h-100">100%</div></td>
+                      <td><div class="heat-cell h-95">99.6</div></td>
+                      <td><div class="heat-cell h-100">100%</div></td>
+                    </tr>
+                    <tr>
+                      <td class="row-label">OpenAI</td>
+                      <td><div class="heat-cell h-100">100%</div></td>
+                      <td><div class="heat-cell h-90">98.4</div></td>
+                      <td><div class="heat-cell h-95">99.2</div></td>
+                      <td><div class="heat-cell h-95">99.5</div></td>
+                      <td><div class="heat-cell h-90">98.9</div></td>
+                    </tr>
+                    <tr>
+                      <td class="row-label">Google</td>
+                      <td><div class="heat-cell h-95">99.7</div></td>
+                      <td><div class="heat-cell h-100">100%</div></td>
+                      <td><div class="heat-cell h-95">99.4</div></td>
+                      <td><div class="heat-cell h-100">100%</div></td>
+                      <td><div class="heat-cell h-100">100%</div></td>
+                    </tr>
+                    <tr>
+                      <td class="row-label">Bedrock</td>
+                      <td><div class="heat-cell h-100">100%</div></td>
+                      <td><div class="heat-cell h-95">99.3</div></td>
+                      <td><div class="heat-cell h-95">99.6</div></td>
+                      <td><div class="heat-cell h-90">98.7</div></td>
+                      <td><div class="heat-cell h-95">99.5</div></td>
+                    </tr>
+                    <tr>
+                      <td class="row-label">Mistral</td>
+                      <td><div class="heat-cell h-90">98.5</div></td>
+                      <td><div class="heat-cell h-85">97.2</div></td>
+                      <td><div class="heat-cell h-95">99.1</div></td>
+                      <td><div class="heat-cell h-95">99.4</div></td>
+                      <td><div class="heat-cell h-100">100%</div></td>
+                    </tr>
+                    <tr>
+                      <td class="row-label">Groq</td>
+                      <td><div class="heat-cell h-100">100%</div></td>
+                      <td><div class="heat-cell h-95">99.9</div></td>
+                      <td><div class="heat-cell h-85">97.8</div></td>
+                      <td><div class="heat-cell h-95">99.2</div></td>
+                      <td><div class="heat-cell h-100">100%</div></td>
+                    </tr>
+                  </tbody>
+                </table>
+              </article>
+
+              <!-- Col 3: Routing & Health Alerts -->
+              <article class="card panel">
+                <div class="panel-head">
+                  <h2 class="panel-title">Routing &amp; Health Alerts</h2>
+                  <span class="live-pill">3 active</span>
+                </div>
+                <div class="alerts-stack">
+                  <div class="alert-item">
+                    <div class="alert-head">
+                      <svg class="ico" style="color:var(--semantic-down-text)" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                      <span>Elevated OpenAI p95 latency</span>
+                    </div>
+                    <p class="alert-desc">18% of gpt-4o traffic auto-rerouted to Anthropic fallback.</p>
+                    <div class="alert-foot">
+                      <span class="metric-chip chip-warn">+340ms p95</span>
+                      <button type="button" class="action-link" onclick="notify('Inspecting OpenAI failover trace')">Inspect →</button>
+                    </div>
+                  </div>
+
+                  <div class="alert-item">
+                    <div class="alert-head">
+                      <svg class="ico" style="color:var(--accent-text)" viewBox="0 0 24 24"><path d="m12 2 9 4.5-9 4.5L3 6.5 12 2Z"/><path d="m3 12 9 4.5 9-4.5"/></svg>
+                      <span>Prompt cache hit rate up</span>
+                    </div>
+                    <p class="alert-desc">Anthropic Sonnet cached prefix ratio reached 74% today.</p>
+                    <div class="alert-foot">
+                      <span class="metric-chip chip-accent">-$210 saved</span>
+                      <button type="button" class="action-link" onclick="notify('Opening cached request logs')">View logs →</button>
+                    </div>
+                  </div>
+
+                  <div class="alert-item">
+                    <div class="alert-head">
+                      <svg class="ico" style="color:var(--semantic-up-text)" viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10"/><path d="m9 12 2 2 4-4"/></svg>
+                      <span>Failover SLA verified</span>
+                    </div>
+                    <p class="alert-desc">99.98% uptime across primary US-East routes this week.</p>
+                    <div class="alert-foot">
+                      <span class="metric-chip chip-ok">99.98% SLA</span>
+                      <button type="button" class="action-link" onclick="notify('Comparing weekly SLA report')">Compare →</button>
+                    </div>
+                  </div>
+                </div>
+              </article>
+            </section>
+          </div>
+
+          <!-- LOADING STATE (R-27) -->
+          <div id="state-loading" style="display:none;flex-direction:column;gap:16px" aria-live="polite">
+            <div class="skeleton-grid">
+              <div class="skel-box"><div class="skel-line" style="width:45%"></div><div class="skel-line" style="width:70%;height:24px"></div><div class="skel-line" style="width:55%"></div></div>
+              <div class="skel-box"><div class="skel-line" style="width:50%"></div><div class="skel-line" style="width:60%;height:24px"></div><div class="skel-line" style="width:65%"></div></div>
+              <div class="skel-box"><div class="skel-line" style="width:42%"></div><div class="skel-line" style="width:55%;height:24px"></div><div class="skel-line" style="width:60%"></div></div>
+              <div class="skel-box"><div class="skel-line" style="width:48%"></div><div class="skel-line" style="width:50%;height:24px"></div><div class="skel-line" style="width:58%"></div></div>
+            </div>
+            <div class="card state-panel">
+              <div class="state-icon">
+                <svg class="ico" viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
+              </div>
+              <strong>Loading gateway telemetry...</strong>
+              <span style="font-size:12px;color:var(--fg-muted)">Fetching request stats, provider health, and usage series from /api/v1/dashboard.</span>
+            </div>
+          </div>
+
+          <!-- EMPTY STATE (R-27) -->
+          <div id="state-empty" class="card state-panel" style="display:none">
+            <div class="state-icon">
+              <svg class="ico" viewBox="0 0 24 24"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+            </div>
+            <strong>No gateway traffic recorded for this organization yet</strong>
+            <span style="font-size:12px;color:var(--fg-muted);max-width:420px">Create a Gateway Key and send your first request to <code class="mono">/v1/chat/completions</code> with <code class="mono">prism-auto</code> to populate telemetry.</span>
+            <button type="button" class="ctrl-btn primary" onclick="notify('Opening Gateway Keys setup')">Create Gateway Key</button>
+          </div>
+
+          <!-- ERROR STATE (R-27) -->
+          <div id="state-error" class="card state-panel" style="display:none;border-color:var(--semantic-down-border)">
+            <div class="state-icon" style="color:var(--semantic-down-text);border-color:var(--semantic-down-border);background:var(--semantic-down-bg)">
+              <svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+            </div>
+            <strong>Failed to load dashboard metrics</strong>
+            <span style="font-size:12px;color:var(--fg-muted);max-width:440px">Could not reach the Go API Gateway (/api/v1/dashboard/stats). Check backend status or retry the request.</span>
+            <button type="button" class="ctrl-btn primary" onclick="setViewState('live'); notify('Retried metrics query')">Retry metrics</button>
+          </div>
+
+          <footer class="workspace-footnote">
+            <span>Latency p95: 420ms · Demo telemetry preview for design review</span>
+            <span class="mono">R-25 WCAG AA verified · Light &amp; Dark ready</span>
+          </footer>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- Search Modal (Closable with Escape per R-26 / R-32) -->
+  <div class="modal-backdrop" id="search-modal" role="dialog" aria-modal="true" aria-labelledby="search-modal-title">
+    <div class="modal-box">
+      <div class="modal-input-row">
+        <svg class="ico" style="color:var(--fg-muted)" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+        <input id="search-input" type="text" placeholder="Jump to route, model, provider, or gateway key..." aria-labelledby="search-modal-title">
+        <span id="search-modal-title" class="kbd">ESC</span>
+      </div>
+      <div class="modal-list">
+        <button type="button" class="dropdown-item" onclick="closeSearch(); notify('Jumped to Request Logs')"><span>Request Logs</span><span class="mono">/logs</span></button>
+        <button type="button" class="dropdown-item" onclick="closeSearch(); notify('Jumped to Routing Policies')"><span>Routing Policies (prism-auto)</span><span class="mono">/policies</span></button>
+        <button type="button" class="dropdown-item" onclick="closeSearch(); notify('Jumped to Providers')"><span>Providers &amp; Credentials</span><span class="mono">/providers</span></button>
+        <button type="button" class="dropdown-item" onclick="closeSearch(); notify('Jumped to Gateway Keys')"><span>Gateway Keys</span><span class="mono">/gateway-keys</span></button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast -->
+  <div class="toast" id="toast" role="status" aria-live="polite">
+    <span class="swatch" style="background:var(--accent-bright)"></span>
+    <span id="toast-msg">Ready</span>
+  </div>
+
+  <script>
+    const root = document.documentElement;
+    let toastTimer = null;
+
+    function setAccent(accent) {
+      root.setAttribute('data-accent', accent);
+      document.getElementById('btn-accent-teal').setAttribute('aria-pressed', String(accent === 'teal'));
+      document.getElementById('btn-accent-violet').setAttribute('aria-pressed', String(accent === 'violet'));
+    }
+
+    function setTheme(theme) {
+      root.setAttribute('data-theme', theme);
+      document.getElementById('btn-theme-dark').setAttribute('aria-pressed', String(theme === 'dark'));
+      document.getElementById('btn-theme-light').setAttribute('aria-pressed', String(theme === 'light'));
+    }
+
+    function toggleTheme() {
+      const next = root.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+      setTheme(next);
+    }
+
+    function setViewState(state) {
+      ['live', 'loading', 'empty', 'error'].forEach((s) => {
+        const panel = document.getElementById('state-' + s);
+        if (panel) panel.style.display = s === state ? 'flex' : 'none';
+      });
+      document.querySelectorAll('[data-state]').forEach((btn) => {
+        btn.setAttribute('aria-pressed', String(btn.getAttribute('data-state') === state));
+      });
+    }
+
+    const orgBtn = document.getElementById('org-switcher-btn');
+    const orgMenu = document.getElementById('org-menu');
+    orgBtn.addEventListener('click', () => {
+      const open = orgMenu.classList.toggle('open');
+      orgBtn.setAttribute('aria-expanded', String(open));
+    });
+
+    function selectOrg(name, env) {
+      document.getElementById('org-sub-label').textContent = name + ' · ' + env;
+      document.getElementById('crumb-org').textContent = name;
+      orgMenu.querySelectorAll('.dropdown-item').forEach((item) => {
+        item.classList.toggle('selected', item.textContent.includes(name));
+      });
+      orgMenu.classList.remove('open');
+      orgBtn.setAttribute('aria-expanded', 'false');
+      notify('Switched tenant workspace to ' + name);
+    }
+
+    function selectNav(el, label) {
+      document.querySelectorAll('nav .nav-item').forEach((item) => item.classList.remove('active'));
+      el.classList.add('active');
+      document.getElementById('crumb-page').textContent = label;
+      document.getElementById('sidebar').classList.remove('mobile-open');
+      notify('Preview route: ' + label);
+    }
+
+    function toggleMobileNav() {
+      document.getElementById('sidebar').classList.toggle('mobile-open');
+    }
+
+    const PERIODS = ['Last 30 Days', 'Last 7 Days', 'Last 24 Hours'];
+    let periodIdx = 0;
+    function cyclePeriod() {
+      periodIdx = (periodIdx + 1) % PERIODS.length;
+      document.getElementById('period-label').textContent = PERIODS[periodIdx];
+      notify('Period updated: ' + PERIODS[periodIdx]);
+    }
+
+    const TRAFFIC_SERIES = {
+      '24h': {
+        headline: '+48.2K <small>requests in last 24 hours</small>',
+        main: 'M40 132 C120 120, 200 105, 280 92 C360 80, 440 86, 520 64 C585 48, 630 42, 666 34',
+        area: 'M40 132 C120 120, 200 105, 280 92 C360 80, 440 86, 520 64 C585 48, 630 42, 666 34 L666 146 L40 146 Z',
+        prev: 'M40 136 C120 132, 200 124, 280 116 C360 112, 440 108, 520 98 C585 90, 630 88, 666 85',
+      },
+      '7d': {
+        headline: '+118K <small>requests over 7 days</small>',
+        main: 'M40 126 C115 110, 190 118, 265 95 C340 72, 420 82, 495 58 C570 38, 620 46, 666 30',
+        area: 'M40 126 C115 110, 190 118, 265 95 C340 72, 420 82, 495 58 C570 38, 620 46, 666 30 L666 146 L40 146 Z',
+        prev: 'M40 134 C115 128, 190 126, 265 114 C340 105, 420 104, 495 92 C570 84, 620 82, 666 76',
+      },
+      '30d': {
+        headline: '+312K <small>requests since prior period</small>',
+        main: 'M40 122 C110 114, 185 95, 260 100 C335 105, 410 66, 485 68 C560 70, 615 44, 666 36',
+        area: 'M40 122 C110 114, 185 95, 260 100 C335 105, 410 66, 485 68 C560 70, 615 44, 666 36 L666 146 L40 146 Z',
+        prev: 'M40 132 C120 128, 190 116, 260 118 C340 120, 410 98, 490 95 C565 92, 620 84, 666 78',
+      },
+    };
+
+    function setTrafficRange(btn, key) {
+      btn.parentElement.querySelectorAll('button').forEach((b) => b.setAttribute('aria-pressed', 'false'));
+      btn.setAttribute('aria-pressed', 'true');
+      const s = TRAFFIC_SERIES[key];
+      document.getElementById('traffic-headline').innerHTML = s.headline;
+      document.getElementById('traffic-main-line').setAttribute('d', s.main);
+      document.getElementById('traffic-area').setAttribute('d', s.area);
+      document.getElementById('traffic-prev-line').setAttribute('d', s.prev);
+    }
+
+    const searchModal = document.getElementById('search-modal');
+    const searchInput = document.getElementById('search-input');
+
+    function openSearch() {
+      searchModal.classList.add('open');
+      setTimeout(() => searchInput.focus(), 20);
+    }
+
+    function closeSearch() {
+      searchModal.classList.remove('open');
+    }
+
+    searchModal.addEventListener('click', (e) => {
+      if (e.target === searchModal) closeSearch();
+    });
+
+    document.addEventListener('keydown', (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        openSearch();
+      } else if (e.key === 'Escape') {
+        closeSearch();
+        orgMenu.classList.remove('open');
+        orgBtn.setAttribute('aria-expanded', 'false');
+        document.getElementById('sidebar').classList.remove('mobile-open');
+      }
+    });
+
+    function notify(message) {
+      const el = document.getElementById('toast');
+      document.getElementById('toast-msg').textContent = message;
+      el.classList.add('show');
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => el.classList.remove('show'), 2600);
+    }
+  </script>
+</body>
+</html>

@@ -73,7 +73,7 @@ function AcceptInviteForm() {
         </CardHeader>
         {preview && !previewError && (
           <CardContent className="space-y-4">
-            <div className="rounded-none border border-border bg-card/80 p-3.5 text-sm space-y-1">
+            <div className="rounded-lg border border-border bg-card/80 p-3.5 text-sm space-y-1">
               <div className="flex items-center gap-2 font-semibold">
                 <Building2 className="h-4 w-4 text-primary" /> {preview.organizationName || 'Prism organization'}
               </div>

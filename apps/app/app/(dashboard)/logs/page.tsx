@@ -236,7 +236,7 @@ export default function LogsPage() {
                   <div className="flex items-center gap-2">
                     <span className={`h-2 w-2 rounded-full ${selectedLog.statusCode === 200 ? 'bg-emerald-500' : 'bg-red-500'} shrink-0`} />
                     <span className="text-muted-foreground">3. Upstream Proxy:</span>
-                    <span className={selectedLog.statusCode === 200 ? 'text-emerald-400 font-semibold' : 'text-red-400 font-semibold'}>
+                    <span className={selectedLog.statusCode === 200 ? 'text-emerald-700 dark:text-emerald-400 font-semibold' : 'text-rose-700 dark:text-rose-400 font-semibold'}>
                       HTTP {selectedLog.statusCode} ({selectedLog.latencyMs}ms)
                     </span>
                   </div>

@@ -17,13 +17,13 @@ export function AuthLayout({ children }: { children: ReactNode }) {
       </div>
 
       {/* Brand Header */}
-      <div className="relative z-10 mb-6 flex items-center gap-2.5">
-        <div className="flex h-10 w-10 items-center justify-center rounded-none bg-[#7C3AED] text-white shadow-md border border-white/20">
+      <div className="relative z-10 mb-6 flex items-center gap-3">
+        <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-violet-500/35 bg-violet-500/15 text-prism-violet shadow-sm">
           <Shield className="h-5 w-5" />
         </div>
         <div className="flex flex-col">
           <span className="font-mono text-lg font-bold tracking-tight text-foreground">
-            RoozyLabs <span className="text-[#8B5CF6]">Prism</span>
+            RoozyLabs <span className="text-prism-violet">Prism</span>
           </span>
           <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground font-mono">
             Universal AI Control Plane v0.4.0

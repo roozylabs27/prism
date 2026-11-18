@@ -104,7 +104,7 @@ function MultiSelect({
           aria-invalid={isInvalid ? true : undefined}
           data-invalid={isInvalid ? 'true' : undefined}
           className={cn(
-            'flex min-h-9 w-full items-center justify-between gap-2 rounded-none border border-input bg-transparent px-3 py-1.5 text-xs shadow-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50',
+            'flex min-h-9 w-full items-center justify-between gap-2 rounded-lg border border-input bg-transparent px-3 py-1.5 text-xs shadow-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50',
             'aria-invalid:border-destructive aria-invalid:focus:ring-destructive data-[invalid=true]:border-destructive data-[invalid=true]:focus:ring-destructive',
             isInvalid && 'border-destructive focus:ring-destructive',
             className
@@ -119,13 +119,13 @@ function MultiSelect({
                 return (
                   <span
                     key={v}
-                    className="inline-flex items-center gap-1 rounded-none border border-border bg-muted/80 px-2 py-0.5 text-xs text-foreground font-medium"
+                    className="inline-flex items-center gap-1 rounded-md border border-border bg-muted/80 px-2 py-0.5 text-xs text-foreground font-medium"
                   >
                     <span className="truncate max-w-[150px]">{opt?.label ?? v}</span>
                     <span
                       role="button"
                       tabIndex={0}
-                      className="cursor-pointer text-muted-foreground hover:text-foreground rounded-none focus:outline-none"
+                      className="cursor-pointer text-muted-foreground hover:text-foreground rounded-sm focus:outline-none"
                       onClick={(e) => {
                         e.stopPropagation();
                         removeValue(v);
@@ -167,7 +167,7 @@ function MultiSelect({
 
       <PopoverPrimitive.Portal>
         <PopoverPrimitive.Content
-          className="z-50 min-w-[var(--radix-popover-trigger-width)] overflow-hidden rounded-none border border-border bg-popover text-popover-foreground shadow-md animate-in fade-in-0 zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=top]:slide-in-from-bottom-2"
+          className="z-50 min-w-[var(--radix-popover-trigger-width)] overflow-hidden rounded-lg border border-border bg-popover text-popover-foreground shadow-lg animate-in fade-in-0 zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=top]:slide-in-from-bottom-2"
           sideOffset={4}
           align="start"
           style={{ width: 'var(--radix-popover-trigger-width)' }}
@@ -179,7 +179,7 @@ function MultiSelect({
                 return (
                   <span
                     key={v}
-                    className="inline-flex items-center gap-1 rounded-none border border-border bg-muted px-1.5 py-0.5 text-[10px]"
+                    className="inline-flex items-center gap-1 rounded-md border border-border bg-muted px-1.5 py-0.5 text-[10px]"
                   >
                     {opt?.label ?? v}
                     <button
@@ -239,12 +239,12 @@ function MultiSelect({
                     type="button"
                     disabled={option.disabled}
                     className={cn(
-                      'relative flex w-full cursor-pointer select-none items-center rounded-none py-1.5 pl-8 pr-2 text-xs outline-none transition-colors hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground',
+                      'relative flex w-full cursor-pointer select-none items-center rounded-md py-1.5 pl-8 pr-2 text-xs outline-none transition-colors hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground',
                       option.disabled && 'pointer-events-none opacity-50'
                     )}
                     onClick={() => toggleOption(option.value)}
                   >
-                    <span className="absolute left-2 flex h-3.5 w-3.5 items-center justify-center rounded-none border border-border">
+                    <span className="absolute left-2 flex h-3.5 w-3.5 items-center justify-center rounded border border-border">
                       {checked && <Check className="h-3 w-3 text-primary" />}
                     </span>
                     <span className="truncate">{option.label}</span>

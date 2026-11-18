@@ -1,10 +1,12 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Layers, Activity, KeyRound } from 'lucide-react';
+import Link from 'next/link';
+import { Layers, Cpu, KeyRound, ArrowRight } from 'lucide-react';
 import { useLogsQuery } from '@/hooks/queries/useLogsQuery';
 import { ApiRequestLog } from '@/lib/api';
 import { useSSE } from '@/context/SSEContext';
+import { AppRoutes } from '@/constants/routes';
 
 interface SSEEventData {
   byCredential?: Record<string, number>;
@@ -60,7 +62,6 @@ export function ModelActivityWidget({ collapsed }: { collapsed?: boolean }) {
     if (!lastEvent || !lastEvent.payload) return;
     const payload = lastEvent.payload as SSEEventPayload;
 
-    // 1. active_streams_update event (Real-time active credentials & models)
     if (payload.type === 'active_streams_update' && payload.data) {
       const { byCredential, byModel } = payload.data;
       if (byCredential) {
@@ -79,7 +80,6 @@ export function ModelActivityWidget({ collapsed }: { collapsed?: boolean }) {
       }
     }
 
-    // 2. ROUTING_DECISION event (Smart Router selection)
     if (payload.type === 'ROUTING_DECISION' && payload.data) {
       if (payload.data.selectedModel) {
         setActiveModel(payload.data.selectedModel);
@@ -87,7 +87,6 @@ export function ModelActivityWidget({ collapsed }: { collapsed?: boolean }) {
       }
     }
 
-    // 3. request_log_created event (Completed request summary)
     if (payload.type === 'request_log_created' && payload.data) {
       const d = payload.data;
       if (d.model) setActiveModel(d.model);
@@ -97,7 +96,6 @@ export function ModelActivityWidget({ collapsed }: { collapsed?: boolean }) {
       setLastActiveTime(Date.now());
     }
 
-    // 4. Fallback / flat payload structure
     if (payload.model) {
       setActiveModel(payload.model);
       setLastActiveTime(Date.now());
@@ -113,7 +111,6 @@ export function ModelActivityWidget({ collapsed }: { collapsed?: boolean }) {
     }
   }, [lastEvent]);
 
-  // 15-second recency status ticker
   useEffect(() => {
     const timer = setInterval(() => {
       const now = Date.now();
@@ -125,50 +122,68 @@ export function ModelActivityWidget({ collapsed }: { collapsed?: boolean }) {
 
   if (collapsed) {
     return (
-      <div
-        className="flex items-center justify-center py-2 text-muted-foreground"
-        title={`Active Router (prism-auto) | ${isRecentlyActive ? 'ACTIVE' : 'STANDBY'} | Model: ${isRecentlyActive ? activeModel : 'prism-auto'} | Key: ${activeCred}`}
+      <Link
+        href={AppRoutes.PLAYGROUND}
+        className="flex items-center justify-center rounded-lg py-2 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+        title={`Smart Router (${isRecentlyActive ? 'ACTIVE' : 'STANDBY'}) | ${isRecentlyActive ? activeModel : 'prism-auto'}`}
+        aria-label="Open Routing Simulator"
       >
-        <Activity className={`h-4 w-4 ${isRecentlyActive ? 'animate-pulse text-emerald-400' : 'text-muted-foreground'}`} />
-      </div>
+        <Cpu className={`h-4 w-4 ${isRecentlyActive ? 'text-prism-cyan' : 'text-prism-violet'}`} />
+      </Link>
     );
   }
 
   return (
-    <div className="p-3 rounded-none border border-border bg-card/60 backdrop-blur space-y-2 text-xs">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-1.5 text-muted-foreground font-semibold text-[11px]">
-          <Activity className={`h-3.5 w-3.5 ${isRecentlyActive ? 'text-emerald-400 animate-pulse' : 'text-muted-foreground'}`} />
+    <div className="rounded-xl border border-border bg-background/60 p-3 space-y-2.5 text-xs">
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2 min-w-0">
+          <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-violet-500/30 bg-violet-500/10 text-prism-violet">
+            <Cpu className="h-3.5 w-3.5" />
+          </div>
+          <div className="min-w-0">
+            <span className="block font-semibold text-foreground leading-tight">Smart Router</span>
+            <span className="block font-mono text-[10px] text-muted-foreground truncate">
+              {isRecentlyActive && latencyMs != null ? `${latencyMs}ms last` : 'Policy ready'}
+            </span>
+          </div>
         </div>
         <span
-          className={`text-[9px] font-mono px-1.5 py-0.5 rounded font-bold uppercase tracking-wider ${
+          className={`shrink-0 rounded-full px-2 py-0.5 font-mono text-[9px] font-bold uppercase tracking-wider border ${
             isRecentlyActive
-              ? 'text-emerald-400 bg-emerald-500/10 border border-emerald-500/20'
-              : 'text-muted-foreground bg-muted/40 border border-border'
+              ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400'
+              : 'border-border bg-muted/60 text-muted-foreground'
           }`}
         >
-          {isRecentlyActive ? 'ACTIVE' : 'STANDBY'}
+          {isRecentlyActive ? 'LIVE' : 'STANDBY'}
         </span>
       </div>
 
-      <div className="space-y-1 font-mono text-xs pt-0.5">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-1.5 font-bold text-foreground">
-            <Layers className="h-3.5 w-3.5 text-muted-foreground" />
-            <span className="truncate max-w-[110px]">{isRecentlyActive ? activeModel : 'prism-auto'}</span>
+      <div className="space-y-1 font-mono text-[11px] rounded-lg border border-border/70 bg-card px-2.5 py-1.5">
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-1.5 font-medium text-foreground min-w-0">
+            <Layers className="h-3 w-3 shrink-0 text-prism-cyan" />
+            <span className="truncate">{isRecentlyActive ? activeModel : 'prism-auto'}</span>
           </div>
-          <span className="text-muted-foreground text-[10px]">
+          <span className="text-[10px] text-muted-foreground shrink-0">
             {isRecentlyActive && latencyMs != null ? `${latencyMs}ms` : 'Ready'}
           </span>
         </div>
 
         {isRecentlyActive && activeCred && (
-          <div className="flex items-center gap-1 text-[10px] text-muted-foreground pt-0.5 truncate">
-            <KeyRound className="h-3 w-3 text-muted-foreground shrink-0" />
+          <div className="flex items-center gap-1 text-[10px] text-muted-foreground truncate">
+            <KeyRound className="h-3 w-3 shrink-0" />
             <span className="truncate">{activeCred}</span>
           </div>
         )}
       </div>
+
+      <Link
+        href={AppRoutes.PLAYGROUND}
+        className="inline-flex h-8 w-full items-center justify-center gap-1.5 rounded-lg bg-primary px-3 text-xs font-semibold text-primary-foreground shadow-sm transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      >
+        <span>Open Simulator</span>
+        <ArrowRight className="h-3.5 w-3.5" />
+      </Link>
     </div>
   );
 }

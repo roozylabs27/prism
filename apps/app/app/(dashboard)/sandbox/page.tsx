@@ -1029,7 +1029,7 @@ export default function SandboxPage() {
                         disabled={!executionOutput || isExecuting}
                       >
                         {copied ? (
-                          <CheckIcon className="h-3.5 w-3.5 text-emerald-400" />
+                          <CheckIcon className="h-3.5 w-3.5 text-emerald-700 dark:text-emerald-400" />
                         ) : (
                           <CopyIcon className="h-3.5 w-3.5 text-primary" />
                         )}

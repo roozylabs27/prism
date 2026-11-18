@@ -178,7 +178,7 @@ export default function PlaygroundPage() {
                           <span className="text-muted-foreground text-[10px]">({cand.providerName})</span>
                         </div>
                         <div className="flex items-center gap-3">
-                          <span className="text-emerald-400 text-[10px]">${cand.estimatedCostUSD != null ? cand.estimatedCostUSD.toFixed(4) : '0'}/1K</span>
+                          <span className="text-emerald-700 dark:text-emerald-400 text-[10px]">${cand.estimatedCostUSD != null ? cand.estimatedCostUSD.toFixed(4) : '0'}/1K</span>
                           <Badge variant="outline" className="font-mono text-[10px]">
                             {Math.round((cand.totalScore || 0) * 100)}%
                           </Badge>

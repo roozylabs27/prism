@@ -24,12 +24,12 @@ export default function NotFoundPage() {
 
       {/* Brand Header */}
       <div className="relative z-10 mb-6 flex items-center gap-2.5">
-        <div className="flex h-10 w-10 items-center justify-center rounded-none bg-[#7C3AED] text-white shadow-md border border-white/20">
+        <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-violet-500/35 bg-violet-500/15 text-prism-violet shadow-sm">
           <Shield className="h-5 w-5" />
         </div>
         <div className="flex flex-col">
           <span className="font-mono text-lg font-bold tracking-tight text-foreground">
-            RoozyLabs <span className="text-[#8B5CF6]">Prism</span>
+            RoozyLabs <span className="text-prism-violet">Prism</span>
           </span>
           <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground font-mono">
             Universal AI Control Plane v0.4.0
@@ -61,12 +61,12 @@ export default function NotFoundPage() {
 
           <CardContent className="space-y-4">
             {/* Target Path Diagnostic Box */}
-            <div className="rounded-none border border-border bg-muted/40 p-3 font-mono text-xs">
+            <div className="rounded-lg border border-border bg-muted/40 p-3 font-mono text-xs">
               <div className="flex items-center justify-between text-[11px] text-muted-foreground mb-1">
                 <span className="uppercase font-semibold">Unresolved Target Route:</span>
                 <span className="text-muted-foreground">UNRESOLVED_URI</span>
               </div>
-              <p className="font-semibold text-foreground break-all select-all bg-background/80 px-2 py-1 border border-border/60">
+              <p className="font-semibold text-foreground break-all select-all bg-background/80 rounded-md px-2 py-1 border border-border/60">
                 {pathname || '/unknown-route'}
               </p>
             </div>
