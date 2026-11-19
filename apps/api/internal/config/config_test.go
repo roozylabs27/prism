@@ -36,6 +36,17 @@ func TestLoadDefaultsToProduction(t *testing.T) {
 	// became warnings and Swagger was served.
 	assert.Equal(t, "production", cfg.AppEnv)
 	assert.False(t, cfg.IsDevelopment())
+	assert.True(t, cfg.RedisFailClosed, "production must default REDIS_FAIL_CLOSED=true")
+
+	t.Setenv("APP_ENV", "development")
+	devCfg, err := Load()
+	assert.NoError(t, err)
+	assert.False(t, devCfg.RedisFailClosed, "development defaults REDIS_FAIL_CLOSED=false")
+
+	t.Setenv("REDIS_FAIL_CLOSED", "true")
+	devStrictCfg, err := Load()
+	assert.NoError(t, err)
+	assert.True(t, devStrictCfg.RedisFailClosed)
 }
 
 func TestLoadRejectsMalformedNumbers(t *testing.T) {

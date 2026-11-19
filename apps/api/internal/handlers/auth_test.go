@@ -197,3 +197,27 @@ func TestSignupRejectsWeakInput(t *testing.T) {
 	w = postJSON(r, "/api/auth/signup", `{"name":"Ada","email":"not-an-email","password":"correct horse"}`)
 	assert.Equal(t, http.StatusBadRequest, w.Code)
 }
+
+type failingLimiter struct{}
+
+func (failingLimiter) Hit(_ context.Context, _ string) (bool, time.Duration, error) {
+	return true, 0, fmt.Errorf("redis unavailable")
+}
+
+func (failingLimiter) Blocked(_ context.Context, _ string) (bool, time.Duration, error) {
+	return false, 0, fmt.Errorf("redis unavailable")
+}
+
+func (failingLimiter) Reset(_ context.Context, _ string) error { return nil }
+
+func TestAuthFailsClosedWhenLimiterErrorsAndConfigured(t *testing.T) {
+	h := NewAuthHandler(nil, NewTurnstile("", false), failingLimiter{}, failingLimiter{})
+	h.SetFailClosed(true)
+	r := authRouter(h)
+
+	for _, path := range []string{"/api/auth/login", "/api/auth/signup"} {
+		w := postJSON(r, path, `{"name":"Ada","email":"ada@example.com","password":"correct horse"}`)
+		assert.Equal(t, http.StatusServiceUnavailable, w.Code, path)
+		assert.Contains(t, w.Body.String(), "AUTH_THROTTLE_UNAVAILABLE", path)
+	}
+}

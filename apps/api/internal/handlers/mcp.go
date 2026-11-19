@@ -18,8 +18,17 @@ import (
 	"github.com/roozylabs/prism/internal/utils"
 )
 
+type mcpServerRepo interface {
+	ListByUserID(ctx context.Context, userID string) ([]models.MCPServer, error)
+	FindByID(ctx context.Context, id, userID string) (*models.MCPServer, error)
+	Create(ctx context.Context, s *models.MCPServer) error
+	Update(ctx context.Context, s *models.MCPServer) error
+	Delete(ctx context.Context, id, userID string) error
+	GetServerWithTools(ctx context.Context, s *models.MCPServer) (*models.MCPServerWithTools, error)
+}
+
 type MCPHandler struct {
-	servers     *repository.MCPServerRepository
+	servers     mcpServerRepo
 	tools       *repository.MCPToolRepository
 	gateway     *proxy.MCPGateway
 	invocations *repository.MCPInvocationRepository
@@ -28,7 +37,11 @@ type MCPHandler struct {
 }
 
 func NewMCPHandler(servers *repository.MCPServerRepository, tools *repository.MCPToolRepository, gateway *proxy.MCPGateway, invocations *repository.MCPInvocationRepository, agents *repository.AgentRepository, encKey string) *MCPHandler {
-	return &MCPHandler{servers: servers, tools: tools, gateway: gateway, invocations: invocations, agents: agents, encKey: encKey}
+	var srvRepo mcpServerRepo
+	if servers != nil {
+		srvRepo = servers
+	}
+	return &MCPHandler{servers: srvRepo, tools: tools, gateway: gateway, invocations: invocations, agents: agents, encKey: encKey}
 }
 
 type CreateMCPServerRequest struct {
@@ -62,9 +75,42 @@ type MCPServerEdit struct {
 	Enabled       bool              `json:"enabled"`
 }
 
-func (h *MCPHandler) toEdit(srv *models.MCPServer) (*MCPServerEdit, error) {
+var sensitiveHeaderTokens = []string{
+	"authorization",
+	"api-key",
+	"apikey",
+	"token",
+	"secret",
+	"cookie",
+	"password",
+	"credential",
+}
+
+func isSensitiveHeaderKey(k string) bool {
+	lower := strings.ToLower(strings.TrimSpace(k))
+	for _, tok := range sensitiveHeaderTokens {
+		if strings.Contains(lower, tok) {
+			return true
+		}
+	}
+	return false
+}
+
+func maskHeaderValue(key, val string) string {
+	trimmed := strings.TrimSpace(val)
+	if trimmed == "" {
+		return ""
+	}
+	if strings.EqualFold(strings.TrimSpace(key), "Authorization") && len(trimmed) > 7 && strings.EqualFold(trimmed[:7], "bearer ") {
+		tok := strings.TrimSpace(trimmed[7:])
+		return "Bearer " + utils.MaskAPIKey(tok)
+	}
+	return utils.MaskAPIKey(trimmed)
+}
+
+func (h *MCPHandler) decryptHeadersMap(srv *models.MCPServer) (map[string]string, error) {
 	var headers map[string]string
-	if srv.HeadersEncrypted != nil && *srv.HeadersEncrypted != "" {
+	if srv != nil && srv.HeadersEncrypted != nil && *srv.HeadersEncrypted != "" {
 		raw, err := utils.DecryptAES256GCM(*srv.HeadersEncrypted, h.encKey)
 		if err != nil {
 			return nil, fmt.Errorf("decrypt headers: %w", err)
@@ -76,6 +122,22 @@ func (h *MCPHandler) toEdit(srv *models.MCPServer) (*MCPServerEdit, error) {
 	if headers == nil {
 		headers = map[string]string{}
 	}
+	return headers, nil
+}
+
+func (h *MCPHandler) toEdit(srv *models.MCPServer) (*MCPServerEdit, error) {
+	headers, err := h.decryptHeadersMap(srv)
+	if err != nil {
+		return nil, err
+	}
+	masked := make(map[string]string, len(headers))
+	for k, v := range headers {
+		if isSensitiveHeaderKey(k) {
+			masked[k] = maskHeaderValue(k, v)
+		} else {
+			masked[k] = v
+		}
+	}
 	return &MCPServerEdit{
 		ID:            srv.ID,
 		Name:          srv.Name,
@@ -84,7 +146,7 @@ func (h *MCPHandler) toEdit(srv *models.MCPServer) (*MCPServerEdit, error) {
 		Type:          srv.Type,
 		TransportType: srv.TransportType,
 		EndpointURL:   srv.EndpointURL,
-		Headers:       headers,
+		Headers:       masked,
 		HasAuthToken:  srv.AuthTokenEncrypted != nil,
 		Command:       srv.Command,
 		Args:          srv.Args,
@@ -114,16 +176,34 @@ func cleanAuthorizationHeader(val string) string {
 }
 
 func (h *MCPHandler) buildConfigHeaders(req CreateMCPServerRequest) (*string, error) {
+	return h.buildMergedConfigHeaders(nil, req)
+}
+
+func (h *MCPHandler) buildMergedConfigHeaders(existing *models.MCPServer, req CreateMCPServerRequest) (*string, error) {
+	prevHeaders := map[string]string{}
+	if existing != nil {
+		if decrypted, err := h.decryptHeadersMap(existing); err == nil {
+			prevHeaders = decrypted
+		}
+	}
+
 	headers := map[string]string{}
 	for k, v := range req.Headers {
 		kClean := strings.TrimSpace(k)
 		vClean := strings.TrimSpace(v)
-		if kClean != "" && vClean != "" {
-			if strings.EqualFold(kClean, "Authorization") {
-				vClean = cleanAuthorizationHeader(vClean)
-			}
-			headers[kClean] = vClean
+		if kClean == "" || vClean == "" {
+			continue
 		}
+		if prevVal, hasPrev := lookupHeaderCaseInsensitive(prevHeaders, kClean); hasPrev && isSensitiveHeaderKey(kClean) {
+			if strings.Contains(vClean, "••••") || vClean == maskHeaderValue(kClean, prevVal) {
+				headers[kClean] = prevVal
+				continue
+			}
+		}
+		if strings.EqualFold(kClean, "Authorization") {
+			vClean = cleanAuthorizationHeader(vClean)
+		}
+		headers[kClean] = vClean
 	}
 
 	if req.AuthToken != "" {
@@ -145,6 +225,18 @@ func (h *MCPHandler) buildConfigHeaders(req CreateMCPServerRequest) (*string, er
 		return nil, fmt.Errorf("encrypt headers: %w", err)
 	}
 	return &enc, nil
+}
+
+func lookupHeaderCaseInsensitive(headers map[string]string, target string) (string, bool) {
+	if v, ok := headers[target]; ok {
+		return v, true
+	}
+	for k, v := range headers {
+		if strings.EqualFold(k, target) {
+			return v, true
+		}
+	}
+	return "", false
 }
 
 // rejectLocalMCP responds 403 and returns true when a local (stdio) MCP server
@@ -310,7 +402,7 @@ func (h *MCPHandler) Update(c *gin.Context) {
 	}
 
 	if req.AuthToken != "" || len(req.Headers) > 0 {
-		headersEnc, err := h.buildConfigHeaders(req)
+		headersEnc, err := h.buildMergedConfigHeaders(existing, req)
 		if err != nil {
 			httputil.RespondInternalError(c, "Failed to encrypt headers", err, "ENCRYPTION_FAILED")
 			return

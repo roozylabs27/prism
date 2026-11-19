@@ -58,13 +58,21 @@ func (r *ModelRepository) ListByProviderID(ctx context.Context, providerID strin
 	return modelList, nil
 }
 
-func (r *ModelRepository) ListWithFilter(ctx context.Context, providerID, search string, limit, offset int) ([]models.Model, int64, error) {
+func (r *ModelRepository) ListWithFilter(ctx context.Context, providerID, search string, limit, offset int, userID ...string) ([]models.Model, int64, error) {
 	query := `SELECT ` + modelSelectCols + `
 		 FROM models m LEFT JOIN providers p ON p.id = m.provider_id WHERE 1=1`
 	countQuery := `SELECT COUNT(*) FROM models m LEFT JOIN providers p ON p.id = m.provider_id WHERE 1=1`
 
 	var args []interface{}
 	var countArgs []interface{}
+
+	if len(userID) > 0 && userID[0] != "" {
+		args = append(args, userID[0])
+		countArgs = append(countArgs, userID[0])
+		filter := fmt.Sprintf(" AND (p.user_id = $%d OR p.user_id IS NULL OR p.user_id = '')", len(args))
+		query += filter
+		countQuery += filter
+	}
 
 	if providerID != "" && providerID != "all" {
 		args = append(args, providerID)

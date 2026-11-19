@@ -229,3 +229,82 @@ func TestTenantMiddleware_NoSessionUser_NoHeader_Forbidden(t *testing.T) {
 	// No user session and no header: strictly fail-closed
 	assert.Equal(t, http.StatusForbidden, resp.Code)
 }
+
+func TestTenantMiddleware_GatewayKey_WorkspaceAndProjectPinning(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	orgA := "org_A"
+	wsA := "ws_A"
+	projA := "proj_A"
+
+	cases := []struct {
+		name         string
+		key          *models.GatewayAPIKey
+		wsHeader     string
+		projHeader   string
+		wantStatus   int
+		wantWS       string
+		wantProj     string
+	}{
+		{
+			name:       "workspace scoped key rejects different workspace header",
+			key:        &models.GatewayAPIKey{ID: "k1", OrgID: &orgA, WorkspaceID: &wsA},
+			wsHeader:   "ws_B",
+			wantStatus: http.StatusForbidden,
+		},
+		{
+			name:       "project scoped key rejects different project header",
+			key:        &models.GatewayAPIKey{ID: "k2", OrgID: &orgA, WorkspaceID: &wsA, ProjectID: &projA},
+			wsHeader:   wsA,
+			projHeader: "proj_B",
+			wantStatus: http.StatusForbidden,
+		},
+		{
+			name:       "workspace and project scoped key accepts matching headers",
+			key:        &models.GatewayAPIKey{ID: "k3", OrgID: &orgA, WorkspaceID: &wsA, ProjectID: &projA},
+			wsHeader:   wsA,
+			projHeader: projA,
+			wantStatus: http.StatusOK,
+			wantWS:     wsA,
+			wantProj:   projA,
+		},
+		{
+			name:       "org-wide key allows header narrowing to workspace and project",
+			key:        &models.GatewayAPIKey{ID: "k4", OrgID: &orgA},
+			wsHeader:   "ws_custom",
+			projHeader: "proj_custom",
+			wantStatus: http.StatusOK,
+			wantWS:     "ws_custom",
+			wantProj:   "proj_custom",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			r := gin.New()
+			r.Use(func(c *gin.Context) {
+				c.Set("gatewayKey", tc.key)
+				c.Next()
+			})
+			r.Use(middleware.TenantMiddleware(nil))
+			r.GET("/test", func(c *gin.Context) {
+				c.JSON(http.StatusOK, middleware.GetTenantContext(c))
+			})
+
+			req := httptest.NewRequest(http.MethodGet, "/test", nil)
+			if tc.wsHeader != "" {
+				req.Header.Set("X-Prism-Workspace-ID", tc.wsHeader)
+			}
+			if tc.projHeader != "" {
+				req.Header.Set("X-Prism-Project-ID", tc.projHeader)
+			}
+			w := httptest.NewRecorder()
+			r.ServeHTTP(w, req)
+
+			assert.Equal(t, tc.wantStatus, w.Code, w.Body.String())
+			if tc.wantStatus == http.StatusOK {
+				assert.Contains(t, w.Body.String(), tc.wantWS)
+				assert.Contains(t, w.Body.String(), tc.wantProj)
+			}
+		})
+	}
+}

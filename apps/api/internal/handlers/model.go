@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 
@@ -11,25 +12,89 @@ import (
 	"github.com/roozylabs/prism/internal/repository"
 )
 
+type modelStore interface {
+	ListWithFilter(ctx context.Context, providerID, search string, limit, offset int, userID ...string) ([]models.Model, int64, error)
+	FindByID(ctx context.Context, id string) (*models.Model, error)
+	Create(ctx context.Context, m *models.Model) error
+	Update(ctx context.Context, m *models.Model) error
+	Delete(ctx context.Context, id string) error
+}
+
+type modelProviderFinder interface {
+	FindByID(ctx context.Context, id string) (*models.Provider, error)
+}
+
 type ModelHandler struct {
-	models        *repository.ModelRepository
-	providers     *repository.ProviderRepository
+	models        modelStore
+	providers     modelProviderFinder
 	gatewayKeys   *repository.GatewayKeyRepository
 	cooldownStore *goredis.CooldownStore
 }
 
 func NewModelHandler(
-	models *repository.ModelRepository,
-	providers *repository.ProviderRepository,
+	modelsRepo *repository.ModelRepository,
+	providersRepo *repository.ProviderRepository,
 	gatewayKeys *repository.GatewayKeyRepository,
 	cooldownStore *goredis.CooldownStore,
 ) *ModelHandler {
+	var ms modelStore
+	if modelsRepo != nil {
+		ms = modelsRepo
+	}
+	var pf modelProviderFinder
+	if providersRepo != nil {
+		pf = providersRepo
+	}
 	return &ModelHandler{
-		models:        models,
-		providers:     providers,
+		models:        ms,
+		providers:     pf,
 		gatewayKeys:   gatewayKeys,
 		cooldownStore: cooldownStore,
 	}
+}
+
+func (h *ModelHandler) callerUserID(c *gin.Context) string {
+	if uid := c.GetString("userId"); uid != "" {
+		return uid
+	}
+	return c.GetString("user_id")
+}
+
+// authorizeProvider enforces tenant ownership for provider-scoped model routes.
+// Reads allow caller-owned providers and shared system providers (UserID == "").
+// Writes allow only providers owned by the caller; shared system providers
+// return 403 and foreign providers return 404 to prevent existence oracles.
+func (h *ModelHandler) authorizeProvider(c *gin.Context, providerID string, write bool) bool {
+	if h.providers == nil {
+		httputil.RespondForbidden(c, "Forbidden: provider ownership verifier unavailable", nil, "PROVIDER_AUTHZ_UNAVAILABLE")
+		return false
+	}
+	userID := h.callerUserID(c)
+	if userID == "" {
+		httputil.RespondUnauthorized(c, "Authentication required", nil, "AUTH_REQUIRED")
+		return false
+	}
+	prov, err := h.providers.FindByID(c.Request.Context(), providerID)
+	if err != nil || prov == nil {
+		httputil.RespondNotFound(c, "Provider not found", err, "PROVIDER_NOT_FOUND")
+		return false
+	}
+	if !write {
+		if prov.UserID == "" || prov.UserID == userID {
+			return true
+		}
+		httputil.RespondNotFound(c, "Provider not found", nil, "PROVIDER_NOT_FOUND")
+		return false
+	}
+	if prov.UserID == "" {
+		httputil.RespondForbidden(c, "System providers cannot be modified by tenants", nil, "SYSTEM_PROVIDER_READONLY")
+		return false
+	}
+	if prov.UserID != userID {
+		httputil.RespondNotFound(c, "Provider not found", nil, "PROVIDER_NOT_FOUND")
+		return false
+	}
+	return true
 }
 
 // List godoc
@@ -44,10 +109,20 @@ func NewModelHandler(
 func (h *ModelHandler) List(c *gin.Context) {
 	providerID := c.Param("id")
 	search := c.Query("search")
+	userID := h.callerUserID(c)
+	if userID == "" {
+		httputil.RespondUnauthorized(c, "Authentication required", nil, "AUTH_REQUIRED")
+		return
+	}
+	if providerID != "" && providerID != "all" {
+		if !h.authorizeProvider(c, providerID, false) {
+			return
+		}
+	}
 
 	pg := httputil.ParsePage(c)
 
-	modelList, total, err := h.models.ListWithFilter(c.Request.Context(), providerID, search, pg.Limit, pg.Offset)
+	modelList, total, err := h.models.ListWithFilter(c.Request.Context(), providerID, search, pg.Limit, pg.Offset, userID)
 	if err != nil {
 		httputil.RespondInternalError(c, "Failed to list models", err, "MODELS_LIST_FAILED")
 		return
@@ -66,9 +141,13 @@ func (h *ModelHandler) List(c *gin.Context) {
 // @Failure      404 {object} map[string]string
 // @Router       /api/providers/{id}/models/{modelId} [get]
 func (h *ModelHandler) Get(c *gin.Context) {
+	providerID := c.Param("id")
+	if !h.authorizeProvider(c, providerID, false) {
+		return
+	}
 	modelID := c.Param("modelId")
 	m, err := h.models.FindByID(c.Request.Context(), modelID)
-	if err != nil {
+	if err != nil || m == nil || m.ProviderID != providerID {
 		httputil.RespondNotFound(c, "Model not found", err, "MODEL_NOT_FOUND")
 		return
 	}
@@ -87,6 +166,9 @@ func (h *ModelHandler) Get(c *gin.Context) {
 // @Router       /api/providers/{id}/models [post]
 func (h *ModelHandler) Create(c *gin.Context) {
 	providerID := c.Param("id")
+	if !h.authorizeProvider(c, providerID, true) {
+		return
+	}
 	var m models.Model
 	if err := c.ShouldBindJSON(&m); err != nil {
 		httputil.RespondBadRequest(c, "Invalid request payload", err, "INVALID_REQUEST_BODY")
@@ -114,9 +196,13 @@ func (h *ModelHandler) Create(c *gin.Context) {
 // @Failure      404 {object} map[string]string
 // @Router       /api/providers/{id}/models/{modelId} [put]
 func (h *ModelHandler) Update(c *gin.Context) {
+	providerID := c.Param("id")
+	if !h.authorizeProvider(c, providerID, true) {
+		return
+	}
 	modelID := c.Param("modelId")
 	existing, err := h.models.FindByID(c.Request.Context(), modelID)
-	if err != nil {
+	if err != nil || existing == nil || existing.ProviderID != providerID {
 		httputil.RespondNotFound(c, "Model not found", err, "MODEL_NOT_FOUND")
 		return
 	}
@@ -125,6 +211,8 @@ func (h *ModelHandler) Update(c *gin.Context) {
 		httputil.RespondBadRequest(c, "Invalid request payload", err, "INVALID_REQUEST_BODY")
 		return
 	}
+	existing.ID = modelID
+	existing.ProviderID = providerID
 
 	if err := h.models.Update(c.Request.Context(), existing); err != nil {
 		httputil.RespondStoreError(c, err, "Model", "MODEL_UPDATE")
@@ -145,9 +233,13 @@ func (h *ModelHandler) Update(c *gin.Context) {
 // @Failure      409 {object} map[string]string
 // @Router       /api/providers/{id}/models/{modelId} [delete]
 func (h *ModelHandler) Delete(c *gin.Context) {
+	providerID := c.Param("id")
+	if !h.authorizeProvider(c, providerID, true) {
+		return
+	}
 	modelID := c.Param("modelId")
 	m, err := h.models.FindByID(c.Request.Context(), modelID)
-	if err != nil {
+	if err != nil || m == nil || m.ProviderID != providerID {
 		httputil.RespondNotFound(c, "Model not found", err, "MODEL_NOT_FOUND")
 		return
 	}
@@ -212,9 +304,13 @@ type UpdateCapabilitiesRequest struct {
 // @Failure      404 {object} map[string]string
 // @Router       /api/providers/{id}/models/{modelId}/capabilities [patch]
 func (h *ModelHandler) UpdateCapabilities(c *gin.Context) {
+	providerID := c.Param("id")
+	if !h.authorizeProvider(c, providerID, true) {
+		return
+	}
 	modelID := c.Param("modelId")
 	m, err := h.models.FindByID(c.Request.Context(), modelID)
-	if err != nil {
+	if err != nil || m == nil || m.ProviderID != providerID {
 		httputil.RespondNotFound(c, "Model not found", err, "MODEL_NOT_FOUND")
 		return
 	}

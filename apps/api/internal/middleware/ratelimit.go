@@ -22,9 +22,15 @@ type RateLimiter interface {
 
 // GatewayRateLimitMiddleware limits requests per gateway key per minute. The
 // key's own rate_limit applies, or defaultLimit when the key has none. When
-// the limiter cannot be reached the request goes through (see the Redis
-// failure table in docs/INFRASTRUCTURE.md), and that is logged.
+// the limiter cannot be reached, fails open for dev/test backward compatibility.
 func GatewayRateLimitMiddleware(limiter RateLimiter, defaultLimit int) gin.HandlerFunc {
+	return GatewayRateLimitMiddlewareWithPolicy(limiter, defaultLimit, false)
+}
+
+// GatewayRateLimitMiddlewareWithPolicy limits requests per gateway key per
+// minute. When failClosed is true, a Redis/limiter error rejects requests with
+// 503 Service Unavailable instead of letting traffic bypass enforcement.
+func GatewayRateLimitMiddlewareWithPolicy(limiter RateLimiter, defaultLimit int, failClosed bool) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		gatewayKey := c.MustGet("gatewayKey").(*models.GatewayAPIKey)
 		tc := GetTenantContext(c)
@@ -37,11 +43,25 @@ func GatewayRateLimitMiddleware(limiter RateLimiter, defaultLimit int) gin.Handl
 			c.Next()
 			return
 		}
+		if limiter == nil {
+			if failClosed {
+				httputil.RespondError(c, http.StatusServiceUnavailable, "Rate limit enforcement temporarily unavailable", nil, "RATE_LIMITER_UNAVAILABLE")
+				c.Abort()
+				return
+			}
+			c.Next()
+			return
+		}
 
 		key := fmt.Sprintf("tenant:%s:gateway:%s:rate_limit", tc.OrgID, gatewayKey.KeyHash)
 		d, err := limiter.Allow(c.Request.Context(), key, limit)
 		if err != nil {
-			logRateLimitFailOpen(err)
+			logRateLimitFailure(err, failClosed)
+			if failClosed {
+				httputil.RespondError(c, http.StatusServiceUnavailable, "Rate limit enforcement temporarily unavailable", err, "RATE_LIMITER_UNAVAILABLE")
+				c.Abort()
+				return
+			}
 			c.Next()
 			return
 		}
@@ -68,14 +88,18 @@ var (
 	rateLimitLogLast time.Time
 )
 
-// logRateLimitFailOpen reports a limiter failure at most once every 10
+// logRateLimitFailure reports a limiter failure at most once every 10
 // seconds: during a Redis outage every gateway request would hit it.
-func logRateLimitFailOpen(err error) {
+func logRateLimitFailure(err error, failClosed bool) {
 	rateLimitLogMu.Lock()
 	defer rateLimitLogMu.Unlock()
 	if time.Since(rateLimitLogLast) < 10*time.Second {
 		return
 	}
 	rateLimitLogLast = time.Now()
+	if failClosed {
+		log.Printf("gateway rate limit: limiter unavailable, failing closed (503): %v", err)
+		return
+	}
 	log.Printf("gateway rate limit: limiter unavailable, letting requests through: %v", err)
 }

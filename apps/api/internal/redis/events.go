@@ -39,8 +39,14 @@ func NewEventPublisher(rdb *goredis.Client) *EventPublisher {
 
 // Publish sends an event to the dashboard streams of userID only.
 func (p *EventPublisher) Publish(ctx context.Context, userID, eventType string, data interface{}) error {
+	if p == nil {
+		return nil
+	}
 	if userID == "" {
 		return ErrNoEventOwner
+	}
+	if p.rdb == nil {
+		return nil
 	}
 	event := Event{
 		Type:      eventType,

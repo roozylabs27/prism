@@ -336,3 +336,36 @@ func TestIdempotencyOversizedResponseIsNotReplayed(t *testing.T) {
 	assert.Equal(t, "true", w.Header().Get("Idempotent-Replay"))
 	assert.Equal(t, int32(1), calls.Load())
 }
+
+func TestIdempotencyMiddlewareFailsClosedOnRedisError(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	// Nil store/client with failClosed=true must answer 503 when Idempotency-Key is present.
+	h := &idemHandler{}
+	r := gin.New()
+	r.Use(func(c *gin.Context) {
+		c.Set("gatewayKey", &models.GatewayAPIKey{ID: "gk-failclosed"})
+	})
+	r.Use(IdempotencyMiddlewareWithPolicy(nil, true))
+	r.POST("/v1/chat/completions", h.handle)
+
+	w := postIdem(r, "key-failclosed-nil", `"a"`)
+	assert.Equal(t, http.StatusServiceUnavailable, w.Code)
+	assert.Contains(t, w.Body.String(), "idempotency_unavailable")
+	assert.Equal(t, int32(0), h.calls.Load())
+
+	// Broken Redis address with failClosed=true must answer 503 on store.load error.
+	badRdb := redis.NewClient(&redis.Options{Addr: "127.0.0.1:1", DialTimeout: 50 * time.Millisecond, ReadTimeout: 50 * time.Millisecond, MaxRetries: 0})
+	defer func() { _ = badRdb.Close() }()
+	r2 := gin.New()
+	r2.Use(func(c *gin.Context) {
+		c.Set("gatewayKey", &models.GatewayAPIKey{ID: "gk-failclosed"})
+	})
+	r2.Use(IdempotencyMiddlewareWithPolicy(NewIdempotencyStore(badRdb), true))
+	r2.POST("/v1/chat/completions", h.handle)
+
+	w2 := postIdem(r2, "key-failclosed-err", `"a"`)
+	assert.Equal(t, http.StatusServiceUnavailable, w2.Code)
+	assert.Contains(t, w2.Body.String(), "idempotency_unavailable")
+	assert.Equal(t, int32(0), h.calls.Load())
+}

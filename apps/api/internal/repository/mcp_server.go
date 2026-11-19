@@ -110,6 +110,9 @@ func (r *MCPServerRepository) Create(ctx context.Context, s *models.MCPServer) e
 	if s.Type == "" {
 		s.Type = "remote"
 	}
+	if s.Args == nil {
+		s.Args = []string{}
+	}
 	return r.db.QueryRowContext(ctx,
 		`INSERT INTO mcp_servers (user_id, name, display_name, description, transport_type, endpoint_url, auth_token_encrypted, status, enabled, config_type, headers_encrypted, command, args, env, created_at, updated_at)
 		 VALUES (NULLIF($1, ''), $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
@@ -123,6 +126,9 @@ func (r *MCPServerRepository) Update(ctx context.Context, s *models.MCPServer) e
 	s.UpdatedAt = time.Now()
 	if s.Type == "" {
 		s.Type = "remote"
+	}
+	if s.Args == nil {
+		s.Args = []string{}
 	}
 	_, err := r.db.ExecContext(ctx,
 		`UPDATE mcp_servers SET display_name=$1, description=$2, transport_type=$3, endpoint_url=$4, auth_token_encrypted=$5, status=$6, enabled=$7, config_type=$8, headers_encrypted=$9, command=$10, args=$11, env=$12, updated_at=$13

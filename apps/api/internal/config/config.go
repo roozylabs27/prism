@@ -76,6 +76,11 @@ type Config struct {
 	// Retention is how many days the retention worker keeps rows of each
 	// growing table; 0 keeps them forever.
 	Retention RetentionDays
+	// RedisFailClosed controls whether Redis-backed security controls (gateway
+	// rate limiting, idempotency locks, auth attempt throttling) reject
+	// requests with 503 when Redis is unreachable. Defaults to true outside
+	// development so production cannot silently bypass enforcement.
+	RedisFailClosed bool
 }
 
 // SMTPSettings holds the SMTP_* settings.
@@ -158,6 +163,7 @@ func Load() (*Config, error) {
 		TurnstileSecretKey:      strings.TrimSpace(getEnv("CLOUDFLARE_SECRET_KEY", "")),
 		TurnstileDisabled:       p.bool("TURNSTILE_DISABLED", false),
 		ResourcePostgresEnabled: p.bool("RESOURCE_POSTGRES_ENABLED", false),
+		RedisFailClosed:         p.bool("REDIS_FAIL_CLOSED", appEnv != "development"),
 
 		// Prompt text (payloads, routing decisions' prompt_preview) is kept
 		// for the shortest time; request logs back billing and analytics.
