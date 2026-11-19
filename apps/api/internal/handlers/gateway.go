@@ -230,7 +230,13 @@ func (h *GatewayHandler) ChatCompletions(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"message": "Model is required", "type": "invalid_request_error"}})
 		return
 	}
-	// Only the sandbox may choose a policy; a client-sent body field is ignored.
+	// Client may select a named/ID routing policy via X-Routing-Policy (scoped
+	// strictly to the gateway key owner); raw body routing_policy_id is ignored.
+	if c.GetString("routingPolicyID") == "" && strings.TrimSpace(c.GetHeader("X-Routing-Policy")) != "" {
+		if !h.resolveSandboxPolicy(c, gatewayKey) {
+			return
+		}
+	}
 	req.RoutingPolicyID = c.GetString("routingPolicyID")
 
 	// Resolve Canonical TenantContext with Strict Ownership Security
@@ -328,7 +334,7 @@ func (h *GatewayHandler) ChatCompletions(c *gin.Context) {
 }
 
 func (h *GatewayHandler) publishEvents(c *gin.Context, requestID string, log *models.RequestLog, key *models.GatewayAPIKey) {
-	if log == nil {
+	if h.eventPublisher == nil || log == nil {
 		return
 	}
 	userID := c.GetString("userId")
@@ -540,7 +546,13 @@ func (h *GatewayHandler) AsyncChatCompletions(c *gin.Context) {
 		return
 	}
 
-	// Only the sandbox may choose a policy; a client-sent body field is ignored.
+	// Client may select a named/ID routing policy via X-Routing-Policy (scoped
+	// strictly to the gateway key owner); raw body routing_policy_id is ignored.
+	if c.GetString("routingPolicyID") == "" && strings.TrimSpace(c.GetHeader("X-Routing-Policy")) != "" {
+		if !h.resolveSandboxPolicy(c, keyObj) {
+			return
+		}
+	}
 	req.RoutingPolicyID = c.GetString("routingPolicyID")
 
 	tenantCtx := middleware.GetTenantContext(c)

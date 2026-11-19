@@ -583,3 +583,21 @@ func (r *RequestLogRepository) GetAgentStats(ctx context.Context, userID, agentI
 	return stats, nil
 }
 
+// GetAgentTotalSpendUSD returns the agent's month-to-date spend in USD from request_logs.
+func (r *RequestLogRepository) GetAgentTotalSpendUSD(ctx context.Context, agentID string) (float64, error) {
+	if agentID == "" {
+		return 0, nil
+	}
+	var spent sql.NullFloat64
+	err := r.db.QueryRowContext(ctx,
+		`SELECT COALESCE(SUM(cost_usd), 0)
+		 FROM request_logs
+		 WHERE agent_id = $1
+		   AND created_at >= date_trunc('month', NOW())`, agentID,
+	).Scan(&spent)
+	if err != nil {
+		return 0, err
+	}
+	return spent.Float64, nil
+}
+

@@ -67,3 +67,24 @@ func TestAgentGovernanceValidateToolAccess(t *testing.T) {
 	assert.False(t, res.ToolAllowed)
 	assert.Contains(t, res.Reason, "not permitted")
 }
+
+func TestAgentGovernance_ResourceMCPAndResolvedModelChecks(t *testing.T) {
+	ag := &models.Agent{
+		Name:              "client-agent",
+		Enabled:           true,
+		AllowedModels:     []string{"gpt-4o-mini", "!gpt-4o"},
+		AllowedResources:  []string{"*", "!prod_db"},
+		AllowedMCPServers: []string{"context7", "!local_shell"},
+	}
+
+	assert.True(t, CheckAgentResourceAccess(ag, "kb_docs").ResourceAllowed)
+	assert.False(t, CheckAgentResourceAccess(ag, "prod_db").ResourceAllowed)
+
+	assert.True(t, CheckAgentMCPServerAccess(ag, "context7", "Context7", "srv1").ToolAllowed)
+	assert.False(t, CheckAgentMCPServerAccess(ag, "local_shell", "Local", "srv2").ToolAllowed)
+	assert.False(t, CheckAgentMCPServerAccess(ag, "github", "GitHub", "srv3").ToolAllowed)
+
+	assert.True(t, CheckAgentResolvedModel(ag, "gpt-4o-mini"))
+	assert.False(t, CheckAgentResolvedModel(ag, "gpt-4o"))
+	assert.False(t, CheckAgentResolvedModel(ag, "claude-3-5-sonnet"), "concrete resolved check must not allow unlisted model")
+}

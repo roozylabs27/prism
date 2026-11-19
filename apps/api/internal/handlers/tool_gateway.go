@@ -9,21 +9,46 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/roozylabs/prism/internal/httputil"
+	"github.com/roozylabs/prism/internal/middleware"
 	"github.com/roozylabs/prism/internal/models"
 	"github.com/roozylabs/prism/internal/proxy"
 	goredis "github.com/roozylabs/prism/internal/redis"
 	"github.com/roozylabs/prism/internal/repository"
+	"github.com/roozylabs/prism/internal/utils"
 )
 
+type toolGatewayExecutor interface {
+	Execute(ctx context.Context, userID, toolName string, args map[string]interface{}, encKey string) (*proxy.ToolExecutionResult, error)
+}
+
 type ToolGatewayHandler struct {
-	gateway  *proxy.ToolGateway
-	toolInv  *repository.ToolInvocationRepository
-	eventPub *goredis.EventPublisher
-	encKey   string
+	gateway       toolGatewayExecutor
+	toolInv       *repository.ToolInvocationRepository
+	eventPub      *goredis.EventPublisher
+	encKey        string
+	admission     *proxy.AdmissionController
+	auditRecorder *proxy.AuditRecorder
+	roleResolver  MemberRoleResolver
 }
 
 func NewToolGatewayHandler(gw *proxy.ToolGateway, toolInv *repository.ToolInvocationRepository, eventPub *goredis.EventPublisher, encKey string) *ToolGatewayHandler {
-	return &ToolGatewayHandler{gateway: gw, toolInv: toolInv, eventPub: eventPub, encKey: encKey}
+	var exec toolGatewayExecutor
+	if gw != nil {
+		exec = gw
+	}
+	return &ToolGatewayHandler{gateway: exec, toolInv: toolInv, eventPub: eventPub, encKey: encKey}
+}
+
+// SetGovernance wires admission control, audit trail recording, and role
+// resolution onto tool execution so RBAC, quotas, budgets, and deny rules
+// are enforced at the execution boundary.
+func (h *ToolGatewayHandler) SetGovernance(admission *proxy.AdmissionController, auditRecorder *proxy.AuditRecorder, roleResolver MemberRoleResolver) {
+	if h == nil {
+		return
+	}
+	h.admission = admission
+	h.auditRecorder = auditRecorder
+	h.roleResolver = roleResolver
 }
 
 type ExecuteToolRequest struct {
@@ -38,19 +63,54 @@ func (h *ToolGatewayHandler) ExecuteTool(c *gin.Context) {
 		return
 	}
 
-	if agentVal, exists := c.Get("agentObject"); exists && agentVal != nil {
-		if agent, ok := agentVal.(*models.Agent); ok && len(agent.AllowedTools) > 0 {
-			allowed := false
-			for _, t := range agent.AllowedTools {
-				if t == "*" || t == toolName {
-					allowed = true
-					break
-				}
-			}
-			if !allowed {
-				httputil.RespondForbidden(c, "Agent is not authorized to execute tool '"+toolName+"'", nil, "TOOL_PERMISSION_DENIED")
-				return
-			}
+	tenantCtx, err := middleware.ResolveCanonicalTenantContext(c, gatewayKey)
+	if err != nil {
+		httputil.RespondForbidden(c, err.Error(), err, "TENANT_SECURITY_ERROR")
+		return
+	}
+
+	agent := middleware.AgentFromContext(c)
+	var agentID, agentName string
+	if agent != nil {
+		agentID, agentName = agent.ID, agent.Name
+	}
+
+	userRole := "developer"
+	if h.roleResolver != nil && gatewayKey.UserID != "" && tenantCtx.OrgID != "" {
+		resolvedRole, rErr := h.roleResolver.GetOrganizationMemberRole(c.Request.Context(), tenantCtx.OrgID, gatewayKey.UserID)
+		if rErr != nil || resolvedRole == "" {
+			httputil.RespondForbidden(c, ErrMemberRoleUnresolved.Error(), rErr, "TENANT_SECURITY_ERROR")
+			return
+		}
+		userRole = resolvedRole
+	}
+
+	executionID := uuid.New().String()
+
+	if h.admission != nil {
+		admRes, admErr := h.admission.Evaluate(c.Request.Context(), proxy.AdmissionRequest{
+			UserID:    gatewayKey.UserID,
+			Role:      userRole,
+			AgentID:   agentID,
+			AgentName: agentName,
+			Agent:     agent,
+			ToolName:  toolName,
+			TenantCtx: tenantCtx,
+		})
+		if admErr != nil {
+			httputil.RespondInternalError(c, "Governance check failed", admErr, "GOVERNANCE_CHECK_FAILED")
+			return
+		}
+		if admRes.Decision == proxy.AdmissionDeny {
+			h.recordAudit(c.Request.Context(), executionID, gatewayKey, agentID, agentName, userRole, toolName, admRes.HTTPStatus, 0, "denied", admRes.Reason)
+			utils.RespondWithError(c, admRes.HTTPStatus, admRes.ErrorCode, admRes.Reason, "FORBIDDEN", admRes.PolicyID, admRes.PolicyName)
+			return
+		}
+	} else if agent != nil {
+		if res := proxy.CheckAgentToolAccess(agent, toolName); !res.ToolAllowed {
+			h.recordAudit(c.Request.Context(), executionID, gatewayKey, agentID, agentName, userRole, toolName, http.StatusForbidden, 0, "denied", res.Reason)
+			httputil.RespondForbidden(c, res.Reason, nil, "TOOL_PERMISSION_DENIED")
+			return
 		}
 	}
 
@@ -60,28 +120,60 @@ func (h *ToolGatewayHandler) ExecuteTool(c *gin.Context) {
 		return
 	}
 
-	executionID := uuid.New().String()
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 60*time.Second)
 	defer cancel()
 
 	result, err := h.gateway.Execute(ctx, gatewayKey.UserID, toolName, req.Args, h.encKey)
 	if err != nil {
+		h.recordAudit(c.Request.Context(), executionID, gatewayKey, agentID, agentName, userRole, toolName, http.StatusBadGateway, 0, "error", err.Error())
 		httputil.RespondError(c, http.StatusBadGateway, "Tool execution failed: "+err.Error(), err, "TOOL_EXECUTION_FAILED")
 		return
 	}
 
 	argsJSON, _ := json.Marshal(req.Args)
-	_ = h.toolInv.CreateBatch(c.Request.Context(), executionID, []models.ToolCallRecord{
-		{Name: toolName, Arguments: argsJSON},
-	})
+	if h.toolInv != nil {
+		_ = h.toolInv.CreateBatch(c.Request.Context(), executionID, []models.ToolCallRecord{
+			{Name: toolName, Arguments: argsJSON},
+		})
+	}
 
-	_ = h.eventPub.Publish(c.Request.Context(), gatewayKey.UserID, "TOOL_EXECUTED", map[string]interface{}{
-		"executionId": executionID,
-		"tool":        toolName,
-		"backend":     result.Backend,
-		"statusCode":  result.StatusCode,
-		"latencyMs":   result.LatencyMs,
-	})
+	if h.eventPub != nil {
+		_ = h.eventPub.Publish(c.Request.Context(), gatewayKey.UserID, "TOOL_EXECUTED", map[string]interface{}{
+			"executionId": executionID,
+			"tool":        toolName,
+			"backend":     result.Backend,
+			"statusCode":  result.StatusCode,
+			"latencyMs":   result.LatencyMs,
+		})
+	}
 
+	h.recordAudit(c.Request.Context(), executionID, gatewayKey, agentID, agentName, userRole, toolName, result.StatusCode, result.LatencyMs, "compliant", string(argsJSON))
 	c.JSON(http.StatusOK, result)
+}
+
+func (h *ToolGatewayHandler) recordAudit(ctx context.Context, reqID string, key *models.GatewayAPIKey, agentID, agentName, userRole, toolName string, statusCode, latencyMs int, compliance, payload string) {
+	if h.auditRecorder == nil || key == nil {
+		return
+	}
+	trail := &models.AIAuditTrail{
+		RequestID:         reqID,
+		UserID:            key.UserID,
+		GatewayKeyID:      &key.ID,
+		UserRole:          userRole,
+		ModelSlug:         "tool:" + toolName,
+		FailoverChain:     []string{},
+		ToolsInvoked:      []string{toolName},
+		ResourcesAccessed: []string{},
+		MCPServersCalled:  []string{},
+		StatusCode:        statusCode,
+		LatencyMS:         latencyMs,
+		PromptHash:        utils.HashSHA256(toolName + ":" + payload),
+		ResponseHash:      utils.HashSHA256(compliance + ":" + reqID),
+		ComplianceStatus:  compliance,
+	}
+	if agentID != "" {
+		trail.AgentID = &agentID
+		trail.AgentName = &agentName
+	}
+	_ = h.auditRecorder.Record(ctx, trail)
 }

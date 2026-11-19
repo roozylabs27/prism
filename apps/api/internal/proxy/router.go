@@ -421,6 +421,9 @@ func (r *Router) ResolveSemantic(
 				continue
 			}
 		}
+		if req.Agent != nil && !CheckAgentResolvedModel(req.Agent, m.Slug) {
+			continue
+		}
 		candidates = append(candidates, &m)
 	}
 

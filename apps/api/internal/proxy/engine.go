@@ -161,8 +161,12 @@ type ProxyRequest struct {
 	// RoutingPolicyID selects the caller's routing policy for prism-auto
 	// requests (the sandbox sets it from X-Routing-Policy). It is kept out
 	// of Extra so it never reaches a provider, and survives async jobs.
-	RoutingPolicyID string                 `json:"routing_policy_id,omitempty"`
-	Extra           map[string]interface{} `json:"-"`
+	RoutingPolicyID string `json:"routing_policy_id,omitempty"`
+	// Agent carries the gateway-resolved agent into the Smart Router so
+	// prism-auto enforces allowed_models on candidate models. Ignored in JSON
+	// so callers cannot spoof it in the request body.
+	Agent *models.Agent          `json:"-"`
+	Extra map[string]interface{} `json:"-"`
 }
 
 func (r *ProxyRequest) UnmarshalJSON(data []byte) error {
