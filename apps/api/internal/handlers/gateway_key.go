@@ -1,7 +1,9 @@
 package handlers
 
 import (
+	"context"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -18,22 +20,52 @@ type GatewayKeyInvalidator interface {
 	Invalidate(keyHash string)
 }
 
+type gatewayKeyStore interface {
+	Create(ctx context.Context, k *models.GatewayAPIKey) error
+	ListByUserIDWithFilter(ctx context.Context, userID, search string, limit, offset int, orgID ...string) ([]models.GatewayAPIKey, int64, error)
+	Delete(ctx context.Context, id string, userID ...string) (string, error)
+}
+
+type gatewayKeyCredentialCounter interface {
+	CountActiveByProviderID(ctx context.Context, providerID string, userID ...string) (int64, error)
+}
+
+type gatewayKeyScopeValidator interface {
+	FindWorkspaceInOrg(ctx context.Context, orgID, workspaceID string) (*models.Workspace, error)
+	FindProjectInOrg(ctx context.Context, orgID, projectID string) (*models.Project, error)
+}
+
 type GatewayKeyHandler struct {
-	keys        *repository.GatewayKeyRepository
-	credentials *repository.CredentialRepository
-	cache       GatewayKeyInvalidator
-	audit       *AdminAudit
+	keys           gatewayKeyStore
+	credentials    gatewayKeyCredentialCounter
+	cache          GatewayKeyInvalidator
+	audit          *AdminAudit
+	scopeValidator gatewayKeyScopeValidator
 }
 
 func NewGatewayKeyHandler(keys *repository.GatewayKeyRepository, credentials *repository.CredentialRepository, cache GatewayKeyInvalidator) *GatewayKeyHandler {
-	return &GatewayKeyHandler{keys: keys, credentials: credentials, cache: cache}
+	var keyStore gatewayKeyStore
+	if keys != nil {
+		keyStore = keys
+	}
+	var credCounter gatewayKeyCredentialCounter
+	if credentials != nil {
+		credCounter = credentials
+	}
+	return &GatewayKeyHandler{keys: keyStore, credentials: credCounter, cache: cache}
 }
 
 func (h *GatewayKeyHandler) SetAuditLog(a *AdminAudit) { h.audit = a }
 
+func (h *GatewayKeyHandler) SetScopeValidator(v gatewayKeyScopeValidator) {
+	h.scopeValidator = v
+}
+
 type CreateGatewayKeyRequest struct {
 	Name          string   `json:"name" binding:"required"`
 	ProviderID    string   `json:"providerId"`
+	WorkspaceID   string   `json:"workspaceId"`
+	ProjectID     string   `json:"projectId"`
 	RateLimit     int      `json:"rateLimit"`
 	AllowedModels []string `json:"allowedModels"`
 	ExpiresInDays int      `json:"expiresInDays"`
@@ -49,6 +81,44 @@ func (h *GatewayKeyHandler) Create(c *gin.Context) {
 	if err := c.ShouldBindJSON(&req); err != nil {
 		httputil.RespondBadRequest(c, "Invalid request: name is required", err, "NAME_REQUIRED")
 		return
+	}
+
+	tc := middleware.GetTenantContext(c)
+	orgID := strings.TrimSpace(tc.OrgID)
+	wsID := strings.TrimSpace(req.WorkspaceID)
+	if wsID == "" {
+		wsID = strings.TrimSpace(tc.WorkspaceID)
+	}
+	projID := strings.TrimSpace(req.ProjectID)
+	if projID == "" {
+		projID = strings.TrimSpace(tc.ProjectID)
+	}
+
+	if h.scopeValidator != nil && (wsID != "" || projID != "") {
+		if orgID == "" {
+			httputil.RespondForbidden(c, "Organization context is required to scope gateway key", nil, "TENANT_REQUIRED")
+			return
+		}
+		if projID != "" {
+			proj, err := h.scopeValidator.FindProjectInOrg(c.Request.Context(), orgID, projID)
+			if err != nil {
+				httputil.RespondNotFound(c, "Project not found in this organization", err, "PROJECT_NOT_FOUND")
+				return
+			}
+			if wsID != "" && wsID != proj.WorkspaceID {
+				httputil.RespondBadRequest(c, "Project does not belong to the specified workspace", nil, "PROJECT_WORKSPACE_MISMATCH")
+				return
+			}
+			if wsID == "" {
+				wsID = proj.WorkspaceID
+			}
+		}
+		if wsID != "" {
+			if _, err := h.scopeValidator.FindWorkspaceInOrg(c.Request.Context(), orgID, wsID); err != nil {
+				httputil.RespondNotFound(c, "Workspace not found in this organization", err, "WORKSPACE_NOT_FOUND")
+				return
+			}
+		}
 	}
 
 	var providerIDPtr *string
@@ -84,10 +154,16 @@ func (h *GatewayKeyHandler) Create(c *gin.Context) {
 		expiresAt = &t
 	}
 
-	tc := middleware.GetTenantContext(c)
-	orgIDPtr := &tc.OrgID
-	wsIDPtr := &tc.WorkspaceID
-	projIDPtr := &tc.ProjectID
+	var orgIDPtr, wsIDPtr, projIDPtr *string
+	if orgID != "" {
+		orgIDPtr = &orgID
+	}
+	if wsID != "" {
+		wsIDPtr = &wsID
+	}
+	if projID != "" {
+		projIDPtr = &projID
+	}
 
 	key := &models.GatewayAPIKey{
 		UserID:        c.GetString("userId"),
@@ -108,7 +184,14 @@ func (h *GatewayKeyHandler) Create(c *gin.Context) {
 		httputil.RespondInternalError(c, "Failed to create gateway key", err, "GATEWAY_KEY_CREATE_FAILED")
 		return
 	}
-	h.audit.Record(c, "gateway_key.create", "gateway_key", key.ID, map[string]any{"name": key.Name, "keyPrefix": key.KeyPrefix, "rateLimit": key.RateLimit})
+	auditDetails := map[string]any{"name": key.Name, "keyPrefix": key.KeyPrefix, "rateLimit": key.RateLimit}
+	if wsID != "" {
+		auditDetails["workspaceId"] = wsID
+	}
+	if projID != "" {
+		auditDetails["projectId"] = projID
+	}
+	h.audit.Record(c, "gateway_key.create", "gateway_key", key.ID, auditDetails)
 
 	c.JSON(http.StatusCreated, CreateGatewayKeyResponse{
 		GatewayAPIKey: *key,

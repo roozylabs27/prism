@@ -131,6 +131,8 @@ func main() {
 	rbacRepo := repository.NewRBACRepository(sqlDB)
 	quotaRepo := repository.NewQuotaRepository(sqlDB)
 	billingRepo := repository.NewBillingRepository(sqlDB)
+	workspaceRepo := repository.NewWorkspaceRepository(sqlDB)
+	pilotOutcomesRepo := repository.NewPilotOutcomesRepository(sqlDB)
 
 	// Services
 	authService := service.NewAuthService(userRepo, sessionRepo, accountRepo)
@@ -164,12 +166,18 @@ func main() {
 		handlers.NewTurnstile(cfg.TurnstileSecretKey, cfg.IsDevelopment()),
 		goredis.NewAttemptLimiter(rdb, "auth:attempts:ip:", 30, 10*time.Minute),
 		goredis.NewAttemptLimiter(rdb, "auth:attempts:email:", 10, 15*time.Minute))
+	authHandler.SetFailClosed(cfg.RedisFailClosed)
 	providerHandler := handlers.NewProviderHandler(providerRepo, gatewayKeyRepo)
 	credentialHandler := handlers.NewCredentialHandler(credentialRepo, providerRepo, gatewayKeyRepo, cooldown, eventPublisher, cfg.EncryptionKey)
 	modelHandler := handlers.NewModelHandler(modelRepo, providerRepo, gatewayKeyRepo, cooldown)
 	gatewayKeyHandler := handlers.NewGatewayKeyHandler(gatewayKeyRepo, credentialRepo, gatewayKeyCache)
+	gatewayKeyHandler.SetScopeValidator(workspaceRepo)
+	workspaceHandler := handlers.NewWorkspaceHandler(workspaceRepo)
+	pilotOutcomesHandler := handlers.NewPilotOutcomesHandler(pilotOutcomesRepo)
 	admissionCtrl := proxy.NewAdmissionController(rbacEngine, agentGovernance, proxy.NewCachedQuotaEvaluator(quotaRepo, proxy.DefaultQuotaCacheTTL), budgetMgr)
+	admissionCtrl.SetAgentSpendFinder(requestLogRepo)
 	orchestrator := service.NewExecutionOrchestrator(engine, admissionCtrl, gatewayKeyRepo, requestLogRepo, eventPublisher, pricingRepo, auditRecorder)
+	orchestrator.SetBudgetManager(budgetMgr)
 	gatewayHandler := handlers.NewGatewayHandler(engine, gatewayKeyRepo, requestLogRepo, eventPublisher, pricingRepo, idemStore, agentGovernance, rbacEngine, auditRecorder, modelRepo, agentRepo, orchestrator)
 	gatewayHandler.SetMCPRepositories(mcpServerRepo, mcpToolRepo)
 	gatewayHandler.SetMemberRoleResolver(rbacRepo)
@@ -241,10 +249,13 @@ func main() {
 	finopsAnomaliesHandler := handlers.NewFinOpsAnomaliesHandler(anomalyRepo, budgetAlertRepo)
 	toolHandler := handlers.NewToolHandler(toolRepo, toolBackendRepo, toolGateway, cfg.EncryptionKey)
 	toolGatewayHandler := handlers.NewToolGatewayHandler(toolGateway, toolInvocationRepo, eventPublisher, cfg.EncryptionKey)
+	toolGatewayHandler.SetGovernance(admissionCtrl, auditRecorder, rbacRepo)
 	resourceHandler := handlers.NewResourceHandler(resourceRepo, resourceBackendRepo, resourceGateway, cfg.EncryptionKey)
 	resourceHandler.SetPostgresBackends(cfg.ResourcePostgresEnabled)
 	resourceGatewayHandler := handlers.NewResourceGatewayHandler(resourceGateway, toolInvocationRepo, eventPublisher, cfg.EncryptionKey)
+	resourceGatewayHandler.SetGovernance(admissionCtrl, auditRecorder, rbacRepo)
 	mcpHandler := handlers.NewMCPHandler(mcpServerRepo, mcpToolRepo, mcpGateway, mcpInvocationRepo, agentRepo, cfg.EncryptionKey)
+	mcpServerHandler := handlers.NewMCPServerHandler(mcpServerRepo, mcpToolRepo, mcpGateway, orchestrator, admissionCtrl, auditRecorder, rbacRepo, routingPolicyRepo, cfg.EncryptionKey)
 	mcpRegistryHandler := handlers.NewMCPRegistryHandler(mcpRegistryRepo)
 	agentHandler := handlers.NewAgentHandler(agentRepo, agentGovernance, requestLogRepo)
 	agentTemplateHandler := handlers.NewAgentTemplateHandler(agentTemplateRepo, agentRepo)
@@ -264,6 +275,7 @@ func main() {
 	adminAudit := handlers.NewAdminAudit(auditTrailRepo, userRepo)
 	orgMemberHandler.SetAuditLog(adminAudit)
 	gatewayKeyHandler.SetAuditLog(adminAudit)
+	workspaceHandler.SetAuditLog(adminAudit)
 	credentialHandler.SetAuditLog(adminAudit)
 	routingPolicyHandler.SetAuditLog(adminAudit)
 	governancePolicyHandler.SetAuditLog(adminAudit)
@@ -372,6 +384,12 @@ func main() {
 			protected.PUT("/organizations/members/:userId", requirePermission("member:update"), orgMemberHandler.UpdateMemberRole)
 			protected.DELETE("/organizations/members/:userId", requirePermission("member:remove"), orgMemberHandler.RemoveMember)
 
+			// Workspaces & Projects (Multi-Client Isolation Hierarchy)
+			protected.GET("/workspaces", requirePermission("organization:read"), workspaceHandler.ListWorkspaces)
+			protected.POST("/workspaces", requirePermission("organization:update"), workspaceHandler.CreateWorkspace)
+			protected.GET("/workspaces/:workspaceId/projects", requirePermission("organization:read"), workspaceHandler.ListProjects)
+			protected.POST("/workspaces/:workspaceId/projects", requirePermission("organization:update"), workspaceHandler.CreateProject)
+
 			// Providers
 			protected.GET("/providers", requirePermission("model:read"), providerHandler.List)
 			protected.POST("/providers", requirePermission("model:create"), providerHandler.Create)
@@ -413,6 +431,8 @@ func main() {
 			// Request Logs & Analytics
 			protected.GET("/logs", requirePermission("logs:read"), logsHandler.List)
 			protected.GET("/analytics/logs", requirePermission("logs:read"), logsHandler.GetAnalytics)
+			protected.GET("/analytics/pilot-outcomes", requirePermission("logs:read"), pilotOutcomesHandler.GetSummary)
+			protected.GET("/analytics/pilot-outcomes/export", requirePermission("logs:read"), pilotOutcomesHandler.Export)
 			protected.GET("/analytics/finops", requirePermission("finops:read"), finopsHandler.GetSummary)
 			protected.GET("/analytics/finops/anomalies", requirePermission("finops:read"), finopsAnomaliesHandler.ListAnomalies)
 			protected.GET("/analytics/finops/budget-alerts", requirePermission("finops:read"), finopsAnomaliesHandler.ListBudgetAlerts)
@@ -558,15 +578,16 @@ func main() {
 	registerGatewayRoutes := func(rg *gin.RouterGroup) {
 		rg.Use(middleware.GatewayAuthMiddleware(gatewayKeyCache))
 		rg.Use(middleware.TenantMiddleware(accountRepo))
-		rg.Use(middleware.GatewayRateLimitMiddleware(goredis.NewSlidingWindowLimiter(rdb, time.Minute), cfg.RateLimitPerKey))
+		rg.Use(middleware.GatewayRateLimitMiddlewareWithPolicy(goredis.NewSlidingWindowLimiter(rdb, time.Minute), cfg.RateLimitPerKey, cfg.RedisFailClosed))
 		rg.Use(middleware.AgentPolicyMiddleware(agentRepo))
-		rg.Use(proxy.IdempotencyMiddleware(idemStore))
+		rg.Use(proxy.IdempotencyMiddlewareWithPolicy(idemStore, cfg.RedisFailClosed))
 		rg.POST("/chat/completions", gatewayHandler.ChatCompletions)
 		rg.POST("/chat/completions/async", gatewayHandler.AsyncChatCompletions)
 		rg.GET("/jobs/:jobId", gatewayHandler.GetJobStatus)
 		rg.GET("/models", gatewayHandler.Models)
 		rg.POST("/tools/:toolName/execute", toolGatewayHandler.ExecuteTool)
 		rg.POST("/resources/:resourceName/query", resourceGatewayHandler.ExecuteQuery)
+		rg.POST("/mcp", mcpServerHandler.Handle)
 		// Registering creates or changes an agent of the key's owner, so the
 		// owner needs agent:create like in the dashboard.
 		rg.POST("/adapters/paperclip/agent/register", middleware.GatewayKeyOwner(), middleware.RequirePermission(authzEngine, "agent:create"), paperclipHandler.RegisterAgent)
