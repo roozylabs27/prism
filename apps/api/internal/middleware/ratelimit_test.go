@@ -99,3 +99,25 @@ func TestGatewayRateLimitFailsOpenWhenLimiterErrors(t *testing.T) {
 		t.Fatal("rate limit headers set although no decision was made")
 	}
 }
+
+func TestGatewayRateLimitFailsClosedWhenConfigured(t *testing.T) {
+	l := &fakeLimiter{err: errors.New("redis down")}
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+	r.Use(func(c *gin.Context) {
+		c.Set("gatewayKey", &models.GatewayAPIKey{KeyHash: "h1"})
+		c.Set(TenantContextKey, models.TenantContext{OrgID: "org1"})
+	})
+	r.Use(GatewayRateLimitMiddlewareWithPolicy(l, 100, true))
+	r.GET("/v1/models", func(c *gin.Context) { c.String(http.StatusOK, "ok") })
+
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/v1/models", nil))
+
+	if w.Code != http.StatusServiceUnavailable {
+		t.Fatalf("status %d, want 503 when failClosed=true and limiter errors", w.Code)
+	}
+	if !strings.Contains(w.Body.String(), "RATE_LIMITER_UNAVAILABLE") {
+		t.Fatalf("body %s", w.Body.String())
+	}
+}

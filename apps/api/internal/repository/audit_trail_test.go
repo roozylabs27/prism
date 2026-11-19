@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/roozylabs/prism/internal/models"
 )
@@ -122,5 +123,38 @@ func TestAIAuditTrailsFilterAndScope(t *testing.T) {
 	}
 	if _, err := r.FindByID(ctx, trails[1].ID, "bob"); !errors.Is(err, sql.ErrNoRows) {
 		t.Fatalf("bob read alice's trail: %v", err)
+	}
+
+	// Regression checks: user_admin and unowned rows must NOT leak to other users,
+	// empty userID must fail closed, and StartDate/EndDate must filter rows.
+	hiddenAdmin := &models.AIAuditTrail{RequestID: "req-admin", UserID: "user_admin", ModelSlug: "gpt-4o", SignatureHash: "sig-admin"}
+	hiddenEmpty := &models.AIAuditTrail{RequestID: "req-empty", UserID: "", ModelSlug: "gpt-4o", SignatureHash: "sig-empty"}
+	for _, tr := range []*models.AIAuditTrail{hiddenAdmin, hiddenEmpty} {
+		if err := r.Create(ctx, tr); err != nil {
+			t.Fatalf("create hidden %s: %v", tr.RequestID, err)
+		}
+	}
+	if _, err := r.FindByID(ctx, hiddenAdmin.ID, "alice"); !errors.Is(err, sql.ErrNoRows) {
+		t.Fatalf("alice read user_admin trail: %v", err)
+	}
+	if _, err := r.FindByID(ctx, hiddenEmpty.ID, "alice"); !errors.Is(err, sql.ErrNoRows) {
+		t.Fatalf("alice read unowned trail: %v", err)
+	}
+	if _, _, err := r.ListWithFilter(ctx, models.AuditTrailFilter{}); err == nil {
+		t.Fatal("ListWithFilter with empty UserID should fail closed")
+	}
+	if _, err := r.FindByID(ctx, trails[0].ID, ""); err == nil {
+		t.Fatal("FindByID with empty userID should fail closed")
+	}
+
+	future := time.Now().Add(time.Hour)
+	_, totalFuture, err := r.ListWithFilter(ctx, models.AuditTrailFilter{UserID: "alice", StartDate: &future})
+	if err != nil || totalFuture != 0 {
+		t.Fatalf("future StartDate returned total=%d err=%v, want 0", totalFuture, err)
+	}
+	past := time.Now().Add(-time.Hour)
+	_, totalPast, err := r.ListWithFilter(ctx, models.AuditTrailFilter{UserID: "alice", EndDate: &past})
+	if err != nil || totalPast != 0 {
+		t.Fatalf("past EndDate returned total=%d err=%v, want 0", totalPast, err)
 	}
 }

@@ -274,8 +274,16 @@ func respondIdempotencyError(c *gin.Context, status int, code, message string) {
 // IdempotencyMiddleware replays a stored result for a repeated
 // Idempotency-Key, refuses the key for a different request (422), and holds
 // a lock for the key while the first request runs (409 for the others).
-// Without Redis the request runs unprotected, as documented.
+// Without Redis the request runs unprotected (dev/test default); use
+// IdempotencyMiddlewareWithPolicy(store, true) to fail closed with 503.
 func IdempotencyMiddleware(store *IdempotencyStore) gin.HandlerFunc {
+	return IdempotencyMiddlewareWithPolicy(store, false)
+}
+
+// IdempotencyMiddlewareWithPolicy enforces idempotency with configurable
+// Redis failure handling. When failClosed is true and an Idempotency-Key is
+// present, Redis lookup/lock failures return 503 Service Unavailable.
+func IdempotencyMiddlewareWithPolicy(store *IdempotencyStore, failClosed bool) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		idemKey := c.GetHeader("Idempotency-Key")
 		if idemKey == "" {
@@ -284,6 +292,14 @@ func IdempotencyMiddleware(store *IdempotencyStore) gin.HandlerFunc {
 		}
 		gk, _ := c.MustGet("gatewayKey").(*models.GatewayAPIKey)
 		if gk == nil {
+			c.Next()
+			return
+		}
+		if store == nil || store.rdb == nil {
+			if failClosed {
+				respondIdempotencyError(c, http.StatusServiceUnavailable, "idempotency_unavailable", "Idempotency protection is temporarily unavailable")
+				return
+			}
 			c.Next()
 			return
 		}
@@ -309,6 +325,10 @@ func IdempotencyMiddleware(store *IdempotencyStore) gin.HandlerFunc {
 		env, found, err := store.load(ctx, gk.ID, idemKey)
 		if err != nil {
 			log.Printf("%v", err)
+			if failClosed {
+				respondIdempotencyError(c, http.StatusServiceUnavailable, "idempotency_unavailable", "Idempotency store is temporarily unavailable")
+				return
+			}
 		}
 		if found {
 			if env.Fingerprint != "" && env.Fingerprint != fingerprint {
@@ -328,6 +348,10 @@ func IdempotencyMiddleware(store *IdempotencyStore) gin.HandlerFunc {
 		token, holderFingerprint, err := store.acquire(ctx, gk.ID, idemKey, fingerprint)
 		if err != nil {
 			log.Printf("%v", err)
+			if failClosed {
+				respondIdempotencyError(c, http.StatusServiceUnavailable, "idempotency_unavailable", "Idempotency lock service is temporarily unavailable")
+				return
+			}
 			c.Next()
 			return
 		}

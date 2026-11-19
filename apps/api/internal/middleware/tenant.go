@@ -15,9 +15,11 @@ const (
 )
 
 var (
-	ErrCrossTenantForbidden  = errors.New("cross-organization tenant context forbidden: gateway key belongs to different organization")
-	ErrOrgMembershipRequired = errors.New("organization membership required: user is not a member of requested organization")
-	ErrMissingTenantContext  = errors.New("tenant context required: X-Prism-Org-ID header or gateway key must be provided")
+	ErrCrossTenantForbidden    = errors.New("cross-organization tenant context forbidden: gateway key belongs to different organization")
+	ErrCrossWorkspaceForbidden = errors.New("cross-workspace tenant context forbidden: gateway key belongs to different workspace")
+	ErrCrossProjectForbidden   = errors.New("cross-project tenant context forbidden: gateway key belongs to different project")
+	ErrOrgMembershipRequired   = errors.New("organization membership required: user is not a member of requested organization")
+	ErrMissingTenantContext    = errors.New("tenant context required: X-Prism-Org-ID header or gateway key must be provided")
 )
 
 // OrgMemberChecker abstracts checking if a user belongs to an organization.
@@ -99,20 +101,26 @@ func ResolveCanonicalTenantContext(c *gin.Context, gatewayKey *models.GatewayAPI
 		}
 	}
 
-	canonicalWsID := headerWsID
-	if canonicalWsID == "" {
-		if gatewayKey != nil && gatewayKey.WorkspaceID != nil && *gatewayKey.WorkspaceID != "" {
-			canonicalWsID = *gatewayKey.WorkspaceID
+	var canonicalWsID string
+	if gatewayKey != nil && gatewayKey.WorkspaceID != nil && *gatewayKey.WorkspaceID != "" {
+		canonicalWsID = *gatewayKey.WorkspaceID
+		// Reject client header spoofing another workspace when key is workspace-scoped
+		if headerWsID != "" && headerWsID != canonicalWsID {
+			return models.TenantContext{}, ErrCrossWorkspaceForbidden
 		}
-		// Empty string represents organization-wide scope (no dummy ws_default)
+	} else {
+		canonicalWsID = headerWsID
 	}
 
-	canonicalProjID := headerProjID
-	if canonicalProjID == "" {
-		if gatewayKey != nil && gatewayKey.ProjectID != nil && *gatewayKey.ProjectID != "" {
-			canonicalProjID = *gatewayKey.ProjectID
+	var canonicalProjID string
+	if gatewayKey != nil && gatewayKey.ProjectID != nil && *gatewayKey.ProjectID != "" {
+		canonicalProjID = *gatewayKey.ProjectID
+		// Reject client header spoofing another project when key is project-scoped
+		if headerProjID != "" && headerProjID != canonicalProjID {
+			return models.TenantContext{}, ErrCrossProjectForbidden
 		}
-		// Empty string represents workspace-wide scope (no dummy proj_default)
+	} else {
+		canonicalProjID = headerProjID
 	}
 
 	tc := models.TenantContext{

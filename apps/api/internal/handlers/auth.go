@@ -34,10 +34,19 @@ type AuthHandler struct {
 	// perIP limits sign-in and sign-up requests from one client address;
 	// perEmail limits failed sign-ins to one account from anywhere.
 	perIP, perEmail AuthAttemptLimiter
+	failClosed      bool
 }
 
 func NewAuthHandler(auth *service.AuthService, turnstile *Turnstile, perIP, perEmail AuthAttemptLimiter) *AuthHandler {
 	return &AuthHandler{auth: auth, turnstile: turnstile, perIP: perIP, perEmail: perEmail}
+}
+
+// SetFailClosed configures whether a Redis outage on the IP/account attempt
+// limiters returns 503 Service Unavailable instead of letting auth attempts bypass throttling.
+func (h *AuthHandler) SetFailClosed(v bool) {
+	if h != nil {
+		h.failClosed = v
+	}
 }
 
 func (h *AuthHandler) GetTurnstileConfig(c *gin.Context) {
@@ -137,15 +146,23 @@ func (t *Turnstile) Verify(ctx context.Context, token, remoteIP string) (bool, s
 }
 
 // allowAttempt counts a sign-in or sign-up attempt from the client address
-// and responds 429 when there have been too many. Limiter errors let the
-// attempt through: Redis being down must not lock everyone out.
+// and responds 429 when there have been too many. When failClosed is true, a
+// limiter outage responds 503; otherwise it lets the attempt through in dev/test.
 func (h *AuthHandler) allowAttempt(c *gin.Context) bool {
 	if h.perIP == nil {
+		if h.failClosed {
+			httputil.RespondError(c, http.StatusServiceUnavailable, "Authentication rate limit unavailable", nil, "AUTH_THROTTLE_UNAVAILABLE")
+			return false
+		}
 		return true
 	}
 	ok, retry, err := h.perIP.Hit(c.Request.Context(), c.ClientIP())
 	if err != nil {
 		log.Printf("[Auth] attempt limiter unavailable: %v", err)
+		if h.failClosed {
+			httputil.RespondError(c, http.StatusServiceUnavailable, "Authentication rate limit temporarily unavailable", err, "AUTH_THROTTLE_UNAVAILABLE")
+			return false
+		}
 		return true
 	}
 	if !ok {
@@ -194,7 +211,14 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	// from many addresses is throttled too.
 	account := emailKey(req.Email)
 	if h.perEmail != nil {
-		if blocked, retry, err := h.perEmail.Blocked(c.Request.Context(), account); err == nil && blocked {
+		blocked, retry, err := h.perEmail.Blocked(c.Request.Context(), account)
+		if err != nil {
+			log.Printf("[Auth] per-account limiter unavailable: %v", err)
+			if h.failClosed {
+				httputil.RespondError(c, http.StatusServiceUnavailable, "Authentication rate limit temporarily unavailable", err, "AUTH_THROTTLE_UNAVAILABLE")
+				return
+			}
+		} else if blocked {
 			respondTooManyAttempts(c, retry)
 			return
 		}

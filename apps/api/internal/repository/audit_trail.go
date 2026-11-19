@@ -111,18 +111,14 @@ func (r *AuditTrailRepository) Create(ctx context.Context, a *models.AIAuditTrai
 }
 
 func (r *AuditTrailRepository) ListWithFilter(ctx context.Context, filter models.AuditTrailFilter) ([]models.AIAuditTrail, int, error) {
-	query := `SELECT ` + auditColumns + ` FROM ai_audit_trails WHERE 1=1`
-	countQuery := `SELECT COUNT(*) FROM ai_audit_trails WHERE 1=1`
-	var args []interface{}
-	paramIdx := 1
-
-	if filter.UserID != "" {
-		clause := fmt.Sprintf(" AND (user_id = $%d OR user_id = 'user_admin' OR user_id = '')", paramIdx)
-		query += clause
-		countQuery += clause
-		args = append(args, filter.UserID)
-		paramIdx++
+	if filter.UserID == "" {
+		return nil, 0, fmt.Errorf("audit trail: user_id is required")
 	}
+
+	query := `SELECT ` + auditColumns + ` FROM ai_audit_trails WHERE user_id = $1`
+	countQuery := `SELECT COUNT(*) FROM ai_audit_trails WHERE user_id = $1`
+	args := []interface{}{filter.UserID}
+	paramIdx := 2
 
 	if filter.AgentName != "" {
 		clause := fmt.Sprintf(" AND agent_name = $%d", paramIdx)
@@ -145,6 +141,22 @@ func (r *AuditTrailRepository) ListWithFilter(ctx context.Context, filter models
 		query += clause
 		countQuery += clause
 		args = append(args, filter.ComplianceStatus)
+		paramIdx++
+	}
+
+	if filter.StartDate != nil {
+		clause := fmt.Sprintf(" AND created_at >= $%d", paramIdx)
+		query += clause
+		countQuery += clause
+		args = append(args, *filter.StartDate)
+		paramIdx++
+	}
+
+	if filter.EndDate != nil {
+		clause := fmt.Sprintf(" AND created_at <= $%d", paramIdx)
+		query += clause
+		countQuery += clause
+		args = append(args, *filter.EndDate)
 		paramIdx++
 	}
 
@@ -185,15 +197,12 @@ func (r *AuditTrailRepository) ListWithFilter(ctx context.Context, filter models
 }
 
 func (r *AuditTrailRepository) FindByID(ctx context.Context, id, userID string) (*models.AIAuditTrail, error) {
-	var a models.AIAuditTrail
-	query := `SELECT ` + auditColumns + ` FROM ai_audit_trails WHERE id = $1`
-	var args []interface{}
-	args = append(args, id)
-	if userID != "" {
-		query += ` AND (user_id = $2 OR user_id = 'user_admin' OR user_id = '')`
-		args = append(args, userID)
+	if userID == "" {
+		return nil, fmt.Errorf("audit trail: user_id is required")
 	}
-	err := scanAudit(r.db.QueryRowContext(ctx, query, args...), &a)
+	var a models.AIAuditTrail
+	query := `SELECT ` + auditColumns + ` FROM ai_audit_trails WHERE id = $1 AND user_id = $2`
+	err := scanAudit(r.db.QueryRowContext(ctx, query, id, userID), &a)
 	if err != nil {
 		return nil, err
 	}

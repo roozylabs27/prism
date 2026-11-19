@@ -1,10 +1,13 @@
 package handlers
 
 import (
+	"context"
+	"database/sql"
 	"net/http"
 	"testing"
 
 	"github.com/gin-gonic/gin"
+	"github.com/roozylabs/prism/internal/models"
 	"github.com/roozylabs/prism/internal/repository"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -78,4 +81,105 @@ func TestModelHandlerCRUDAndDeleteGuards(t *testing.T) {
 	requireStatus(t, doJSON(alice, http.MethodDelete, base+"/"+id, ""), http.StatusNoContent)
 	requireStatus(t, doJSON(alice, http.MethodGet, base+"/"+id, ""), http.StatusNotFound)
 	requireStatus(t, doJSON(alice, http.MethodDelete, base+"/"+id, ""), http.StatusNotFound)
+
+	// Cross-tenant isolation: Bob cannot read or mutate Alice's provider or models.
+	bob := asUser("bob", nil, modelRoutes(h))
+	requireStatus(t, doJSON(alice, http.MethodPost, base, `{"name":"AliceOnly","slug":"alice-only","displayName":"AliceOnly","enabled":true}`), http.StatusCreated)
+	requireStatus(t, doJSON(bob, http.MethodGet, base, ""), http.StatusNotFound)
+	requireStatus(t, doJSON(bob, http.MethodPost, base, `{"name":"Hacked","slug":"hacked","displayName":"Hacked","enabled":true}`), http.StatusNotFound)
+}
+
+type fakeModelStore struct {
+	items map[string]*models.Model
+}
+
+func (f *fakeModelStore) ListWithFilter(_ context.Context, providerID, _ string, _, _ int, userID ...string) ([]models.Model, int64, error) {
+	var out []models.Model
+	for _, m := range f.items {
+		if providerID != "" && providerID != "all" && m.ProviderID != providerID {
+			continue
+		}
+		_ = userID
+		out = append(out, *m)
+	}
+	return out, int64(len(out)), nil
+}
+
+func (f *fakeModelStore) FindByID(_ context.Context, id string) (*models.Model, error) {
+	if m, ok := f.items[id]; ok {
+		cp := *m
+		return &cp, nil
+	}
+	return nil, sql.ErrNoRows
+}
+
+func (f *fakeModelStore) Create(_ context.Context, m *models.Model) error {
+	if m.ID == "" {
+		m.ID = "m-created"
+	}
+	cp := *m
+	f.items[m.ID] = &cp
+	return nil
+}
+
+func (f *fakeModelStore) Update(_ context.Context, m *models.Model) error {
+	cp := *m
+	f.items[m.ID] = &cp
+	return nil
+}
+
+func (f *fakeModelStore) Delete(_ context.Context, id string) error {
+	delete(f.items, id)
+	return nil
+}
+
+type fakeModelProviderFinder map[string]*models.Provider
+
+func (f fakeModelProviderFinder) FindByID(_ context.Context, id string) (*models.Provider, error) {
+	if p, ok := f[id]; ok {
+		return p, nil
+	}
+	return nil, sql.ErrNoRows
+}
+
+func TestModelHandler_CrossTenantAndSystemProviderGuards(t *testing.T) {
+	provs := fakeModelProviderFinder{
+		"prov_alice":  {ID: "prov_alice", UserID: "alice", Name: "Alice OpenAI"},
+		"prov_bob":    {ID: "prov_bob", UserID: "bob", Name: "Bob OpenAI"},
+		"prov_system": {ID: "prov_system", UserID: "", Name: "System OpenAI"},
+	}
+	store := &fakeModelStore{
+		items: map[string]*models.Model{
+			"m_alice": {ID: "m_alice", ProviderID: "prov_alice", Name: "gpt-4o", Slug: "gpt-4o", DisplayName: "GPT-4o", Enabled: true},
+			"m_bob":   {ID: "m_bob", ProviderID: "prov_bob", Name: "gpt-4o", Slug: "gpt-4o", DisplayName: "Bob GPT-4o", Enabled: true},
+			"m_sys":   {ID: "m_sys", ProviderID: "prov_system", Name: "gpt-4o-mini", Slug: "gpt-4o-mini", DisplayName: "Sys Mini", Enabled: true},
+		},
+	}
+	h := &ModelHandler{models: store, providers: provs}
+	alice := asUser("alice", nil, modelRoutes(h))
+
+	// Bob's provider & model are invisible (404) for read and all mutations.
+	requireStatus(t, doJSON(alice, http.MethodGet, "/api/providers/prov_bob/models", ""), http.StatusNotFound)
+	requireStatus(t, doJSON(alice, http.MethodGet, "/api/providers/prov_bob/models/m_bob", ""), http.StatusNotFound)
+	requireStatus(t, doJSON(alice, http.MethodPost, "/api/providers/prov_bob/models", `{"name":"x","slug":"x"}`), http.StatusNotFound)
+	requireStatus(t, doJSON(alice, http.MethodPut, "/api/providers/prov_bob/models/m_bob", `{"displayName":"pwn"}`), http.StatusNotFound)
+	requireStatus(t, doJSON(alice, http.MethodPatch, "/api/providers/prov_bob/models/m_bob/capabilities", `{"inputPricePer1M":0}`), http.StatusNotFound)
+	requireStatus(t, doJSON(alice, http.MethodDelete, "/api/providers/prov_bob/models/m_bob", ""), http.StatusNotFound)
+
+	// Path-provider mismatch on Alice's provider pointing at Bob's model ID returns 404.
+	requireStatus(t, doJSON(alice, http.MethodGet, "/api/providers/prov_alice/models/m_bob", ""), http.StatusNotFound)
+	requireStatus(t, doJSON(alice, http.MethodPatch, "/api/providers/prov_alice/models/m_bob/capabilities", `{"inputPricePer1M":0}`), http.StatusNotFound)
+
+	// System providers are readable by tenants, but mutations return 403.
+	requireStatus(t, doJSON(alice, http.MethodGet, "/api/providers/prov_system/models", ""), http.StatusOK)
+	requireStatus(t, doJSON(alice, http.MethodGet, "/api/providers/prov_system/models/m_sys", ""), http.StatusOK)
+	requireStatus(t, doJSON(alice, http.MethodPost, "/api/providers/prov_system/models", `{"name":"x","slug":"x"}`), http.StatusForbidden)
+	requireStatus(t, doJSON(alice, http.MethodPut, "/api/providers/prov_system/models/m_sys", `{"displayName":"pwn"}`), http.StatusForbidden)
+	requireStatus(t, doJSON(alice, http.MethodPatch, "/api/providers/prov_system/models/m_sys/capabilities", `{"inputPricePer1M":0}`), http.StatusForbidden)
+	requireStatus(t, doJSON(alice, http.MethodDelete, "/api/providers/prov_system/models/m_sys", ""), http.StatusForbidden)
+
+	// Alice can read & update her own model.
+	requireStatus(t, doJSON(alice, http.MethodGet, "/api/providers/prov_alice/models/m_alice", ""), http.StatusOK)
+	requireStatus(t, doJSON(alice, http.MethodPut, "/api/providers/prov_alice/models/m_alice", `{"displayName":"Renamed","providerId":"prov_bob"}`), http.StatusOK)
+	assert.Equal(t, "prov_alice", store.items["m_alice"].ProviderID, "update must not reassign providerId")
 }

@@ -33,7 +33,7 @@ type FeaturesResponse struct {
 func (h *FeaturesHandler) GetFeatures(c *gin.Context) {
 	planTier := c.GetString("plan_tier")
 	if planTier == "" {
-		planTier = c.DefaultQuery("plan_tier", "free")
+		planTier = "free"
 	}
 
 	flags := h.manager.GetAll(planTier)
