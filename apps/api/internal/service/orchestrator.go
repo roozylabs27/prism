@@ -30,6 +30,7 @@ type OrchestrationResult struct {
 type ExecutionOrchestrator struct {
 	engine         *proxy.Engine
 	admission      *proxy.AdmissionController
+	budgetManager  *proxy.BudgetManager
 	gatewayKeys    *repository.GatewayKeyRepository
 	requestLogs    *repository.RequestLogRepository
 	eventPublisher *goredis.EventPublisher
@@ -47,9 +48,14 @@ func NewExecutionOrchestrator(
 	pricingRepo *repository.ModelPricingRepository,
 	auditRecorder *proxy.AuditRecorder,
 ) *ExecutionOrchestrator {
+	var bm *proxy.BudgetManager
+	if admission != nil {
+		bm = admission.BudgetManager()
+	}
 	return &ExecutionOrchestrator{
 		engine:         engine,
 		admission:      admission,
+		budgetManager:  bm,
 		gatewayKeys:    gatewayKeys,
 		requestLogs:    requestLogs,
 		eventPublisher: eventPublisher,
@@ -60,6 +66,14 @@ func NewExecutionOrchestrator(
 
 func (o *ExecutionOrchestrator) SetPostProcessor(p *AsyncPostProcessor) {
 	o.postProcessor = p
+}
+
+// SetBudgetManager configures the BudgetManager used for atomic in-flight spend
+// reservation around inference requests.
+func (o *ExecutionOrchestrator) SetBudgetManager(bm *proxy.BudgetManager) {
+	if o != nil {
+		o.budgetManager = bm
+	}
 }
 
 func (o *ExecutionOrchestrator) ExecuteChatCompletions(
@@ -97,12 +111,15 @@ func (o *ExecutionOrchestrator) ExecuteChatCompletions(
 	}
 
 	// 1. Admission Control Gate
+	if c != nil && req.Agent == nil {
+		req.Agent = resolvedAgent(c)
+	}
 	admReq := proxy.AdmissionRequest{
 		UserID:        userID,
 		Role:          userRole,
 		AgentID:       agentID,
 		AgentName:     agentName,
-		Agent:         resolvedAgent(c),
+		Agent:         req.Agent,
 		ModelSlug:     req.Model,
 		PromptPayload: promptBuilder.String(),
 		TenantCtx:     tenantCtx,
@@ -126,6 +143,36 @@ func (o *ExecutionOrchestrator) ExecuteChatCompletions(
 			PolicyName:   admRes.PolicyName,
 			RequestID:    requestID,
 		}, nil
+	}
+
+	// 1b. Atomic in-flight budget spend reservation (prevents concurrent hard-limit races)
+	bm := o.budgetManager
+	if bm == nil && o.admission != nil {
+		bm = o.admission.BudgetManager()
+	}
+	var budgetReservation *proxy.BudgetReservation
+	actualCostUSD := 0.0
+	if bm != nil && userID != "" {
+		estCost := estimateRequestCostUSD(req)
+		res, bStatus, rErr := bm.Reserve(ctx, userID, estCost)
+		if rErr != nil {
+			return nil, fmt.Errorf("budget reserve: %w", rErr)
+		}
+		if res == nil && bStatus != nil && bStatus.Status == "exceeded" && bStatus.Budget != nil && bStatus.Budget.HardLimit {
+			reason := fmt.Sprintf("%s budget limit of %q exceeded", bStatus.LimitPeriod, bStatus.Budget.Name)
+			o.recordDeniedAuditTrail(ctx, requestID, gatewayKey, tenantCtx, agentID, agentName, userRole, req.Model, reason)
+			return &OrchestrationResult{
+				Denied:       true,
+				HTTPStatus:   429,
+				ErrorCode:    "budget_exceeded_error",
+				ErrorMessage: reason,
+				RequestID:    requestID,
+			}, nil
+		}
+		budgetReservation = res
+		defer func() {
+			bm.Release(budgetReservation, actualCostUSD)
+		}()
 	}
 
 	// Attach budget status to proxy response header if downgraded or warned
@@ -168,6 +215,7 @@ func (o *ExecutionOrchestrator) ExecuteChatCompletions(
 		if log.CostUSD == 0 && log.TotalTokens > 0 && o.pricingRepo != nil {
 			log.CostUSD = o.pricingRepo.CalculateCost(log.Model, log.ProviderType, log.InputTokens, log.OutputTokens)
 		}
+		actualCostUSD = log.CostUSD
 
 		if c != nil {
 			c.Header("X-Request-Id", requestID)
@@ -394,4 +442,29 @@ func resolvedAgent(c *gin.Context) *models.Agent {
 		return nil
 	}
 	return middleware.AgentFromContext(c)
+}
+
+// estimateRequestCostUSD returns a conservative pre-request spend reservation
+// floor so concurrent requests cannot race past a hard budget limit.
+func estimateRequestCostUSD(req *proxy.ProxyRequest) float64 {
+	if req == nil {
+		return 0.001
+	}
+	chars := 0
+	for _, m := range req.Messages {
+		if s, ok := m["content"].(string); ok {
+			chars += len(s)
+		}
+	}
+	estInputTokens := float64(chars) / 4.0
+	estOutputTokens := float64(req.MaxTokens)
+	if estOutputTokens <= 0 {
+		estOutputTokens = 256
+	}
+	// Conservative blended rate ($0.50/1M input, $1.50/1M output) with $0.001 floor.
+	est := (estInputTokens/1_000_000.0)*0.50 + (estOutputTokens/1_000_000.0)*1.50
+	if est < 0.001 {
+		return 0.001
+	}
+	return est
 }

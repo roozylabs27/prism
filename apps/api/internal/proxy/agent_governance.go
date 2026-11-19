@@ -111,6 +111,81 @@ func CheckAgentToolAccess(ag *models.Agent, toolName string) *models.AgentGovern
 	}
 }
 
+// CheckAgentResourceAccess applies the agent's allowed_resources rules: deny
+// rules win, an empty list allows, otherwise the resource must be listed or "*".
+func CheckAgentResourceAccess(ag *models.Agent, resourceName string) *models.AgentGovernanceCheckResult {
+	if !ag.Enabled {
+		return &models.AgentGovernanceCheckResult{AgentName: ag.Name, Reason: fmt.Sprintf("agent %q is disabled", ag.Name)}
+	}
+	if isDenied(ag.AllowedResources, resourceName) {
+		return &models.AgentGovernanceCheckResult{
+			AgentName: ag.Name,
+			Reason:    fmt.Sprintf("resource %q explicitly denied for agent %q", resourceName, ag.Name),
+		}
+	}
+	if len(ag.AllowedResources) == 0 || isAllowed(ag.AllowedResources, resourceName) {
+		return &models.AgentGovernanceCheckResult{AgentName: ag.Name, ResourceAllowed: true}
+	}
+	return &models.AgentGovernanceCheckResult{
+		AgentName: ag.Name,
+		Reason:    fmt.Sprintf("resource %q is not permitted for agent %q", resourceName, ag.Name),
+	}
+}
+
+// CheckAgentMCPServerAccess verifies whether an agent may call tools exposed
+// by the named MCP server (matching name, displayName, or serverID).
+func CheckAgentMCPServerAccess(ag *models.Agent, serverName, serverDisplayName, serverID string) *models.AgentGovernanceCheckResult {
+	if !ag.Enabled {
+		return &models.AgentGovernanceCheckResult{AgentName: ag.Name, Reason: fmt.Sprintf("agent %q is disabled", ag.Name)}
+	}
+	candidates := []string{serverName}
+	if serverDisplayName != "" {
+		candidates = append(candidates, serverDisplayName)
+	}
+	if serverID != "" {
+		candidates = append(candidates, serverID)
+	}
+	for _, cand := range candidates {
+		if cand != "" && isDenied(ag.AllowedMCPServers, cand) {
+			return &models.AgentGovernanceCheckResult{
+				AgentName: ag.Name,
+				Reason:    fmt.Sprintf("mcp server %q explicitly denied for agent %q", serverName, ag.Name),
+			}
+		}
+	}
+	if len(ag.AllowedMCPServers) == 0 {
+		return &models.AgentGovernanceCheckResult{AgentName: ag.Name, ToolAllowed: true}
+	}
+	for _, cand := range candidates {
+		if cand != "" && isAllowed(ag.AllowedMCPServers, cand) {
+			return &models.AgentGovernanceCheckResult{AgentName: ag.Name, ToolAllowed: true}
+		}
+	}
+	return &models.AgentGovernanceCheckResult{
+		AgentName: ag.Name,
+		Reason:    fmt.Sprintf("mcp server %q is not permitted for agent %q", serverName, ag.Name),
+	}
+}
+
+// CheckAgentResolvedModel checks whether a concrete model candidate (after
+// smart routing) is permitted by the agent's allowed_models rules, without the
+// "prism-auto" pass-through.
+func CheckAgentResolvedModel(ag *models.Agent, concreteModelSlug string) bool {
+	if ag == nil {
+		return true
+	}
+	if !ag.Enabled {
+		return false
+	}
+	if isDenied(ag.AllowedModels, concreteModelSlug) {
+		return false
+	}
+	if len(ag.AllowedModels) == 0 {
+		return true
+	}
+	return isAllowed(ag.AllowedModels, concreteModelSlug)
+}
+
 // isDenied reports whether a "!name", "-name" or "deny:name" rule matches.
 func isDenied(rules []string, target string) bool {
 	for _, rule := range rules {

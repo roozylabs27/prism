@@ -39,8 +39,15 @@ type AdmissionRequest struct {
 	ModelSlug     string
 	ToolName      string
 	ResourceName  string
+	MCPServerName string
 	PromptPayload string
 	TenantCtx     models.TenantContext
+}
+
+// AgentSpendFinder returns an agent's month-to-date spend in USD for enforcing
+// Agent.MaxBudgetCents.
+type AgentSpendFinder interface {
+	GetAgentTotalSpendUSD(ctx context.Context, agentID string) (float64, error)
 }
 
 type AdmissionController struct {
@@ -48,6 +55,7 @@ type AdmissionController struct {
 	agentGovernance *AgentGovernanceEngine
 	quotaRepo       QuotaEvaluator
 	budgetManager   *BudgetManager
+	agentSpend      AgentSpendFinder
 }
 
 func NewAdmissionController(
@@ -62,6 +70,22 @@ func NewAdmissionController(
 		quotaRepo:       quotaRepo,
 		budgetManager:   budgetManager,
 	}
+}
+
+// SetAgentSpendFinder wires month-to-date per-agent spend lookup used to
+// enforce Agent.MaxBudgetCents during admission.
+func (a *AdmissionController) SetAgentSpendFinder(finder AgentSpendFinder) {
+	if a != nil {
+		a.agentSpend = finder
+	}
+}
+
+// BudgetManager returns the controller's BudgetManager, if configured.
+func (a *AdmissionController) BudgetManager() *BudgetManager {
+	if a == nil {
+		return nil
+	}
+	return a.budgetManager
 }
 
 func (a *AdmissionController) Evaluate(ctx context.Context, req AdmissionRequest) (*AdmissionResult, error) {
@@ -125,12 +149,25 @@ func (a *AdmissionController) Evaluate(ctx context.Context, req AdmissionRequest
 		return res, err
 	}
 
-	// 3. Tenant Quota Check (Organization & Workspace quotas)
+	// 3. Tenant Quota Check (Organization, Workspace, and Project quotas - fail closed)
 	if a.quotaRepo != nil {
-		orgID := req.TenantCtx.OrgID
-		if orgID != "" {
-			quotaRes, err := a.quotaRepo.EvaluateQuota(ctx, "organization", orgID)
-			if err == nil && !quotaRes.Allowed {
+		scopes := []struct {
+			kind string
+			id   string
+		}{
+			{"organization", req.TenantCtx.OrgID},
+			{"workspace", req.TenantCtx.WorkspaceID},
+			{"project", req.TenantCtx.ProjectID},
+		}
+		for _, sc := range scopes {
+			if sc.id == "" {
+				continue
+			}
+			quotaRes, err := a.quotaRepo.EvaluateQuota(ctx, sc.kind, sc.id)
+			if err != nil {
+				return nil, fmt.Errorf("quota evaluate (%s %s): %w", sc.kind, sc.id, err)
+			}
+			if quotaRes != nil && !quotaRes.Allowed {
 				return &AdmissionResult{
 					Decision:   AdmissionDeny,
 					HTTPStatus: http.StatusTooManyRequests,
@@ -141,11 +178,14 @@ func (a *AdmissionController) Evaluate(ctx context.Context, req AdmissionRequest
 		}
 	}
 
-	// 4. Multi-Level Budget Check
+	// 4. Multi-Level Budget Check (fail closed on store error)
 	var budgetStatusStr string
 	if a.budgetManager != nil {
 		budgetStatus, err := a.budgetManager.GetStatus(ctx, req.UserID)
-		if err == nil && budgetStatus != nil {
+		if err != nil {
+			return nil, fmt.Errorf("budget evaluate: %w", err)
+		}
+		if budgetStatus != nil {
 			budgetStatusStr = budgetStatus.Status
 			if budgetStatus.Status == "exceeded" && budgetStatus.Budget != nil && budgetStatus.Budget.HardLimit {
 				return &AdmissionResult{
@@ -219,6 +259,30 @@ func (a *AdmissionController) evaluateAgent(ctx context.Context, req AdmissionRe
 	if req.ToolName != "" {
 		if res := CheckAgentToolAccess(agent, req.ToolName); !res.ToolAllowed {
 			return agentDenied("agent_tool_denied", res.Reason), nil
+		}
+	}
+	if req.ResourceName != "" {
+		if res := CheckAgentResourceAccess(agent, req.ResourceName); !res.ResourceAllowed {
+			return agentDenied("agent_resource_denied", res.Reason), nil
+		}
+	}
+	if req.MCPServerName != "" {
+		if res := CheckAgentMCPServerAccess(agent, req.MCPServerName, "", ""); !res.ToolAllowed {
+			return agentDenied("agent_mcp_server_denied", res.Reason), nil
+		}
+	}
+	if agent.MaxBudgetCents > 0 && a.agentSpend != nil && agent.ID != "" {
+		spentUSD, err := a.agentSpend.GetAgentTotalSpendUSD(ctx, agent.ID)
+		if err != nil {
+			return nil, fmt.Errorf("agent budget check (%s): %w", agent.ID, err)
+		}
+		if spentUSD*100.0 >= float64(agent.MaxBudgetCents) {
+			return &AdmissionResult{
+				Decision:   AdmissionDeny,
+				HTTPStatus: http.StatusTooManyRequests,
+				ErrorCode:  "agent_budget_exceeded",
+				Reason:     fmt.Sprintf("agent %q monthly budget limit ($%.2f) exceeded (spent: $%.2f)", agent.Name, float64(agent.MaxBudgetCents)/100.0, spentUSD),
+			}, nil
 		}
 	}
 	return nil, nil

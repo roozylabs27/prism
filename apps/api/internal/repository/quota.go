@@ -171,7 +171,8 @@ var spendQueries = map[string]string{
 
 func spendQuery(column string) string {
 	return `SELECT COALESCE(SUM(cost_usd), 0.0),
-		       COALESCE(SUM(cost_usd) FILTER (WHERE created_at >= date_trunc('day', NOW())), 0.0)
+		       COALESCE(SUM(cost_usd) FILTER (WHERE created_at >= date_trunc('day', NOW())), 0.0),
+		       COUNT(*) FILTER (WHERE created_at >= date_trunc('day', NOW()))
 		FROM request_logs
 		WHERE ` + column + ` = $1
 		  AND created_at >= date_trunc('month', NOW())`
@@ -180,17 +181,19 @@ func spendQuery(column string) string {
 func (r *QuotaRepository) EvaluateQuota(ctx context.Context, targetType, targetID string) (*models.QuotaCheckResult, error) {
 	quota, err := r.GetQuotaByTarget(ctx, targetType, targetID)
 	if err != nil {
-		return &models.QuotaCheckResult{Allowed: true}, nil
+		return nil, fmt.Errorf("evaluate quota get target (%s/%s): %w", targetType, targetID, err)
 	}
 
-	// Current month and day spend of the target in one pass. The organization
-	// query, the one admission runs, is served by idx_request_logs_org_created.
+	// Current month and day spend + daily request count in one pass.
 	query, ok := spendQueries[targetType]
 	if !ok {
 		return &models.QuotaCheckResult{Allowed: true, TargetType: targetType, TargetID: targetID}, nil
 	}
 	var monthlySpent, dailySpent float64
-	_ = r.db.QueryRowContext(ctx, query, targetID).Scan(&monthlySpent, &dailySpent)
+	var dailyRequests int
+	if err := r.db.QueryRowContext(ctx, query, targetID).Scan(&monthlySpent, &dailySpent, &dailyRequests); err != nil {
+		return nil, fmt.Errorf("evaluate quota spend query (%s/%s): %w", targetType, targetID, err)
+	}
 
 	res := &models.QuotaCheckResult{
 		Allowed:         true,
@@ -211,6 +214,12 @@ func (r *QuotaRepository) EvaluateQuota(ctx context.Context, targetType, targetI
 	if quota.DailySpendLimitUSD > 0 && dailySpent >= quota.DailySpendLimitUSD {
 		res.Allowed = false
 		res.Reason = fmt.Sprintf("Daily spend limit of $%.2f USD exceeded (Spent: $%.2f USD)", quota.DailySpendLimitUSD, dailySpent)
+		return res, nil
+	}
+
+	if quota.DailyRequestLimit > 0 && dailyRequests >= quota.DailyRequestLimit {
+		res.Allowed = false
+		res.Reason = fmt.Sprintf("Daily request limit of %d exceeded (Requests: %d)", quota.DailyRequestLimit, dailyRequests)
 		return res, nil
 	}
 
