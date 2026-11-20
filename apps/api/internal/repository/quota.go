@@ -196,13 +196,14 @@ func (r *QuotaRepository) EvaluateQuota(ctx context.Context, targetType, targetI
 	}
 
 	res := &models.QuotaCheckResult{
-		Allowed:         true,
-		TargetType:      targetType,
-		TargetID:        targetID,
-		MonthlySpendUSD: monthlySpent,
-		MonthlyLimitUSD: quota.MonthlySpendLimitUSD,
-		DailySpendUSD:   dailySpent,
-		DailyLimitUSD:   quota.DailySpendLimitUSD,
+		Allowed:              true,
+		TargetType:           targetType,
+		TargetID:             targetID,
+		MonthlySpendUSD:      monthlySpent,
+		MonthlyLimitUSD:      quota.MonthlySpendLimitUSD,
+		DailySpendUSD:        dailySpent,
+		DailyLimitUSD:        quota.DailySpendLimitUSD,
+		MaxConcurrentStreams: quota.MaxConcurrentStreams,
 	}
 
 	if quota.MonthlySpendLimitUSD > 0 && monthlySpent >= quota.MonthlySpendLimitUSD {

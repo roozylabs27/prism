@@ -8,6 +8,7 @@ import (
 
 	"github.com/roozylabs/prism/internal/database"
 	"github.com/roozylabs/prism/internal/models"
+	goredis "github.com/roozylabs/prism/internal/redis"
 	"github.com/roozylabs/prism/internal/repository"
 )
 
@@ -24,22 +25,49 @@ type budgetStore interface {
 	GetCombinedSpend(ctx context.Context, userID string) (monthlySpend float64, dailySpend float64, err error)
 }
 
+// DistributedBudgetStore coordinates in-flight and short-TTL settled budget reservations
+// across multiple API replicas (backed by Redis Lua scripts in production).
+type DistributedBudgetStore interface {
+	TryReserve(ctx context.Context, in goredis.BudgetReserveInput) (*goredis.BudgetReserveResult, error)
+	Release(ctx context.Context, scopeKey, reservationID string, actualCost float64) (int64, error)
+	InFlightAndOptimistic(ctx context.Context, scopeKey string) (*goredis.BudgetSnapshot, error)
+}
+
 // BudgetReservation represents an in-flight spend hold for a single request.
 // Callers must pass it to Release once the request finishes or fails.
 type BudgetReservation struct {
-	UserID      string
-	ScopeKey    string
-	ReservedUSD float64
-	released    bool
+	UserID          string
+	ScopeKey        string
+	ReservedUSD     float64
+	ReservationID   string
+	usedDistributed bool
+	released        bool
 }
 
 type BudgetManager struct {
 	budgetRepo  budgetStore
+	distStore   DistributedBudgetStore
+	failClosed  bool
 	spendCache  sync.Map // scopeKey -> budgetSpendCacheEntry
 	userToScope sync.Map // userID -> latest scopeKey (supports InvalidateSpendCache(userID))
 
 	mu       sync.Mutex
 	inFlight map[string]float64 // scopeKey -> reserved in-flight USD
+}
+
+// SetDistributedStore attaches a shared multi-replica budget store (Redis Lua).
+func (bm *BudgetManager) SetDistributedStore(store DistributedBudgetStore) {
+	if bm != nil {
+		bm.distStore = store
+	}
+}
+
+// SetFailClosed configures whether distributed store failures abort requests instead
+// of falling back to local in-process reservation state.
+func (bm *BudgetManager) SetFailClosed(failClosed bool) {
+	if bm != nil {
+		bm.failClosed = failClosed
+	}
 }
 
 func budgetScopeKey(ctx context.Context, userID string) string {
@@ -90,6 +118,16 @@ func (bm *BudgetManager) GetStatus(ctx context.Context, userID string) (*models.
 				return nil, err
 			}
 			inFlight := bm.inFlightSpend(scopeKey)
+			if bm.distStore != nil {
+				snap, distErr := bm.distStore.InFlightAndOptimistic(ctx, scopeKey)
+				if distErr != nil {
+					if bm.failClosed {
+						return nil, distErr
+					}
+				} else if snap != nil {
+					inFlight = snap.InFlight + snap.RecentSettled
+				}
+			}
 			monthly = m + inFlight
 			daily = d + inFlight
 			spendLoaded = true
@@ -135,6 +173,16 @@ func (bm *BudgetManager) Reserve(ctx context.Context, userID string, estimatedCo
 	monthlyDB, dailyDB, err := bm.getSpendCached(ctx, scopeKey, userID)
 	if err != nil {
 		return nil, nil, err
+	}
+
+	if bm.distStore != nil {
+		res, status, distErr := bm.reserveDistributed(ctx, userID, scopeKey, enabledBudgets, monthlyDB, dailyDB, estimatedCostUSD)
+		if distErr == nil {
+			return res, status, nil
+		}
+		if bm.failClosed {
+			return nil, nil, distErr
+		}
 	}
 
 	bm.mu.Lock()
@@ -188,6 +236,88 @@ func (bm *BudgetManager) Reserve(ctx context.Context, userID string, estimatedCo
 	}, worst, nil
 }
 
+func (bm *BudgetManager) reserveDistributed(
+	ctx context.Context,
+	userID, scopeKey string,
+	enabledBudgets []models.Budget,
+	monthlyDB, dailyDB, estimatedCostUSD float64,
+) (*BudgetReservation, *models.BudgetStatus, error) {
+	var tightestMonthly, tightestDaily float64
+	var tightestMonthlyBudget, tightestDailyBudget *models.Budget
+	hasHardLimit := false
+
+	for i := range enabledBudgets {
+		b := &enabledBudgets[i]
+		if !b.HardLimit {
+			continue
+		}
+		hasHardLimit = true
+		if b.MonthlyLimit > 0 && (tightestMonthly == 0 || b.MonthlyLimit < tightestMonthly) {
+			tightestMonthly = b.MonthlyLimit
+			tightestMonthlyBudget = b
+		}
+		if b.DailyLimit > 0 && (tightestDaily == 0 || b.DailyLimit < tightestDaily) {
+			tightestDaily = b.DailyLimit
+			tightestDailyBudget = b
+		}
+	}
+
+	res, err := bm.distStore.TryReserve(ctx, goredis.BudgetReserveInput{
+		ScopeKey:      scopeKey,
+		EstimatedCost: estimatedCostUSD,
+		MonthlySpent:  monthlyDB,
+		DailySpent:    dailyDB,
+		MonthlyLimit:  tightestMonthly,
+		DailyLimit:    tightestDaily,
+		HardStop:      hasHardLimit,
+		TTL:           10 * time.Minute,
+	})
+	if err != nil {
+		return nil, nil, err
+	}
+
+	if !res.Allowed {
+		evalMonthly := monthlyDB + res.RecentSettled + res.InFlight + estimatedCostUSD
+		evalDaily := dailyDB + res.RecentSettled + res.InFlight + estimatedCostUSD
+		targetBudget := tightestMonthlyBudget
+		if res.ExceededPeriod == "daily" || targetBudget == nil {
+			targetBudget = tightestDailyBudget
+		}
+		if targetBudget == nil {
+			targetBudget = &enabledBudgets[0]
+		}
+		st := evaluateBudget(targetBudget, evalMonthly, evalDaily)
+		st.Status = "exceeded"
+		if res.ExceededPeriod != "" {
+			st.LimitPeriod = res.ExceededPeriod
+		}
+		return nil, st, nil
+	}
+
+	preReserveInFlight := res.InFlight - estimatedCostUSD
+	if preReserveInFlight < 0 {
+		preReserveInFlight = 0
+	}
+	evalMonthly := monthlyDB + res.RecentSettled + preReserveInFlight
+	evalDaily := dailyDB + res.RecentSettled + preReserveInFlight
+
+	var worst *models.BudgetStatus
+	for i := range enabledBudgets {
+		st := evaluateBudget(&enabledBudgets[i], evalMonthly, evalDaily)
+		if worst == nil || worseBudget(st, worst) {
+			worst = st
+		}
+	}
+
+	return &BudgetReservation{
+		UserID:          userID,
+		ScopeKey:        scopeKey,
+		ReservedUSD:     estimatedCostUSD,
+		ReservationID:   res.ReservationID,
+		usedDistributed: true,
+	}, worst, nil
+}
+
 // Release frees an in-flight reservation and optimistically reflects actualCostUSD
 // in the spend cache so subsequent requests see the committed spend before async
 // persistence finishes. Safe to call multiple times or with a nil reservation.
@@ -196,9 +326,8 @@ func (bm *BudgetManager) Release(res *BudgetReservation, actualCostUSD float64) 
 		return
 	}
 	bm.mu.Lock()
-	defer bm.mu.Unlock()
-
 	if res.released {
+		bm.mu.Unlock()
 		return
 	}
 	res.released = true
@@ -208,22 +337,33 @@ func (bm *BudgetManager) Release(res *BudgetReservation, actualCostUSD float64) 
 		scopeKey = "user:" + res.UserID
 	}
 
-	if bm.inFlight != nil {
-		next := bm.inFlight[scopeKey] - res.ReservedUSD
-		if next <= 1e-12 {
-			delete(bm.inFlight, scopeKey)
-		} else {
-			bm.inFlight[scopeKey] = next
+	usedDistributed := res.usedDistributed
+	reservationID := res.ReservationID
+	if !usedDistributed {
+		if bm.inFlight != nil {
+			next := bm.inFlight[scopeKey] - res.ReservedUSD
+			if next <= 1e-12 {
+				delete(bm.inFlight, scopeKey)
+			} else {
+				bm.inFlight[scopeKey] = next
+			}
+		}
+
+		if actualCostUSD > 0 {
+			if v, ok := bm.spendCache.Load(scopeKey); ok {
+				entry := v.(budgetSpendCacheEntry)
+				entry.monthly += actualCostUSD
+				entry.daily += actualCostUSD
+				bm.spendCache.Store(scopeKey, entry)
+			}
 		}
 	}
+	bm.mu.Unlock()
 
-	if actualCostUSD > 0 {
-		if v, ok := bm.spendCache.Load(scopeKey); ok {
-			entry := v.(budgetSpendCacheEntry)
-			entry.monthly += actualCostUSD
-			entry.daily += actualCostUSD
-			bm.spendCache.Store(scopeKey, entry)
-		}
+	if usedDistributed && bm.distStore != nil && reservationID != "" {
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		defer cancel()
+		_, _ = bm.distStore.Release(ctx, scopeKey, reservationID, actualCostUSD)
 	}
 }
 
