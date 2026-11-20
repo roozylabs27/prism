@@ -211,6 +211,27 @@ func (o *ExecutionOrchestrator) ExecuteChatCompletions(
 		c.Header("X-Prism-Budget-Status", admRes.BudgetStatus)
 	}
 
+	// 1c. Concurrent stream limit enforcement across org/workspace/project quota scopes
+	if req.Stream && o.admission != nil {
+		releaseStreams, streamDeny, sErr := o.admission.AcquireStreamSlots(ctx, requestID, tenantCtx)
+		if sErr != nil {
+			return nil, fmt.Errorf("stream concurrency limit: %w", sErr)
+		}
+		if streamDeny != nil {
+			o.recordDeniedAuditTrail(ctx, requestID, gatewayKey, tenantCtx, agentID, agentName, userRole, req.Model, promptHash, streamDeny.Reason)
+			return &OrchestrationResult{
+				Denied:       true,
+				HTTPStatus:   streamDeny.HTTPStatus,
+				ErrorCode:    streamDeny.ErrorCode,
+				ErrorMessage: streamDeny.Reason,
+				RequestID:    requestID,
+			}, nil
+		}
+		if releaseStreams != nil {
+			defer releaseStreams()
+		}
+	}
+
 	// 2. Stream vs Non-Stream Proxy Execution
 	var providerResp *proxy.ProviderResponse
 	var log *models.RequestLog

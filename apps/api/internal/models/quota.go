@@ -18,12 +18,13 @@ type TenantQuota struct {
 }
 
 type QuotaCheckResult struct {
-	Allowed         bool    `json:"allowed"`
-	TargetType      string  `json:"targetType"`
-	TargetID        string  `json:"targetId"`
-	MonthlySpendUSD float64 `json:"monthlySpendUsd"`
-	MonthlyLimitUSD float64 `json:"monthlyLimitUsd"`
-	DailySpendUSD   float64 `json:"dailySpendUsd"`
-	DailyLimitUSD   float64 `json:"dailyLimitUsd"`
-	Reason          string  `json:"reason,omitempty"`
+	Allowed              bool    `json:"allowed"`
+	TargetType           string  `json:"targetType"`
+	TargetID             string  `json:"targetId"`
+	MonthlySpendUSD      float64 `json:"monthlySpendUsd"`
+	MonthlyLimitUSD      float64 `json:"monthlyLimitUsd"`
+	DailySpendUSD        float64 `json:"dailySpendUsd"`
+	DailyLimitUSD        float64 `json:"dailyLimitUsd"`
+	MaxConcurrentStreams int     `json:"maxConcurrentStreams"`
+	Reason               string  `json:"reason,omitempty"`
 }
