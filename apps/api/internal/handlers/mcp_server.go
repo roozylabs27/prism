@@ -597,7 +597,8 @@ func (h *MCPServerHandler) handleDelegateAITask(
 		proxyReq.MaxTokens = maxTok
 	}
 	if temp, ok := asFloat(args["temperature"]); ok && temp >= 0 && temp <= 2 {
-		proxyReq.Temperature = temp
+		tVal := temp
+		proxyReq.Temperature = &tVal
 	}
 
 	res, err := h.orchestrator.ExecuteChatCompletions(

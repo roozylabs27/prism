@@ -2,6 +2,8 @@ package security
 
 import (
 	"net"
+	"net/http"
+	"net/url"
 	"os"
 	"testing"
 	"time"
@@ -78,4 +80,49 @@ func TestNewSafeHTTPClient_Construction(t *testing.T) {
 	if client.Transport == nil {
 		t.Fatal("expected non-nil transport")
 	}
+}
+
+func TestSafeCheckRedirect_StripsAuthHeadersCrossHost(t *testing.T) {
+	t.Setenv("APP_ENV", "development")
+	t.Setenv("ALLOW_INTERNAL_SSRF", "true")
+
+	originReq := &http.Request{URL: &url.URL{Scheme: "https", Host: "api.provider-a.com", Path: "/v1/chat"}}
+
+	t.Run("strips credentials on cross-host redirect", func(t *testing.T) {
+		nextReq := &http.Request{
+			URL: &url.URL{Scheme: "https", Host: "evil.example.org", Path: "/collect"},
+			Header: http.Header{
+				"Authorization":       {"Bearer secret"},
+				"Proxy-Authorization": {"Basic xyz"},
+				"X-Api-Key":           {"ant-secret"},
+				"X-Goog-Api-Key":      {"AIzaSecret"},
+				"Cookie":              {"sid=abc"},
+				"Content-Type":        {"application/json"},
+			},
+		}
+		if err := SafeCheckRedirect(nextReq, []*http.Request{originReq}); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		for _, h := range []string{"Authorization", "Proxy-Authorization", "X-Api-Key", "X-Goog-Api-Key", "Cookie"} {
+			if got := nextReq.Header.Get(h); got != "" {
+				t.Errorf("expected cross-host redirect header %s stripped, got %q", h, got)
+			}
+		}
+		if got := nextReq.Header.Get("Content-Type"); got != "application/json" {
+			t.Errorf("expected safe header Content-Type preserved, got %q", got)
+		}
+	})
+
+	t.Run("preserves Authorization on same-origin redirect", func(t *testing.T) {
+		sameReq := &http.Request{
+			URL:    &url.URL{Scheme: "https", Host: "api.provider-a.com", Path: "/v2/chat"},
+			Header: http.Header{"Authorization": {"Bearer secret"}},
+		}
+		if err := SafeCheckRedirect(sameReq, []*http.Request{originReq}); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if got := sameReq.Header.Get("Authorization"); got != "Bearer secret" {
+			t.Errorf("expected same-origin Authorization preserved, got %q", got)
+		}
+	})
 }

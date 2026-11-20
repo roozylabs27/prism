@@ -3,6 +3,7 @@ package proxy
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"strings"
 	"testing"
 )
@@ -401,5 +402,88 @@ func TestSanitizeMessagesForGoogle_AnthropicContentBlocks(t *testing.T) {
 	if _, hasSig := inputMap["thought_signature"]; hasSig {
 		t.Errorf("input map should not have thought_signature: %v", inputMap)
 	}
+}
+
+func TestGoogleAndNonGoogleSanitizationAndTemperature(t *testing.T) {
+	zeroTemp := 0.0
+	baseMessages := []map[string]interface{}{
+		{
+			"role":    "assistant",
+			"content": "Calling tool",
+			"tool_calls": []interface{}{
+				map[string]interface{}{
+					"id":   "call_1",
+					"type": "function",
+					"function": map[string]interface{}{
+						"name":      "lookup",
+						"arguments": `{"q":"prism"}`,
+					},
+				},
+			},
+		},
+	}
+
+	t.Run("GoogleAdapter preserves gemini-2.0-flash, keeps temperature 0, and sanitizes messages", func(t *testing.T) {
+		g := NewGoogleAdapter()
+		req := &ProviderRequest{
+			Model:       "gemini-2.0-flash",
+			Messages:    baseMessages,
+			Temperature: &zeroTemp,
+		}
+		httpReq, err := g.BuildRequest("https://generativelanguage.googleapis.com", "AIzaSy-test", req)
+		if err != nil {
+			t.Fatalf("BuildRequest error: %v", err)
+		}
+		raw, _ := io.ReadAll(httpReq.Body)
+		var parsed map[string]interface{}
+		if err := json.Unmarshal(raw, &parsed); err != nil {
+			t.Fatalf("unmarshal body: %v", err)
+		}
+		if parsed["model"] != "gemini-2.0-flash" {
+			t.Fatalf("expected gemini-2.0-flash preserved, got %v", parsed["model"])
+		}
+		tempVal, hasTemp := parsed["temperature"].(float64)
+		if !hasTemp || tempVal != 0.0 {
+			t.Fatalf("expected temperature=0 present, got %v (present=%v)", parsed["temperature"], hasTemp)
+		}
+		if !strings.Contains(string(raw), SentinelThoughtSignature) {
+			t.Fatalf("expected Google request to contain thought_signature, got %s", string(raw))
+		}
+	})
+
+	t.Run("Non-Google adapters never inject thought_signature and preserve temperature 0", func(t *testing.T) {
+		adapters := []struct {
+			name    string
+			adapter ProviderAdapter
+			model   string
+			baseURL string
+		}{
+			{"OpenAI", NewOpenAIAdapter(), "gpt-4o", "https://api.openai.com"},
+			{"Anthropic", NewAnthropicAdapter(), "claude-3-7-sonnet", "https://api.anthropic.com"},
+			{"OpenCode", NewOpenCodeAdapter(), "deepseek-v4-pro", "https://opencode.ai/zen"},
+		}
+
+		for _, tc := range adapters {
+			httpReq, err := tc.adapter.BuildRequest(tc.baseURL, "sk-test", &ProviderRequest{
+				Model:       tc.model,
+				Messages:    baseMessages,
+				Temperature: &zeroTemp,
+			})
+			if err != nil {
+				t.Fatalf("%s BuildRequest failed: %v", tc.name, err)
+			}
+			raw, _ := io.ReadAll(httpReq.Body)
+			if strings.Contains(string(raw), "thought_signature") || strings.Contains(string(raw), "thoughtSignature") {
+				t.Errorf("%s adapter leaked Google thought_signature: %s", tc.name, string(raw))
+			}
+			var parsed map[string]interface{}
+			if err := json.Unmarshal(raw, &parsed); err != nil {
+				t.Fatalf("%s unmarshal failed: %v", tc.name, err)
+			}
+			if _, ok := parsed["temperature"]; !ok {
+				t.Errorf("%s adapter omitted explicit temperature=0", tc.name)
+			}
+		}
+	})
 }
 

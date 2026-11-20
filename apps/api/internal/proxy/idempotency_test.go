@@ -45,6 +45,44 @@ func TestRequestFingerprintSeparatesParts(t *testing.T) {
 	assert.Equal(t, a, requestFingerprint("POST", "/v1/chat/completions", []byte(`{"model":"a"}`)))
 }
 
+type mockUnwrappingWriter struct {
+	gin.ResponseWriter
+}
+
+func (m *mockUnwrappingWriter) Unwrap() http.ResponseWriter {
+	return m.ResponseWriter
+}
+
+func TestSaveIdempotencyResult_SkipsInterruptedAndUnwrapsBufferedWriter(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/messages", nil)
+
+	bw := WrapBufferedWriter(c)
+	c.Writer = &mockUnwrappingWriter{ResponseWriter: bw}
+	_, _ = c.Writer.Write([]byte("event: message_start\n\n"))
+	c.Set("_idem_gk_id", "gk-1")
+	c.Set("_idem_key", "k-1")
+	c.Set("_stream_interrupted", true)
+
+	// Passing a non-nil IdempotencyStore with nil rdb proves the _stream_interrupted
+	// guard returns early BEFORE ever attempting a Redis write.
+	assert.NotPanics(t, func() {
+		SaveIdempotencyResult(c, &IdempotencyStore{})
+	})
+	assert.True(t, strings.Contains(string(bw.WrittenBytes()), "message_start"))
+}
+
+func TestSSEStream_KeepaliveDeferralDoesNotFlushHeadersBeforeStart(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	sse := newSSEStream(c, 50*time.Millisecond)
+	assert.False(t, sse.Started())
+	assert.Equal(t, 0, rec.Body.Len())
+}
+
 func newTestIdempotencyStore(t *testing.T) (*IdempotencyStore, *redis.Client, string) {
 	t.Helper()
 	url := os.Getenv("REDIS_URL")

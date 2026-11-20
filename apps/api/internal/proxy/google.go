@@ -35,7 +35,7 @@ func (a *GoogleAdapter) BuildRequest(baseURL, apiKey string, req *ProviderReques
 	}
 
 	targetModel := req.Model
-	if targetModel == "" || targetModel == "prism-auto" || targetModel == "roozy-auto" || targetModel == "gemini-2.0-flash" {
+	if targetModel == "" || targetModel == "prism-auto" || targetModel == "roozy-auto" {
 		targetModel = "gemini-3.6-flash"
 	}
 
@@ -55,8 +55,8 @@ func (a *GoogleAdapter) BuildRequest(baseURL, apiKey string, req *ProviderReques
 	if req.MaxTokens > 0 {
 		body["max_tokens"] = req.MaxTokens
 	}
-	if req.Temperature > 0 {
-		body["temperature"] = req.Temperature
+	if req.Temperature != nil {
+		body["temperature"] = *req.Temperature
 	}
 	for k, v := range req.Extra {
 		body[k] = v

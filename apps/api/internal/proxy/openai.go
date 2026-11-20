@@ -15,11 +15,9 @@ func NewOpenAIAdapter() *OpenAIAdapter {
 }
 
 func (a *OpenAIAdapter) BuildRequest(baseURL, apiKey string, req *ProviderRequest) (*http.Request, error) {
-	messages := SanitizeMessagesForGoogle(req.Messages)
-
 	body := map[string]interface{}{
 		"model":    req.Model,
-		"messages": messages,
+		"messages": req.Messages,
 		"stream":   req.Stream,
 	}
 	if len(req.Tools) > 0 {
@@ -36,8 +34,8 @@ func (a *OpenAIAdapter) BuildRequest(baseURL, apiKey string, req *ProviderReques
 	if req.MaxTokens > 0 {
 		body["max_tokens"] = req.MaxTokens
 	}
-	if req.Temperature > 0 {
-		body["temperature"] = req.Temperature
+	if req.Temperature != nil {
+		body["temperature"] = *req.Temperature
 	}
 	for k, v := range req.Extra {
 		body[k] = v

@@ -19,19 +19,21 @@ type GatewayKeyFinder interface {
 
 func GatewayAuthMiddleware(keys GatewayKeyFinder) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		authHeader := c.GetHeader("Authorization")
-		if authHeader == "" {
+		var rawKey string
+		if authHeader := c.GetHeader("Authorization"); authHeader != "" {
+			parts := strings.SplitN(authHeader, " ", 2)
+			if len(parts) != 2 || strings.ToLower(parts[0]) != "bearer" {
+				httputil.RespondUnauthorized(c, "Invalid API key format", nil, "API_KEY_FORMAT_INVALID")
+				return
+			}
+			rawKey = strings.TrimSpace(parts[1])
+		} else if apiKeyHeader := strings.TrimSpace(c.GetHeader("x-api-key")); apiKeyHeader != "" {
+			rawKey = apiKeyHeader
+		} else {
 			httputil.RespondUnauthorized(c, "Missing API key", nil, "API_KEY_MISSING")
 			return
 		}
 
-		parts := strings.SplitN(authHeader, " ", 2)
-		if len(parts) != 2 || strings.ToLower(parts[0]) != "bearer" {
-			httputil.RespondUnauthorized(c, "Invalid API key format", nil, "API_KEY_FORMAT_INVALID")
-			return
-		}
-
-		rawKey := parts[1]
 		if !utils.IsGatewayKey(rawKey) {
 			httputil.RespondUnauthorized(c, "Invalid API key prefix", nil, "API_KEY_PREFIX_INVALID")
 			return
