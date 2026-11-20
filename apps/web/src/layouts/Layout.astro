@@ -1,50 +1,61 @@
 ---
 import '../styles/globals.css';
-import BackgroundAnimation from '../components/BackgroundAnimation.astro';
+import { site } from '../data/site';
 
 export interface Props {
-	title: string;
+	title?: string;
 	description?: string;
 }
 
-const { 
-	title, 
-	description = "RoozyLabs Prism v0.4.0. The open-source AI gateway with sub-2ms latency, deterministic failover, smart routing, and multi-tenant security." 
-}: Props = Astro.props;
+const { title = site.title, description = site.description } = Astro.props;
+const canonical = new URL(Astro.url.pathname, site.url).toString();
 ---
 
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 	<head>
 		<meta charset="utf-8" />
-		<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0" />
-		<meta name="description" content={description} />
-		<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-		<meta name="generator" content={Astro.generator} />
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
 		<title>{title}</title>
-		
-		<!-- Anti-FOUC Theme Script -->
+		<meta name="description" content={description} />
+		<link rel="canonical" href={canonical} />
+		<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+		<meta name="theme-color" content="#F6F5F1" media="(prefers-color-scheme: light)" />
+		<meta name="theme-color" content="#111315" media="(prefers-color-scheme: dark)" />
+
+		<meta property="og:type" content="website" />
+		<meta property="og:site_name" content="Prism" />
+		<meta property="og:title" content={title} />
+		<meta property="og:description" content={description} />
+		<meta property="og:url" content={canonical} />
+		<meta name="twitter:card" content="summary" />
+		<meta name="twitter:title" content={title} />
+		<meta name="twitter:description" content={description} />
+
+		<!-- Theme before paint: stored choice wins, otherwise follow the system. -->
 		<script is:inline>
-			(function() {
-				const storedTheme = localStorage.getItem('theme');
-				const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-				if (storedTheme === 'dark' || (!storedTheme && prefersDark) || !storedTheme) {
-					document.documentElement.classList.add('dark');
-				} else {
-					document.documentElement.classList.remove('dark');
-				}
+			(function () {
+				var stored = null;
+				try { stored = localStorage.getItem('theme'); } catch (e) {}
+				var dark = stored ? stored === 'dark' : window.matchMedia('(prefers-color-scheme: dark)').matches;
+				document.documentElement.classList.toggle('dark', dark);
 			})();
 		</script>
 
-		<!-- Google Fonts (Inter & JetBrains Mono) -->
-		<link rel="preconnect" href="https://fonts.googleapis.com">
-		<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-		<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet" />
+		<link rel="preconnect" href="https://fonts.googleapis.com" />
+		<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+		<link
+			rel="stylesheet"
+			href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap"
+		/>
 	</head>
-	<body class="bg-background font-['Inter',sans-serif] text-foreground antialiased selection:bg-primary selection:text-white min-h-screen flex flex-col relative overflow-x-hidden">
-		<!-- Dynamic AI & Data Theme-Adaptive Animated Background -->
-		<BackgroundAnimation />
-
+	<body class="min-h-screen flex flex-col">
+		<a
+			href="#main"
+			class="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-[60] focus:bg-ink focus:text-paper focus:px-4 focus:py-3"
+		>
+			Skip to content
+		</a>
 		<slot />
 	</body>
 </html>
