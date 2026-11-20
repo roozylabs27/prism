@@ -65,9 +65,9 @@ func (h *GatewayHandler) resolveSandboxPolicy(c *gin.Context, key *models.Gatewa
 	if ref == "" || h.routingPolicies == nil || key == nil {
 		return true
 	}
-	policy, err := h.routingPolicies.FindByID(c.Request.Context(), ref, key.UserID)
+	policy, err := h.routingPolicies.FindByID(middleware.ContextWithTenant(c), ref, key.UserID)
 	if err != nil || policy == nil {
-		policy, err = h.routingPolicies.FindByName(c.Request.Context(), ref, key.UserID)
+		policy, err = h.routingPolicies.FindByName(middleware.ContextWithTenant(c), ref, key.UserID)
 	}
 	if err != nil || policy == nil || !policy.Enabled {
 		c.JSON(http.StatusNotFound, gin.H{"error": gin.H{
@@ -441,16 +441,19 @@ func (h *GatewayHandler) resolveSandboxKey(c *gin.Context) (*models.GatewayAPIKe
 		return nil, false
 	}
 
+	tc := middleware.GetTenantContext(c)
 	var gatewayKey *models.GatewayAPIKey
 	if keyPrefix := c.GetHeader("X-Sandbox-Key-Prefix"); keyPrefix != "" {
-		key, err := h.sandboxKeys.FindByKeyPrefix(c.Request.Context(), keyPrefix)
-		if err != nil || key == nil || key.UserID != userID {
+		key, err := h.sandboxKeys.FindByKeyPrefix(middleware.ContextWithTenant(c), keyPrefix)
+		sameOrg := key != nil && key.OrgID != nil && *key.OrgID != "" && tc.OrgID != "" && *key.OrgID == tc.OrgID
+		ownerFallback := key != nil && key.UserID == userID && ((key.OrgID == nil || *key.OrgID == "") || tc.OrgID == "")
+		if err != nil || key == nil || (!sameOrg && !ownerFallback) {
 			c.JSON(http.StatusUnauthorized, gin.H{"error": gin.H{"message": "Invalid API key prefix", "type": "invalid_request_error"}})
 			return nil, false
 		}
 		gatewayKey = key
 	} else {
-		keys, err := h.sandboxKeys.ListByUserID(c.Request.Context(), userID)
+		keys, err := h.sandboxKeys.ListByUserID(middleware.ContextWithTenant(c), userID)
 		if err == nil {
 			for _, k := range keys {
 				if k.Enabled {
@@ -555,11 +558,21 @@ func (h *GatewayHandler) AsyncChatCompletions(c *gin.Context) {
 	}
 	req.RoutingPolicyID = c.GetString("routingPolicyID")
 
-	tenantCtx := middleware.GetTenantContext(c)
-	// Sanitised by the correlation middleware, never the raw header.
+	tenantCtx, tcErr := middleware.ResolveCanonicalTenantContext(c, keyObj)
+	if tcErr != nil {
+		c.JSON(http.StatusForbidden, gin.H{
+			"error": gin.H{
+				"message": tcErr.Error(),
+				"type":    "tenant_security_error",
+			},
+		})
+		return
+	}
+	// Sanitised by the correlation middleware, never the raw header, and forced
+	// to a canonical UUID so request_logs / routing_decisions stay valid UUIDs.
 	requestID := middleware.GetRequestID(c)
-	if requestID == "" {
-		requestID = fmt.Sprintf("req_%d", time.Now().UnixNano())
+	if _, err := uuid.Parse(requestID); err != nil {
+		requestID = uuid.New().String()
 	}
 	// Job IDs are random so they cannot be predicted from the client-supplied X-Request-ID.
 	jobID := "job_" + strings.ReplaceAll(uuid.New().String(), "-", "")

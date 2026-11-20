@@ -6,6 +6,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/roozylabs/prism/internal/httputil"
+	"github.com/roozylabs/prism/internal/middleware"
 	"github.com/roozylabs/prism/internal/repository"
 )
 
@@ -40,7 +41,7 @@ func (h *RoutingDecisionHandler) List(c *gin.Context) {
 
 	offset := (page - 1) * limit
 
-	decisions, total, err := h.repo.ListWithFilter(c.Request.Context(), userID, limit, offset)
+	decisions, total, err := h.repo.ListWithFilter(middleware.ContextWithTenant(c), userID, limit, offset)
 	if err != nil {
 		httputil.RespondInternalError(c, "Failed to list routing decisions", err, "ROUTING_DECISIONS_LIST_FAILED")
 		return

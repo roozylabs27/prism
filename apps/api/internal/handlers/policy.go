@@ -9,6 +9,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/roozylabs/prism/internal/httputil"
+	"github.com/roozylabs/prism/internal/middleware"
 	"github.com/roozylabs/prism/internal/models"
 	"github.com/roozylabs/prism/internal/proxy"
 	"github.com/roozylabs/prism/internal/repository"
@@ -48,7 +49,7 @@ func (h *RoutingPolicyHandler) SetAuditLog(a *AdminAudit) { h.audit = a }
 
 func (h *RoutingPolicyHandler) List(c *gin.Context) {
 	userID := c.GetString("userId")
-	policies, err := h.policyRepo.ListByUserID(c.Request.Context(), userID)
+	policies, err := h.policyRepo.ListByUserID(middleware.ContextWithTenant(c), userID)
 	if err != nil {
 		httputil.RespondInternalError(c, "Failed to list routing policies", err, "POLICIES_LIST_FAILED")
 		return
@@ -62,7 +63,7 @@ func (h *RoutingPolicyHandler) List(c *gin.Context) {
 func (h *RoutingPolicyHandler) Get(c *gin.Context) {
 	userID := c.GetString("userId")
 	id := c.Param("id")
-	policy, err := h.policyRepo.FindByID(c.Request.Context(), id, userID)
+	policy, err := h.policyRepo.FindByID(middleware.ContextWithTenant(c), id, userID)
 	if err != nil {
 		httputil.RespondNotFound(c, "Policy not found", err, "POLICY_NOT_FOUND")
 		return
@@ -103,7 +104,7 @@ func (h *RoutingPolicyHandler) Create(c *gin.Context) {
 		Constraints: req.Constraints,
 		Enabled:     true,
 	}
-	if err := h.policyRepo.Create(c.Request.Context(), policy); err != nil {
+	if err := h.policyRepo.Create(middleware.ContextWithTenant(c), policy); err != nil {
 		httputil.RespondStoreError(c, err, "Routing policy", "POLICY_CREATE")
 		return
 	}
@@ -121,7 +122,7 @@ type UpdatePolicyRequest struct {
 func (h *RoutingPolicyHandler) Update(c *gin.Context) {
 	userID := c.GetString("userId")
 	id := c.Param("id")
-	existing, err := h.policyRepo.FindByID(c.Request.Context(), id, userID)
+	existing, err := h.policyRepo.FindByID(middleware.ContextWithTenant(c), id, userID)
 	if err != nil {
 		httputil.RespondNotFound(c, "Policy not found", err, "POLICY_NOT_FOUND")
 		return
@@ -148,7 +149,7 @@ func (h *RoutingPolicyHandler) Update(c *gin.Context) {
 	if req.Enabled != nil {
 		existing.Enabled = *req.Enabled
 	}
-	if err := h.policyRepo.Update(c.Request.Context(), existing); err != nil {
+	if err := h.policyRepo.Update(middleware.ContextWithTenant(c), existing); err != nil {
 		httputil.RespondStoreError(c, err, "Routing policy", "POLICY_UPDATE")
 		return
 	}
@@ -159,7 +160,7 @@ func (h *RoutingPolicyHandler) Update(c *gin.Context) {
 func (h *RoutingPolicyHandler) Delete(c *gin.Context) {
 	userID := c.GetString("userId")
 	id := c.Param("id")
-	if err := h.policyRepo.Delete(c.Request.Context(), id, userID); err != nil {
+	if err := h.policyRepo.Delete(middleware.ContextWithTenant(c), id, userID); err != nil {
 		httputil.RespondStoreError(c, err, "Routing policy", "POLICY_DELETE")
 		return
 	}
@@ -170,12 +171,12 @@ func (h *RoutingPolicyHandler) Delete(c *gin.Context) {
 func (h *RoutingPolicyHandler) SetDefault(c *gin.Context) {
 	userID := c.GetString("userId")
 	id := c.Param("id")
-	if err := h.policyRepo.SetDefault(c.Request.Context(), id, userID); err != nil {
+	if err := h.policyRepo.SetDefault(middleware.ContextWithTenant(c), id, userID); err != nil {
 		httputil.RespondStoreError(c, err, "Routing policy", "POLICY_SET_DEFAULT")
 		return
 	}
 	h.audit.Record(c, "routing_policy.set_default", "routing_policy", id, nil)
-	policy, err := h.policyRepo.FindByID(c.Request.Context(), id, userID)
+	policy, err := h.policyRepo.FindByID(middleware.ContextWithTenant(c), id, userID)
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{"message": "policy set as default"})
 		return
@@ -186,7 +187,7 @@ func (h *RoutingPolicyHandler) SetDefault(c *gin.Context) {
 func (h *RoutingPolicyHandler) FindByName(c *gin.Context) {
 	userID := c.GetString("userId")
 	name := c.Param("name")
-	policy, err := h.policyRepo.FindByName(c.Request.Context(), name, userID)
+	policy, err := h.policyRepo.FindByName(middleware.ContextWithTenant(c), name, userID)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			httputil.RespondNotFound(c, "Policy not found", err, "POLICY_NOT_FOUND")

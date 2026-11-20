@@ -28,7 +28,7 @@ func (h *DashboardHandler) GetStats(c *gin.Context) {
 		return
 	}
 	days := parseDays(c.Query("days"), 0)
-	stats, err := h.requestLogs.GetStats(c.Request.Context(), userID, days, startDate, endDate)
+	stats, err := h.requestLogs.GetStats(middleware.ContextWithTenant(c), userID, days, startDate, endDate)
 	if err != nil {
 		httputil.RespondError(c, http.StatusInternalServerError, "Failed to retrieve dashboard statistics", err, "STATS_QUERY_FAILED")
 		return
@@ -43,7 +43,7 @@ func (h *DashboardHandler) GetUsageChart(c *gin.Context) {
 		return
 	}
 	days := parseDays(c.Query("days"), 30)
-	data, err := h.requestLogs.GetUsageChart(c.Request.Context(), userID, days, startDate, endDate)
+	data, err := h.requestLogs.GetUsageChart(middleware.ContextWithTenant(c), userID, days, startDate, endDate)
 	if err != nil {
 		httputil.RespondError(c, http.StatusInternalServerError, "Failed to retrieve usage chart", err, "USAGE_CHART_FAILED")
 		return
@@ -56,7 +56,8 @@ func (h *DashboardHandler) GetUsageChart(c *gin.Context) {
 
 func (h *DashboardHandler) GetProviderHealth(c *gin.Context) {
 	userID := c.GetString("userId")
-	data, err := h.requestLogs.GetProviderHealth(c.Request.Context(), userID)
+	ctx := middleware.ContextWithTenant(c)
+	data, err := h.requestLogs.GetProviderHealth(ctx, userID)
 	if err != nil {
 		httputil.RespondError(c, http.StatusInternalServerError, "Failed to retrieve provider health", err, "HEALTH_QUERY_FAILED")
 		return
@@ -67,7 +68,7 @@ func (h *DashboardHandler) GetProviderHealth(c *gin.Context) {
 
 	var scores map[string]float64
 	if h.health != nil {
-		scores = h.health.ScoresFor(c.Request.Context(), middleware.GetTenantContext(c).OrgID)
+		scores = h.health.ScoresFor(ctx, middleware.GetTenantContext(c).OrgID)
 	}
 	for i := range data {
 		score, ok := scores[data[i].ID]

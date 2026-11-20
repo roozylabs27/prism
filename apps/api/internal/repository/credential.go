@@ -34,6 +34,28 @@ func scanCredential(row interface{ Scan(...interface{}) error }, c *models.Crede
 	)
 }
 
+func credOwnerClause(ctx context.Context, colPrefix, uid string, args []any) (string, []any) {
+	orgID := tenantOrgID(ctx)
+	if orgID != "" {
+		if uid == "" {
+			uid = tenantUserID(ctx)
+		}
+		if uid != "" {
+			args = append(args, orgID, uid)
+			orgIdx, userIdx := len(args)-1, len(args)
+			return fmt.Sprintf("(%sorg_id = $%d OR ((%sorg_id IS NULL OR %sorg_id = '') AND %suser_id = $%d))",
+				colPrefix, orgIdx, colPrefix, colPrefix, colPrefix, userIdx), args
+		}
+		args = append(args, orgID)
+		return fmt.Sprintf("%sorg_id = $%d", colPrefix, len(args)), args
+	}
+	if uid != "" {
+		args = append(args, uid)
+		return fmt.Sprintf("(%suser_id = $%d OR %sorg_id = $%d)", colPrefix, len(args), colPrefix, len(args)), args
+	}
+	return "", args
+}
+
 func (r *CredentialRepository) ListByProviderID(ctx context.Context, providerID string, userID ...string) ([]models.Credential, error) {
 	uid := ""
 	if len(userID) > 0 {
@@ -53,9 +75,9 @@ func (r *CredentialRepository) ListByProviderID(ctx context.Context, providerID 
 		args = append(args, providerID)
 	}
 
-	if uid != "" {
-		args = append(args, uid)
-		query += fmt.Sprintf(" AND (c.user_id = $%d OR c.org_id = $%d)", len(args), len(args))
+	if clause, nextArgs := credOwnerClause(ctx, "c.", uid, args); clause != "" {
+		args = nextArgs
+		query += " AND " + clause
 	}
 	query += " ORDER BY COALESCE(c.health_score, 100.00) DESC, c.priority ASC"
 
@@ -91,10 +113,10 @@ func (r *CredentialRepository) ListWithFilter(ctx context.Context, providerID, s
 	if len(userID) > 0 {
 		uid = userID[0]
 	}
-	if uid != "" {
-		args = append(args, uid)
-		countArgs = append(countArgs, uid)
-		filter := fmt.Sprintf(" AND (c.user_id = $%d OR c.org_id = $%d)", len(args), len(args))
+	if clause, nextArgs := credOwnerClause(ctx, "c.", uid, args); clause != "" {
+		args = nextArgs
+		_, countArgs = credOwnerClause(ctx, "c.", uid, countArgs)
+		filter := " AND " + clause
 		query += filter
 		countQuery += filter
 	}
@@ -172,11 +194,11 @@ func (r *CredentialRepository) FindByID(ctx context.Context, id string, userID .
 	var args []interface{}
 	args = append(args, id)
 
-	if uid != "" {
-		args = append(args, uid)
+	if clause, nextArgs := credOwnerClause(ctx, "c.", uid, args); clause != "" {
+		args = nextArgs
 		query = `SELECT ` + credentialCols + `
 		         FROM credentials c
-		         WHERE c.id = $1 AND (c.user_id = $2 OR c.org_id = $2)`
+		         WHERE c.id = $1 AND ` + clause
 	} else {
 		query = `SELECT ` + credentialCols + `
 		         FROM credentials c WHERE c.id = $1`
@@ -195,6 +217,11 @@ func (r *CredentialRepository) Create(ctx context.Context, c *models.Credential)
 	}
 	if c.AuthType == "" {
 		c.AuthType = "api_key"
+	}
+	if c.OrgID == nil || *c.OrgID == "" {
+		if orgID := tenantOrgID(ctx); orgID != "" {
+			c.OrgID = &orgID
+		}
 	}
 	c.CreatedAt = time.Now()
 	c.UpdatedAt = time.Now()
@@ -216,24 +243,23 @@ func (r *CredentialRepository) Update(ctx context.Context, c *models.Credential,
 	if len(userID) > 0 {
 		uid = userID[0]
 	}
-	var err error
-	if uid != "" {
-		_, err = r.db.ExecContext(ctx,
+	args := []any{c.Name, c.EncryptedKey, c.KeyPrefix, c.AuthType, c.EncryptedMetadata, c.Priority,
+		c.Enabled, c.Status, c.UpdatedAt, c.ID}
+	if clause, nextArgs := credOwnerClause(ctx, "", uid, args); clause != "" {
+		_, err := r.db.ExecContext(ctx,
 			`UPDATE credentials SET name=$1, encrypted_key=$2, key_prefix=$3, auth_type=$4, encrypted_metadata=$5, priority=$6,
 			        enabled=$7, status=$8, updated_at=$9
-			 WHERE id=$10 AND (user_id = $11 OR org_id = $11)`,
-			c.Name, c.EncryptedKey, c.KeyPrefix, c.AuthType, c.EncryptedMetadata, c.Priority,
-			c.Enabled, c.Status, c.UpdatedAt, c.ID, uid,
+			 WHERE id=$10 AND `+clause,
+			nextArgs...,
 		)
-	} else {
-		_, err = r.db.ExecContext(ctx,
-			`UPDATE credentials SET name=$1, encrypted_key=$2, key_prefix=$3, auth_type=$4, encrypted_metadata=$5, priority=$6,
-			        enabled=$7, status=$8, updated_at=$9
-			 WHERE id=$10`,
-			c.Name, c.EncryptedKey, c.KeyPrefix, c.AuthType, c.EncryptedMetadata, c.Priority,
-			c.Enabled, c.Status, c.UpdatedAt, c.ID,
-		)
+		return err
 	}
+	_, err := r.db.ExecContext(ctx,
+		`UPDATE credentials SET name=$1, encrypted_key=$2, key_prefix=$3, auth_type=$4, encrypted_metadata=$5, priority=$6,
+		        enabled=$7, status=$8, updated_at=$9
+		 WHERE id=$10`,
+		args...,
+	)
 	return err
 }
 
@@ -242,8 +268,8 @@ func (r *CredentialRepository) Delete(ctx context.Context, id string, userID ...
 	if len(userID) > 0 {
 		uid = userID[0]
 	}
-	if uid != "" {
-		res, err := r.db.ExecContext(ctx, `DELETE FROM credentials WHERE id = $1 AND (user_id = $2 OR org_id = $2)`, id, uid)
+	if clause, nextArgs := credOwnerClause(ctx, "", uid, []any{id}); clause != "" {
+		res, err := r.db.ExecContext(ctx, `DELETE FROM credentials WHERE id = $1 AND `+clause, nextArgs...)
 		return requireOneRow(res, err)
 	}
 	res, err := r.db.ExecContext(ctx, `DELETE FROM credentials WHERE id = $1`, id)
@@ -270,9 +296,9 @@ func (r *CredentialRepository) FindActiveByProviderID(ctx context.Context, provi
 		         WHERE (p.type = $1 OR p.name ILIKE $1) AND c.enabled = true AND c.status NOT IN ('invalid', 'disabled')`
 	}
 
-	if uid != "" {
-		args = append(args, uid)
-		query += fmt.Sprintf(" AND (c.user_id = $%d OR c.org_id = $%d)", len(args), len(args))
+	if clause, nextArgs := credOwnerClause(ctx, "c.", uid, args); clause != "" {
+		args = nextArgs
+		query += " AND " + clause
 	}
 	query += " ORDER BY COALESCE(c.health_score, 100.00) DESC, c.priority ASC LIMIT 1"
 
@@ -302,9 +328,9 @@ func (r *CredentialRepository) FindAllActiveByProviderID(ctx context.Context, pr
 		         WHERE (p.type = $1 OR p.name ILIKE $1) AND c.enabled = true AND c.status NOT IN ('invalid', 'disabled')`
 	}
 
-	if uid != "" {
-		args = append(args, uid)
-		query += fmt.Sprintf(" AND (c.user_id = $%d OR c.org_id = $%d)", len(args), len(args))
+	if clause, nextArgs := credOwnerClause(ctx, "c.", uid, args); clause != "" {
+		args = nextArgs
+		query += " AND " + clause
 	}
 	query += " ORDER BY COALESCE(c.health_score, 100.00) DESC, c.priority ASC"
 
@@ -440,9 +466,9 @@ func (r *CredentialRepository) FindRoundRobin(ctx context.Context, providerID st
 	var args []interface{}
 	args = append(args, providerID)
 
-	if uid != "" {
-		args = append(args, uid)
-		query += fmt.Sprintf(" AND (c.user_id = $%d OR c.org_id = $%d)", len(args), len(args))
+	if clause, nextArgs := credOwnerClause(ctx, "c.", uid, args); clause != "" {
+		args = nextArgs
+		query += " AND " + clause
 	}
 	query += " ORDER BY COALESCE(c.health_score, 100.00) DESC, c.request_count ASC, c.priority ASC"
 
@@ -484,9 +510,9 @@ func (r *CredentialRepository) FindLRU(ctx context.Context, providerID string, e
 	var args []interface{}
 	args = append(args, providerID)
 
-	if uid != "" {
-		args = append(args, uid)
-		query += fmt.Sprintf(" AND (c.user_id = $%d OR c.org_id = $%d)", len(args), len(args))
+	if clause, nextArgs := credOwnerClause(ctx, "c.", uid, args); clause != "" {
+		args = nextArgs
+		query += " AND " + clause
 	}
 	query += " ORDER BY COALESCE(c.health_score, 100.00) DESC, c.last_used_at ASC NULLS FIRST, c.priority ASC"
 
@@ -533,9 +559,9 @@ func (r *CredentialRepository) CountActiveByProviderID(ctx context.Context, prov
 	var args []interface{}
 	args = append(args, providerID)
 
-	if uid != "" {
-		args = append(args, uid)
-		query += fmt.Sprintf(" AND (c.user_id = $%d OR c.org_id = $%d)", len(args), len(args))
+	if clause, nextArgs := credOwnerClause(ctx, "c.", uid, args); clause != "" {
+		args = nextArgs
+		query += " AND " + clause
 	}
 
 	var count int64
@@ -551,9 +577,9 @@ func (r *CredentialRepository) ListActiveProviderIDs(ctx context.Context, userOr
 
 	query := `SELECT DISTINCT provider_id FROM credentials c WHERE c.enabled = true AND c.status != 'invalid' AND (c.encrypted_key IS NOT NULL AND c.encrypted_key != '')`
 	var args []interface{}
-	if uid != "" {
-		args = append(args, uid)
-		query += fmt.Sprintf(" AND (c.user_id = $%d OR c.org_id = $%d)", len(args), len(args))
+	if clause, nextArgs := credOwnerClause(ctx, "c.", uid, args); clause != "" {
+		args = nextArgs
+		query += " AND " + clause
 	}
 
 	rows, err := r.db.QueryContext(ctx, query, args...)

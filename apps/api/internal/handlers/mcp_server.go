@@ -217,7 +217,7 @@ func (h *MCPServerHandler) handleToolsList(c *gin.Context, gatewayKey *models.Ga
 	}
 
 	if h.servers != nil && h.tools != nil {
-		srvs, err := h.servers.ListByUserID(c.Request.Context(), gatewayKey.UserID)
+		srvs, err := h.servers.ListByUserID(middleware.ContextWithTenant(c), gatewayKey.UserID)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, mcpJSONRPCResponse{
 				JSONRPC: "2.0",
@@ -330,7 +330,7 @@ func (h *MCPServerHandler) handleToolsCall(c *gin.Context, gatewayKey *models.Ga
 		requestID = uuid.New().String()
 	}
 
-	ctx, cancel := context.WithTimeout(c.Request.Context(), defaultMCPCallTimout)
+	ctx, cancel := context.WithTimeout(middleware.ContextWithTenant(c), defaultMCPCallTimout)
 	defer cancel()
 
 	if params.Name == delegateAITaskTool {

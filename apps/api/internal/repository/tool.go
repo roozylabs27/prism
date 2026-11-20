@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
@@ -17,15 +18,21 @@ func NewToolRepository(db *sql.DB) *ToolRepository {
 	return &ToolRepository{db: db}
 }
 
-const toolColumns = `id, COALESCE(user_id, ''), name, display_name, description, input_schema, enabled, created_at, updated_at`
+const toolColumns = `id, COALESCE(user_id, ''), COALESCE(org_id, ''), COALESCE(workspace_id, ''), name, display_name, description, input_schema, enabled, created_at, updated_at`
 
 func scanTool(row interface{ Scan(...interface{}) error }, t *models.Tool) error {
-	return row.Scan(&t.ID, &t.UserID, &t.Name, &t.DisplayName, &t.Description, &t.InputSchema, &t.Enabled, &t.CreatedAt, &t.UpdatedAt)
+	return row.Scan(&t.ID, &t.UserID, &t.OrgID, &t.WorkspaceID, &t.Name, &t.DisplayName, &t.Description, &t.InputSchema, &t.Enabled, &t.CreatedAt, &t.UpdatedAt)
 }
 
 func (r *ToolRepository) ListByUserID(ctx context.Context, userID string) ([]models.Tool, error) {
+	ownerClause, args := tenantOwnerClause(ctx, "", userID, nil)
+	where := ownerClause
+	if wsClause, wsArgs := appendOptionalWorkspaceClause(ctx, "", args); wsClause != "" {
+		where = fmt.Sprintf("(%s) AND %s", ownerClause, wsClause)
+		args = wsArgs
+	}
 	rows, err := r.db.QueryContext(ctx,
-		`SELECT `+toolColumns+` FROM tools WHERE user_id = $1 ORDER BY created_at DESC`, userID)
+		`SELECT `+toolColumns+` FROM tools WHERE `+where+` ORDER BY created_at DESC`, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -43,9 +50,10 @@ func (r *ToolRepository) ListByUserID(ctx context.Context, userID string) ([]mod
 
 func (r *ToolRepository) FindByID(ctx context.Context, id, userID string) (*models.Tool, error) {
 	var t models.Tool
-	err := r.db.QueryRowContext(ctx,
-		`SELECT `+toolColumns+` FROM tools WHERE id = $1 AND user_id = $2`, id, userID,
-	).Scan(&t.ID, &t.UserID, &t.Name, &t.DisplayName, &t.Description, &t.InputSchema, &t.Enabled, &t.CreatedAt, &t.UpdatedAt)
+	ownerClause, args := tenantOwnerClause(ctx, "", userID, []any{id})
+	err := scanTool(r.db.QueryRowContext(ctx,
+		`SELECT `+toolColumns+` FROM tools WHERE id = $1 AND (`+ownerClause+`)`, args...,
+	), &t)
 	if err != nil {
 		return nil, err
 	}
@@ -54,9 +62,10 @@ func (r *ToolRepository) FindByID(ctx context.Context, id, userID string) (*mode
 
 func (r *ToolRepository) FindByUserAndName(ctx context.Context, userID, name string) (*models.Tool, error) {
 	var t models.Tool
-	err := r.db.QueryRowContext(ctx,
-		`SELECT `+toolColumns+` FROM tools WHERE user_id = $1 AND name = $2`, userID, name,
-	).Scan(&t.ID, &t.UserID, &t.Name, &t.DisplayName, &t.Description, &t.InputSchema, &t.Enabled, &t.CreatedAt, &t.UpdatedAt)
+	ownerClause, args := tenantOwnerClause(ctx, "", userID, []any{name})
+	err := scanTool(r.db.QueryRowContext(ctx,
+		`SELECT `+toolColumns+` FROM tools WHERE name = $1 AND (`+ownerClause+`)`, args...,
+	), &t)
 	if err != nil {
 		return nil, err
 	}
@@ -67,13 +76,19 @@ func (r *ToolRepository) Create(ctx context.Context, t *models.Tool) error {
 	if t.ID == "" {
 		t.ID = uuid.New().String()
 	}
+	if t.OrgID == "" {
+		t.OrgID = tenantOrgID(ctx)
+	}
+	if t.WorkspaceID == "" {
+		t.WorkspaceID = tenantWorkspaceID(ctx)
+	}
 	now := time.Now()
 	t.CreatedAt = now
 	t.UpdatedAt = now
 	_, err := r.db.ExecContext(ctx,
-		`INSERT INTO tools (id, user_id, name, display_name, description, input_schema, enabled, created_at, updated_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
-		t.ID, t.UserID, t.Name, t.DisplayName, t.Description, []byte(t.InputSchema), t.Enabled, t.CreatedAt, t.UpdatedAt)
+		`INSERT INTO tools (id, user_id, org_id, workspace_id, name, display_name, description, input_schema, enabled, created_at, updated_at)
+		 VALUES ($1, $2, NULLIF($3, ''), NULLIF($4, ''), $5, $6, $7, $8, $9, $10, $11)`,
+		t.ID, t.UserID, t.OrgID, t.WorkspaceID, t.Name, t.DisplayName, t.Description, []byte(t.InputSchema), t.Enabled, t.CreatedAt, t.UpdatedAt)
 	return err
 }
 
@@ -87,13 +102,19 @@ func (r *ToolRepository) CreateWithBackendsTx(ctx context.Context, t *models.Too
 	if t.ID == "" {
 		t.ID = uuid.New().String()
 	}
+	if t.OrgID == "" {
+		t.OrgID = tenantOrgID(ctx)
+	}
+	if t.WorkspaceID == "" {
+		t.WorkspaceID = tenantWorkspaceID(ctx)
+	}
 	now := time.Now()
 	t.CreatedAt = now
 	t.UpdatedAt = now
 	_, err = tx.ExecContext(ctx,
-		`INSERT INTO tools (id, user_id, name, display_name, description, input_schema, enabled, created_at, updated_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
-		t.ID, t.UserID, t.Name, t.DisplayName, t.Description, []byte(t.InputSchema), t.Enabled, t.CreatedAt, t.UpdatedAt)
+		`INSERT INTO tools (id, user_id, org_id, workspace_id, name, display_name, description, input_schema, enabled, created_at, updated_at)
+		 VALUES ($1, $2, NULLIF($3, ''), NULLIF($4, ''), $5, $6, $7, $8, $9, $10, $11)`,
+		t.ID, t.UserID, t.OrgID, t.WorkspaceID, t.Name, t.DisplayName, t.Description, []byte(t.InputSchema), t.Enabled, t.CreatedAt, t.UpdatedAt)
 	if err != nil {
 		return err
 	}
@@ -126,15 +147,18 @@ func (r *ToolRepository) CreateWithBackendsTx(ctx context.Context, t *models.Too
 
 func (r *ToolRepository) Update(ctx context.Context, t *models.Tool) error {
 	t.UpdatedAt = time.Now()
+	args := []any{t.DisplayName, t.Description, []byte(t.InputSchema), t.Enabled, t.UpdatedAt, t.ID}
+	ownerClause, args := tenantOwnerClause(ctx, "", t.UserID, args)
 	_, err := r.db.ExecContext(ctx,
 		`UPDATE tools SET display_name=$1, description=$2, input_schema=$3, enabled=$4, updated_at=$5
-		 WHERE id=$6 AND user_id=$7`,
-		t.DisplayName, t.Description, []byte(t.InputSchema), t.Enabled, t.UpdatedAt, t.ID, t.UserID)
+		 WHERE id=$6 AND (`+ownerClause+`)`,
+		args...)
 	return err
 }
 
 func (r *ToolRepository) Delete(ctx context.Context, id, userID string) error {
-	res, err := r.db.ExecContext(ctx, `DELETE FROM tools WHERE id = $1 AND user_id = $2`, id, userID)
+	ownerClause, args := tenantOwnerClause(ctx, "", userID, []any{id})
+	res, err := r.db.ExecContext(ctx, `DELETE FROM tools WHERE id = $1 AND (`+ownerClause+`)`, args...)
 	return requireOneRow(res, err)
 }
 

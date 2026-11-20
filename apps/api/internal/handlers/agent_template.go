@@ -7,6 +7,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/roozylabs/prism/internal/httputil"
+	"github.com/roozylabs/prism/internal/middleware"
 	"github.com/roozylabs/prism/internal/models"
 	"github.com/roozylabs/prism/internal/repository"
 )
@@ -42,7 +43,7 @@ type InstantiateAgentRequest struct {
 
 func (h *AgentTemplateHandler) ListTemplates(c *gin.Context) {
 	userID := c.GetString("userId")
-	templates, err := h.tmplRepo.ListAll(c.Request.Context(), userID)
+	templates, err := h.tmplRepo.ListAll(middleware.ContextWithTenant(c), userID)
 	if err != nil {
 		httputil.RespondInternalError(c, "Failed to list agent templates", err, "AGENT_TEMPLATES_LIST_FAILED")
 		return
@@ -89,7 +90,7 @@ func (h *AgentTemplateHandler) CreateTemplate(c *gin.Context) {
 		IsPreset:         false,
 	}
 
-	if err := h.tmplRepo.Create(c.Request.Context(), tmpl); err != nil {
+	if err := h.tmplRepo.Create(middleware.ContextWithTenant(c), tmpl); err != nil {
 		httputil.RespondStoreError(c, err, "Agent template", "AGENT_TEMPLATE_CREATE")
 		return
 	}
@@ -101,7 +102,7 @@ func (h *AgentTemplateHandler) InstantiateTemplate(c *gin.Context) {
 	userID := c.GetString("userId")
 	tmplID := c.Param("id")
 
-	tmpl, err := h.tmplRepo.FindByID(c.Request.Context(), tmplID, userID)
+	tmpl, err := h.tmplRepo.FindByID(middleware.ContextWithTenant(c), tmplID, userID)
 	if err != nil {
 		httputil.RespondNotFound(c, "Agent template not found", err, "AGENT_TEMPLATE_NOT_FOUND")
 		return
@@ -142,7 +143,7 @@ func (h *AgentTemplateHandler) InstantiateTemplate(c *gin.Context) {
 		Enabled:          true,
 	}
 
-	if err := h.agentRepo.Create(c.Request.Context(), agent); err != nil {
+	if err := h.agentRepo.Create(middleware.ContextWithTenant(c), agent); err != nil {
 		httputil.RespondInternalError(c, "Failed to instantiate agent", err, "AGENT_INSTANTIATE_FAILED")
 		return
 	}

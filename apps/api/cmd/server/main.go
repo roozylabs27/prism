@@ -172,6 +172,7 @@ func main() {
 	modelHandler := handlers.NewModelHandler(modelRepo, providerRepo, gatewayKeyRepo, cooldown)
 	gatewayKeyHandler := handlers.NewGatewayKeyHandler(gatewayKeyRepo, credentialRepo, gatewayKeyCache)
 	gatewayKeyHandler.SetScopeValidator(workspaceRepo)
+	gatewayKeyHandler.SetAgentValidator(agentRepo)
 	workspaceHandler := handlers.NewWorkspaceHandler(workspaceRepo)
 	pilotOutcomesHandler := handlers.NewPilotOutcomesHandler(pilotOutcomesRepo)
 	admissionCtrl := proxy.NewAdmissionController(rbacEngine, agentGovernance, proxy.NewCachedQuotaEvaluator(quotaRepo, proxy.DefaultQuotaCacheTTL), budgetMgr)
@@ -205,9 +206,15 @@ func main() {
 	}()
 
 	jobQueue.StartWorkerPool(jobWorkerCtx, 5, func(job *queue.AsyncJob) (*proxy.ProviderResponse, error) {
+		workerCtx := database.WithTenantContext(context.Background(), database.TenantDBContext{
+			UserID:      job.UserID,
+			OrgID:       job.TenantCtx.OrgID,
+			WorkspaceID: job.TenantCtx.WorkspaceID,
+			ProjectID:   job.TenantCtx.ProjectID,
+		})
 		res, execErr := orchestrator.ExecuteChatCompletions(
 			nil,
-			context.Background(),
+			workerCtx,
 			job.RequestPayload,
 			job.GatewayKey,
 			job.TenantCtx,
@@ -331,6 +338,7 @@ func main() {
 	r.GET("/metrics", middleware.MetricsGuard(cfg.MetricsToken, cfg.IsDevelopment()), telemetry.PrometheusHandler())
 
 	// API routes group
+	tenantChecker := middleware.NewCompositeTenantChecker(accountRepo, workspaceRepo)
 	api := r.Group("/api")
 	{
 		// Public API routes
@@ -339,6 +347,7 @@ func main() {
 		api.GET("/features", featuresHandler.GetFeatures)
 		api.POST("/auth/login", authHandler.Login)
 		api.POST("/auth/signup", authHandler.Signup)
+		api.POST("/auth/logout", authHandler.Logout)
 		api.GET("/auth/turnstile-config", authHandler.GetTurnstileConfig)
 		api.GET("/auth/oauth/:provider", oauthHandler.InitiateOAuth)
 		api.GET("/auth/oauth/:provider/callback", oauthHandler.OAuthCallback)
@@ -355,11 +364,10 @@ func main() {
 		userProtected.Use(middleware.RestrictGatewayKeys(middleware.GatewayKeyRoutes))
 		{
 			// Auth Session
-			userProtected.POST("/auth/logout", authHandler.Logout)
 			userProtected.GET("/auth/me", authHandler.Me)
 
 			// User Permissions, Organization List & Onboarding
-			userProtected.GET("/user/permissions", userPermissionsHandler.GetPermissions)
+			userProtected.GET("/user/permissions", middleware.OptionalTenantMiddleware(tenantChecker), userPermissionsHandler.GetPermissions)
 			userProtected.GET("/user/organizations", userPermissionsHandler.GetOrganizations)
 			userProtected.GET("/organizations", userPermissionsHandler.GetOrganizations)
 			userProtected.POST("/onboarding", onboardingHandler.Complete)
@@ -371,7 +379,7 @@ func main() {
 		protected := api.Group("")
 		protected.Use(middleware.AuthMiddleware(sessionRepo, gatewayKeyCache))
 		protected.Use(middleware.RestrictGatewayKeys(middleware.GatewayKeyRoutes))
-		protected.Use(middleware.TenantMiddleware(accountRepo))
+		protected.Use(middleware.TenantMiddleware(tenantChecker))
 		requirePermission := func(code string) gin.HandlerFunc {
 			return middleware.RequirePermission(authzEngine, code)
 		}
@@ -577,7 +585,7 @@ func main() {
 	// Gateway routes (authenticated with prism_sk_* keys, or legacy gw_sk_*) - accessible at /v1 and /api/v1
 	registerGatewayRoutes := func(rg *gin.RouterGroup) {
 		rg.Use(middleware.GatewayAuthMiddleware(gatewayKeyCache))
-		rg.Use(middleware.TenantMiddleware(accountRepo))
+		rg.Use(middleware.TenantMiddleware(tenantChecker))
 		rg.Use(middleware.GatewayRateLimitMiddlewareWithPolicy(goredis.NewSlidingWindowLimiter(rdb, time.Minute), cfg.RateLimitPerKey, cfg.RedisFailClosed))
 		rg.Use(middleware.AgentPolicyMiddleware(agentRepo))
 		rg.Use(proxy.IdempotencyMiddlewareWithPolicy(idemStore, cfg.RedisFailClosed))

@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	"github.com/roozylabs/prism/internal/database"
 	"github.com/roozylabs/prism/internal/middleware"
 	"github.com/roozylabs/prism/internal/models"
 	"github.com/roozylabs/prism/internal/proxy"
@@ -109,6 +110,12 @@ func (o *ExecutionOrchestrator) ExecuteChatCompletions(
 	if gatewayKey != nil {
 		userID = gatewayKey.UserID
 	}
+	ctx = database.WithTenantContext(ctx, database.TenantDBContext{
+		UserID:      userID,
+		OrgID:       tenantCtx.OrgID,
+		WorkspaceID: tenantCtx.WorkspaceID,
+		ProjectID:   tenantCtx.ProjectID,
+	})
 
 	// 1. Admission Control Gate
 	if c != nil && req.Agent == nil {
@@ -323,10 +330,17 @@ func (o *ExecutionOrchestrator) recordDeniedAuditTrail(
 	if gatewayKey != nil {
 		userID = gatewayKey.UserID
 	}
+	ctx = database.WithTenantContext(ctx, database.TenantDBContext{
+		UserID:      userID,
+		OrgID:       tenantCtx.OrgID,
+		WorkspaceID: tenantCtx.WorkspaceID,
+		ProjectID:   tenantCtx.ProjectID,
+	})
 
 	trail := &models.AIAuditTrail{
 		RequestID:         requestID,
 		UserID:            userID,
+		OrgID:             tenantCtx.OrgID,
 		UserRole:          userRole,
 		ModelSlug:         modelSlug,
 		FailoverChain:     []string{},
@@ -377,10 +391,17 @@ func (o *ExecutionOrchestrator) recordAuditTrail(
 	if gatewayKey != nil {
 		userID = gatewayKey.UserID
 	}
+	ctx = database.WithTenantContext(ctx, database.TenantDBContext{
+		UserID:      userID,
+		OrgID:       log.OrgID,
+		WorkspaceID: log.WorkspaceID,
+		ProjectID:   log.ProjectID,
+	})
 
 	trail := &models.AIAuditTrail{
 		RequestID:         log.RequestID,
 		UserID:            userID,
+		OrgID:             log.OrgID,
 		UserRole:          userRole,
 		ModelSlug:         log.Model,
 		FailoverChain:     failoverChain,

@@ -20,15 +20,15 @@ func NewGatewayKeyRepository(db *sql.DB) *GatewayKeyRepository {
 }
 
 const gatewayKeySelectColumns = `
-	id, user_id, org_id, workspace_id, project_id, provider_id, name, key_hash, key_prefix,
+	id, user_id, org_id, workspace_id, project_id, provider_id, agent_id, name, key_hash, key_prefix,
 	enabled, rate_limit, allowed_models, expires_at, last_used_at, request_count, created_at, updated_at
 `
 
 func scanGatewayKey(row interface{ Scan(...interface{}) error }, k *models.GatewayAPIKey) error {
 	var allowedModels []string
-	var orgID, wsID, projID, provID sql.NullString
+	var orgID, wsID, projID, provID, agentID sql.NullString
 	err := row.Scan(
-		&k.ID, &k.UserID, &orgID, &wsID, &projID, &provID, &k.Name, &k.KeyHash, &k.KeyPrefix,
+		&k.ID, &k.UserID, &orgID, &wsID, &projID, &provID, &agentID, &k.Name, &k.KeyHash, &k.KeyPrefix,
 		&k.Enabled, &k.RateLimit, pq.Array(&allowedModels),
 		&k.ExpiresAt, &k.LastUsedAt, &k.RequestCount, &k.CreatedAt, &k.UpdatedAt,
 	)
@@ -47,6 +47,9 @@ func scanGatewayKey(row interface{ Scan(...interface{}) error }, k *models.Gatew
 	if provID.Valid {
 		k.ProviderID = &provID.String
 	}
+	if agentID.Valid {
+		k.AgentID = &agentID.String
+	}
 	k.AllowedModels = allowedModels
 	if k.AllowedModels == nil {
 		k.AllowedModels = []string{}
@@ -58,13 +61,18 @@ func (r *GatewayKeyRepository) Create(ctx context.Context, k *models.GatewayAPIK
 	if k.ID == "" {
 		k.ID = uuid.New().String()
 	}
+	if k.OrgID == nil || *k.OrgID == "" {
+		if orgID := tenantOrgID(ctx); orgID != "" {
+			k.OrgID = &orgID
+		}
+	}
 	now := time.Now()
 	k.CreatedAt = now
 	k.UpdatedAt = now
 	_, err := r.db.ExecContext(ctx,
-		`INSERT INTO gateway_api_keys (id, user_id, org_id, workspace_id, project_id, provider_id, name, key_hash, key_prefix, enabled, rate_limit, allowed_models, expires_at, created_at, updated_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)`,
-		k.ID, k.UserID, k.OrgID, k.WorkspaceID, k.ProjectID, k.ProviderID, k.Name, k.KeyHash, k.KeyPrefix,
+		`INSERT INTO gateway_api_keys (id, user_id, org_id, workspace_id, project_id, provider_id, agent_id, name, key_hash, key_prefix, enabled, rate_limit, allowed_models, expires_at, created_at, updated_at)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)`,
+		k.ID, k.UserID, k.OrgID, k.WorkspaceID, k.ProjectID, k.ProviderID, k.AgentID, k.Name, k.KeyHash, k.KeyPrefix,
 		k.Enabled, k.RateLimit, pq.Array(k.AllowedModels),
 		k.ExpiresAt, k.CreatedAt, k.UpdatedAt,
 	)
@@ -94,8 +102,13 @@ func (r *GatewayKeyRepository) FindByKeyPrefix(ctx context.Context, keyPrefix st
 }
 
 func (r *GatewayKeyRepository) ListByUserID(ctx context.Context, userID string) ([]models.GatewayAPIKey, error) {
+	ownerClause, args := tenantOwnerClause(ctx, "", userID, nil)
+	if wsClause, wsArgs := appendOptionalWorkspaceClause(ctx, "", args); wsClause != "" {
+		ownerClause = fmt.Sprintf("(%s) AND %s", ownerClause, wsClause)
+		args = wsArgs
+	}
 	rows, err := r.db.QueryContext(ctx,
-		`SELECT `+gatewayKeySelectColumns+` FROM gateway_api_keys WHERE user_id = $1 ORDER BY created_at DESC`, userID,
+		`SELECT `+gatewayKeySelectColumns+` FROM gateway_api_keys WHERE `+ownerClause+` ORDER BY created_at DESC`, args...,
 	)
 	if err != nil {
 		return nil, err
@@ -114,18 +127,35 @@ func (r *GatewayKeyRepository) ListByUserID(ctx context.Context, userID string) 
 }
 
 func (r *GatewayKeyRepository) ListByUserIDWithFilter(ctx context.Context, userID, search string, limit, offset int, orgID ...string) ([]models.GatewayAPIKey, int64, error) {
-	query := `SELECT ` + gatewayKeySelectColumns + ` FROM gateway_api_keys WHERE user_id = $1`
-	countQuery := `SELECT COUNT(*) FROM gateway_api_keys WHERE user_id = $1`
-
-	args := []interface{}{userID}
-	countArgs := []interface{}{userID}
-
+	effectiveOrgID := tenantOrgID(ctx)
 	if len(orgID) > 0 && orgID[0] != "" {
-		args = append(args, orgID[0])
-		countArgs = append(countArgs, orgID[0])
-		filter := fmt.Sprintf(" AND org_id = $%d", len(args))
-		query += filter
-		countQuery += filter
+		effectiveOrgID = orgID[0]
+	}
+
+	query := `SELECT ` + gatewayKeySelectColumns + ` FROM gateway_api_keys WHERE `
+	countQuery := `SELECT COUNT(*) FROM gateway_api_keys WHERE `
+
+	var args []interface{}
+	var countArgs []interface{}
+	if effectiveOrgID != "" {
+		args = append(args, effectiveOrgID, userID)
+		countArgs = append(countArgs, effectiveOrgID, userID)
+		base := "(org_id = $1 OR ((org_id IS NULL OR org_id = '') AND user_id = $2))"
+		query += base
+		countQuery += base
+	} else {
+		args = append(args, userID)
+		countArgs = append(countArgs, userID)
+		base := "user_id = $1"
+		query += base
+		countQuery += base
+	}
+
+	if wsClause, wsArgs := appendOptionalWorkspaceClause(ctx, "", args); wsClause != "" {
+		args = wsArgs
+		_, countArgs = appendOptionalWorkspaceClause(ctx, "", countArgs)
+		query += " AND " + wsClause
+		countQuery += " AND " + wsClause
 	}
 
 	if search != "" {
@@ -171,35 +201,37 @@ func (r *GatewayKeyRepository) ListByUserIDWithFilter(ctx context.Context, userI
 
 func (r *GatewayKeyRepository) Update(ctx context.Context, k *models.GatewayAPIKey) error {
 	k.UpdatedAt = time.Now()
-	var err error
-	if k.UserID != "" {
-		_, err = r.db.ExecContext(ctx,
-			`UPDATE gateway_api_keys SET name=$1, enabled=$2, rate_limit=$3, allowed_models=$4, expires_at=$5, provider_id=$6, updated_at=$7
-			 WHERE id=$8 AND user_id=$9`,
-			k.Name, k.Enabled, k.RateLimit, pq.Array(k.AllowedModels),
-			k.ExpiresAt, k.ProviderID, k.UpdatedAt, k.ID, k.UserID,
+	if k.UserID != "" || tenantOrgID(ctx) != "" {
+		args := []any{k.Name, k.Enabled, k.RateLimit, pq.Array(k.AllowedModels),
+			k.ExpiresAt, k.ProviderID, k.AgentID, k.UpdatedAt, k.ID}
+		ownerClause, args := tenantOwnerClause(ctx, "", k.UserID, args)
+		_, err := r.db.ExecContext(ctx,
+			`UPDATE gateway_api_keys SET name=$1, enabled=$2, rate_limit=$3, allowed_models=$4, expires_at=$5, provider_id=$6, agent_id=$7, updated_at=$8
+			 WHERE id=$9 AND `+ownerClause,
+			args...,
 		)
-	} else {
-		_, err = r.db.ExecContext(ctx,
-			`UPDATE gateway_api_keys SET name=$1, enabled=$2, rate_limit=$3, allowed_models=$4, expires_at=$5, provider_id=$6, updated_at=$7
-			 WHERE id=$8`,
-			k.Name, k.Enabled, k.RateLimit, pq.Array(k.AllowedModels),
-			k.ExpiresAt, k.ProviderID, k.UpdatedAt, k.ID,
-		)
+		return err
 	}
+	_, err := r.db.ExecContext(ctx,
+		`UPDATE gateway_api_keys SET name=$1, enabled=$2, rate_limit=$3, allowed_models=$4, expires_at=$5, provider_id=$6, agent_id=$7, updated_at=$8
+		 WHERE id=$9`,
+		k.Name, k.Enabled, k.RateLimit, pq.Array(k.AllowedModels),
+		k.ExpiresAt, k.ProviderID, k.AgentID, k.UpdatedAt, k.ID,
+	)
 	return err
 }
 
 // Delete removes the key and returns its hash, so a cache keyed by hash can
-// drop it. sql.ErrNoRows means no such key, or not the user's.
+// drop it. sql.ErrNoRows means no such key, or not the tenant's.
 func (r *GatewayKeyRepository) Delete(ctx context.Context, id string, userID ...string) (string, error) {
 	uid := ""
 	if len(userID) > 0 {
 		uid = userID[0]
 	}
 	var row *sql.Row
-	if uid != "" {
-		row = r.db.QueryRowContext(ctx, `DELETE FROM gateway_api_keys WHERE id = $1 AND user_id = $2 RETURNING key_hash`, id, uid)
+	if uid != "" || tenantOrgID(ctx) != "" {
+		ownerClause, args := tenantOwnerClause(ctx, "", uid, []any{id})
+		row = r.db.QueryRowContext(ctx, `DELETE FROM gateway_api_keys WHERE id = $1 AND `+ownerClause+` RETURNING key_hash`, args...)
 	} else {
 		row = r.db.QueryRowContext(ctx, `DELETE FROM gateway_api_keys WHERE id = $1 RETURNING key_hash`, id)
 	}
@@ -217,13 +249,27 @@ func (r *GatewayKeyRepository) IncrementUsage(ctx context.Context, id string) er
 }
 
 func (r *GatewayKeyRepository) CountByProviderID(ctx context.Context, providerID string) (int64, error) {
+	query := `SELECT COUNT(*) FROM gateway_api_keys WHERE provider_id = $1 AND enabled = true`
+	args := []any{providerID}
+	if tenantOrgID(ctx) != "" || tenantUserID(ctx) != "" {
+		var ownerClause string
+		ownerClause, args = tenantOwnerClause(ctx, "", tenantUserID(ctx), args)
+		query += ` AND ` + ownerClause
+	}
 	var count int64
-	err := r.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM gateway_api_keys WHERE provider_id = $1 AND enabled = true`, providerID).Scan(&count)
+	err := r.db.QueryRowContext(ctx, query, args...).Scan(&count)
 	return count, err
 }
 
 func (r *GatewayKeyRepository) CountByAllowedModel(ctx context.Context, modelSlug string) (int64, error) {
+	query := `SELECT COUNT(*) FROM gateway_api_keys WHERE $1 = ANY(allowed_models) AND enabled = true`
+	args := []any{modelSlug}
+	if tenantOrgID(ctx) != "" || tenantUserID(ctx) != "" {
+		var ownerClause string
+		ownerClause, args = tenantOwnerClause(ctx, "", tenantUserID(ctx), args)
+		query += ` AND ` + ownerClause
+	}
 	var count int64
-	err := r.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM gateway_api_keys WHERE $1 = ANY(allowed_models) AND enabled = true`, modelSlug).Scan(&count)
+	err := r.db.QueryRowContext(ctx, query, args...).Scan(&count)
 	return count, err
 }

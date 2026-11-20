@@ -19,7 +19,7 @@ func NewPostgres(databaseURL string, statementTimeout time.Duration) (*sqlx.DB, 
 	if err != nil {
 		return nil, fmt.Errorf("invalid database URL: %w", err)
 	}
-	db, err := sqlx.Connect("postgres", dsn)
+	db, err := OpenRLSPostgres(dsn)
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to database: %w", err)
 	}

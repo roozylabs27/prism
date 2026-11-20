@@ -80,7 +80,7 @@ func (h *ResourceGatewayHandler) ExecuteQuery(c *gin.Context) {
 	executionID := uuid.New().String()
 
 	if h.admission != nil {
-		admRes, admErr := h.admission.Evaluate(c.Request.Context(), proxy.AdmissionRequest{
+		admRes, admErr := h.admission.Evaluate(middleware.ContextWithTenant(c), proxy.AdmissionRequest{
 			UserID:       gatewayKey.UserID,
 			Role:         userRole,
 			AgentID:      agentID,
@@ -112,7 +112,7 @@ func (h *ResourceGatewayHandler) ExecuteQuery(c *gin.Context) {
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(c.Request.Context(), 60*time.Second)
+	ctx, cancel := context.WithTimeout(middleware.ContextWithTenant(c), 60*time.Second)
 	defer cancel()
 
 	result, err := h.gateway.Execute(ctx, gatewayKey.UserID, resourceName, req.Args, h.encKey)

@@ -25,6 +25,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/gin-gonic/gin"
+	"github.com/roozylabs/prism/internal/database"
 	"github.com/roozylabs/prism/internal/models"
 	goredis "github.com/roozylabs/prism/internal/redis"
 	"github.com/roozylabs/prism/internal/repository"
@@ -348,13 +349,18 @@ func (e *Engine) resolveRoutes(c *gin.Context, req *ProxyRequest, gatewayKey *mo
 			}
 		}
 
+		orgID := database.TenantContextFrom(ctx).OrgID
+		if orgID == "" && gatewayKey != nil && gatewayKey.OrgID != nil {
+			orgID = *gatewayKey.OrgID
+		}
 		routes, decision, err := e.router.ResolveSemantic(ctx, req, gatewayKey, e.cooldown, e.telemetry, sPolicy, budgetStatus)
 		if err == nil && decision != nil {
 			decision.RequestID = safeGetString(c, "requestID")
 			// Log routing decision asynchronously
 			if userID != "" {
-				e.effects.Go("routing decision", func(ctx context.Context) {
-					e.logRoutingDecision(ctx, userID, decision)
+				e.effects.Go("routing decision", func(bgCtx context.Context) {
+					bgCtx = database.WithTenantContext(bgCtx, database.TenantDBContext{UserID: userID, OrgID: orgID})
+					e.logRoutingDecision(bgCtx, userID, decision)
 				})
 			}
 		}
@@ -399,6 +405,7 @@ func (e *Engine) logRoutingDecision(ctx context.Context, userID string, decision
 		_ = e.decisionRepo.Create(ctx, &repository.RoutingDecisionLog{
 			RequestID:        decision.RequestID,
 			UserID:           userID,
+			OrgID:            database.TenantContextFrom(ctx).OrgID,
 			PromptPreview:    decision.PromptPreview,
 			TaskType:         decision.Task,
 			Complexity:       decision.Complexity,

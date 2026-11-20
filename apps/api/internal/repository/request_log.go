@@ -48,11 +48,35 @@ func (r *RequestLogRepository) Create(ctx context.Context, log *models.RequestLo
 	return err
 }
 
-func (r *RequestLogRepository) ListByUserID(ctx context.Context, userID string, limit, offset int) ([]models.RequestLog, error) {
-	whereClause := `(gak.user_id = $1 OR rl.gateway_api_key_id IS NULL OR $1 = '')`
-	if userID != "" {
-		whereClause = `gak.user_id = $1`
+func requestLogOwnerClause(ctx context.Context, userID string, args []any) (string, []any) {
+	orgID := tenantOrgID(ctx)
+	if orgID != "" {
+		if userID == "" {
+			userID = tenantUserID(ctx)
+		}
+		if userID != "" {
+			args = append(args, orgID, userID)
+			oIdx, uIdx := len(args)-1, len(args)
+			return fmt.Sprintf("(rl.org_id = $%d OR ((rl.org_id IS NULL OR rl.org_id = '') AND (gak.org_id = $%d OR ((gak.org_id IS NULL OR gak.org_id = '') AND gak.user_id = $%d))))", oIdx, oIdx, uIdx), args
+		}
+		args = append(args, orgID)
+		oIdx := len(args)
+		return fmt.Sprintf("(rl.org_id = $%d OR ((rl.org_id IS NULL OR rl.org_id = '') AND gak.org_id = $%d))", oIdx, oIdx), args
 	}
+	if userID != "" {
+		args = append(args, userID)
+		return fmt.Sprintf("gak.user_id = $%d", len(args)), args
+	}
+	return "", args
+}
+
+func (r *RequestLogRepository) ListByUserID(ctx context.Context, userID string, limit, offset int) ([]models.RequestLog, error) {
+	whereClause, args := requestLogOwnerClause(ctx, userID, nil)
+	if whereClause == "" {
+		whereClause = "1=1"
+	}
+	args = append(args, limit, offset)
+	limitIdx, offsetIdx := len(args)-1, len(args)
 	rows, err := r.db.QueryContext(ctx,
 		`SELECT rl.id, rl.request_id, rl.gateway_api_key_id, rl.provider_id, rl.credential_id, rl.model,
 		        rl.status_code, rl.latency_ms, rl.input_tokens, rl.output_tokens, rl.total_tokens,
@@ -60,9 +84,9 @@ func (r *RequestLogRepository) ListByUserID(ctx context.Context, userID string, 
 		        COALESCE(rl.client_app, ''), COALESCE(rl.is_stream, false), COALESCE(rl.ttft_ms, 0), rl.created_at
 		 FROM request_logs rl
 		 LEFT JOIN gateway_api_keys gak ON rl.gateway_api_key_id = gak.id
-		 WHERE `+whereClause+`
+		 WHERE `+whereClause+fmt.Sprintf(`
 		 ORDER BY rl.created_at DESC
-		 LIMIT $2 OFFSET $3`, userID, limit, offset,
+		 LIMIT $%d OFFSET $%d`, limitIdx, offsetIdx), args...,
 	)
 	if err != nil {
 		return nil, err
@@ -103,10 +127,13 @@ func (r *RequestLogRepository) ListWithFilter(ctx context.Context, f LogFilter) 
 	args := []interface{}{}
 	argIdx := 1
 
-	if f.UserID != "" {
-		where = append(where, fmt.Sprintf("gak.user_id = $%d", argIdx))
-		args = append(args, f.UserID)
-		argIdx++
+	if f.UserID != "" || tenantOrgID(ctx) != "" {
+		clause, nextArgs := requestLogOwnerClause(ctx, f.UserID, args)
+		if clause != "" {
+			where = append(where, clause)
+			args = nextArgs
+			argIdx = len(args) + 1
+		}
 	}
 	if f.Provider != "" {
 		where = append(where, fmt.Sprintf("p.slug = $%d", argIdx))
@@ -226,10 +253,15 @@ func (r *RequestLogRepository) GetStats(ctx context.Context, userID string, days
 	s := &DashboardStats{}
 
 	var query string
-	var args []interface{}
+	ownerClause, args := requestLogOwnerClause(ctx, userID, nil)
+	if ownerClause == "" {
+		ownerClause = "1=1"
+	}
 
 	if startDate != "" && endDate != "" {
-		query = `SELECT COALESCE(COUNT(*), 0),
+		args = append(args, startDate, endDate)
+		startIdx, endIdx := len(args)-1, len(args)
+		query = fmt.Sprintf(`SELECT COALESCE(COUNT(*), 0),
 		        COALESCE(SUM(total_tokens), 0),
 		        COALESCE(SUM(input_tokens), 0),
 		        COALESCE(SUM(output_tokens), 0),
@@ -245,12 +277,13 @@ func (r *RequestLogRepository) GetStats(ctx context.Context, userID string, days
 		        )
 		 FROM request_logs rl
 		 INNER JOIN gateway_api_keys gak ON rl.gateway_api_key_id = gak.id
-		 WHERE gak.user_id = $1
-		   AND rl.created_at >= $2::DATE
-		   AND rl.created_at <= ($3::DATE + INTERVAL '1 day')`
-		args = []interface{}{userID, startDate, endDate}
+		 WHERE %s
+		   AND rl.created_at >= $%d::DATE
+		   AND rl.created_at <= ($%d::DATE + INTERVAL '1 day')`, ownerClause, startIdx, endIdx)
 	} else if days > 0 {
-		query = `SELECT COALESCE(COUNT(*), 0),
+		args = append(args, days)
+		daysIdx := len(args)
+		query = fmt.Sprintf(`SELECT COALESCE(COUNT(*), 0),
 		        COALESCE(SUM(total_tokens), 0),
 		        COALESCE(SUM(input_tokens), 0),
 		        COALESCE(SUM(output_tokens), 0),
@@ -266,11 +299,10 @@ func (r *RequestLogRepository) GetStats(ctx context.Context, userID string, days
 		        )
 		 FROM request_logs rl
 		 INNER JOIN gateway_api_keys gak ON rl.gateway_api_key_id = gak.id
-		 WHERE gak.user_id = $1
-		   AND rl.created_at >= NOW() - ($2 || ' days')::INTERVAL`
-		args = []interface{}{userID, days}
+		 WHERE %s
+		   AND rl.created_at >= NOW() - ($%d || ' days')::INTERVAL`, ownerClause, daysIdx)
 	} else {
-		query = `SELECT COALESCE(COUNT(*), 0),
+		query = fmt.Sprintf(`SELECT COALESCE(COUNT(*), 0),
 		        COALESCE(SUM(total_tokens), 0),
 		        COALESCE(SUM(input_tokens), 0),
 		        COALESCE(SUM(output_tokens), 0),
@@ -286,8 +318,7 @@ func (r *RequestLogRepository) GetStats(ctx context.Context, userID string, days
 		        )
 		 FROM request_logs rl
 		 INNER JOIN gateway_api_keys gak ON rl.gateway_api_key_id = gak.id
-		 WHERE gak.user_id = $1`
-		args = []interface{}{userID}
+		 WHERE %s`, ownerClause)
 	}
 
 	err := r.db.QueryRowContext(ctx, query, args...).Scan(
@@ -298,23 +329,26 @@ func (r *RequestLogRepository) GetStats(ctx context.Context, userID string, days
 		return nil, err
 	}
 
+	provClause, provArgs := tenantOwnerClause(ctx, "", userID, nil)
 	err = r.db.QueryRowContext(ctx,
-		`SELECT COUNT(*) FROM providers WHERE user_id = $1 AND enabled = true`, userID,
+		`SELECT COUNT(*) FROM providers WHERE (`+provClause+`) AND enabled = true`, provArgs...,
 	).Scan(&s.ActiveProviders)
 	if err != nil {
 		return nil, err
 	}
 
+	credClause, credArgs := tenantOwnerClause(ctx, "c.", userID, nil)
 	err = r.db.QueryRowContext(ctx,
 		`SELECT COUNT(*) FROM credentials c
-		 WHERE (c.user_id = $1 OR c.org_id = $1) AND c.enabled = true AND c.status = 'active'`, userID,
+		 WHERE (`+credClause+`) AND c.enabled = true AND c.status = 'active'`, credArgs...,
 	).Scan(&s.ActiveCredentials)
 	if err != nil {
 		return nil, err
 	}
 
+	keyClause, keyArgs := tenantOwnerClause(ctx, "", userID, nil)
 	err = r.db.QueryRowContext(ctx,
-		`SELECT COUNT(*) FROM gateway_api_keys WHERE user_id = $1 AND enabled = true`, userID,
+		`SELECT COUNT(*) FROM gateway_api_keys WHERE (`+keyClause+`) AND enabled = true`, keyArgs...,
 	).Scan(&s.ActiveKeys)
 	if err != nil {
 		return nil, err
@@ -325,38 +359,43 @@ func (r *RequestLogRepository) GetStats(ctx context.Context, userID string, days
 
 func (r *RequestLogRepository) GetUsageChart(ctx context.Context, userID string, days int, startDate, endDate string) ([]UsagePoint, error) {
 	var query string
-	var args []interface{}
+	ownerClause, args := requestLogOwnerClause(ctx, userID, nil)
+	if ownerClause == "" {
+		ownerClause = "1=1"
+	}
 
 	if startDate != "" && endDate != "" {
-		query = `SELECT TO_CHAR(rl.created_at, 'YYYY-MM-DD') as date,
+		args = append(args, startDate, endDate)
+		startIdx, endIdx := len(args)-1, len(args)
+		query = fmt.Sprintf(`SELECT TO_CHAR(rl.created_at, 'YYYY-MM-DD') as date,
 		        COALESCE(NULLIF(rl.model, ''), 'default') as model,
 		        COUNT(*) as requests,
 		        COALESCE(SUM(total_tokens), 0) as tokens,
 		        COALESCE(SUM(cost_usd), 0) as cost
 		 FROM request_logs rl
 		 INNER JOIN gateway_api_keys gak ON rl.gateway_api_key_id = gak.id
-		 WHERE gak.user_id = $1
-		   AND rl.created_at >= $2::DATE
-		   AND rl.created_at <= ($3::DATE + INTERVAL '1 day')
+		 WHERE %s
+		   AND rl.created_at >= $%d::DATE
+		   AND rl.created_at <= ($%d::DATE + INTERVAL '1 day')
 		 GROUP BY TO_CHAR(rl.created_at, 'YYYY-MM-DD'), COALESCE(NULLIF(rl.model, ''), 'default')
-		 ORDER BY date ASC, model ASC`
-		args = []interface{}{userID, startDate, endDate}
+		 ORDER BY date ASC, model ASC`, ownerClause, startIdx, endIdx)
 	} else {
 		if days <= 0 || days > 365 {
 			days = 30
 		}
-		query = `SELECT TO_CHAR(rl.created_at, 'YYYY-MM-DD') as date,
+		args = append(args, days)
+		daysIdx := len(args)
+		query = fmt.Sprintf(`SELECT TO_CHAR(rl.created_at, 'YYYY-MM-DD') as date,
 		        COALESCE(NULLIF(rl.model, ''), 'default') as model,
 		        COUNT(*) as requests,
 		        COALESCE(SUM(total_tokens), 0) as tokens,
 		        COALESCE(SUM(cost_usd), 0) as cost
 		 FROM request_logs rl
 		 INNER JOIN gateway_api_keys gak ON rl.gateway_api_key_id = gak.id
-		 WHERE gak.user_id = $1
-		   AND rl.created_at >= NOW() - ($2 || ' days')::INTERVAL
+		 WHERE %s
+		   AND rl.created_at >= NOW() - ($%d || ' days')::INTERVAL
 		 GROUP BY TO_CHAR(rl.created_at, 'YYYY-MM-DD'), COALESCE(NULLIF(rl.model, ''), 'default')
-		 ORDER BY date ASC, model ASC`
-		args = []interface{}{userID, days}
+		 ORDER BY date ASC, model ASC`, ownerClause, daysIdx)
 	}
 
 	rows, err := r.db.QueryContext(ctx, query, args...)
@@ -392,18 +431,20 @@ func (r *RequestLogRepository) GetProviderHealth(ctx context.Context, userID str
 	var query string
 	var args []interface{}
 
-	if userID != "" {
-		query = `SELECT p.id, p.name, p.type, p.enabled,
-		        (SELECT COUNT(*) FROM credentials c WHERE c.provider_id = p.id AND c.enabled = true AND c.status = 'active' AND (c.user_id = $1 OR c.org_id = $1)) as cred_count
+	if userID != "" || tenantOrgID(ctx) != "" {
+		credClause, nextArgs := tenantOwnerClause(ctx, "c.", userID, nil)
+		provClause, allArgs := tenantOwnerClause(ctx, "p.", userID, nextArgs)
+		query = fmt.Sprintf(`SELECT p.id, p.name, p.type, p.enabled,
+		        (SELECT COUNT(*) FROM credentials c WHERE c.provider_id = p.id AND c.enabled = true AND c.status = 'active' AND (%s)) as cred_count
 		 FROM providers p
-		 WHERE p.user_id = $1 OR p.user_id IS NULL
-		 ORDER BY p.name`
-		args = []interface{}{userID}
+		 WHERE (%s) OR (p.user_id IS NULL AND (p.org_id IS NULL OR p.org_id = ''))
+		 ORDER BY p.name`, credClause, provClause)
+		args = allArgs
 	} else {
 		query = `SELECT p.id, p.name, p.type, p.enabled,
 		        (SELECT COUNT(*) FROM credentials c WHERE c.provider_id = p.id AND c.enabled = true AND c.status = 'active') as cred_count
 		 FROM providers p
-		 WHERE p.user_id IS NULL
+		 WHERE p.user_id IS NULL AND (p.org_id IS NULL OR p.org_id = '')
 		 ORDER BY p.name`
 	}
 
@@ -468,17 +509,24 @@ func (r *RequestLogRepository) GetLogAnalytics(ctx context.Context, userID strin
 		Models:     []ModelStat{},
 	}
 
+	ownerClause, args := requestLogOwnerClause(ctx, userID, nil)
+	if ownerClause == "" {
+		ownerClause = "1=1"
+	}
+	args = append(args, days)
+	daysIdx := len(args)
+
 	// 1. Overall Summary & Estimated Savings
 	// Baseline flagship cost: $3.00/1M input ($0.000003), $15.00/1M output ($0.000015)
 	err := r.db.QueryRowContext(ctx,
-		`SELECT COALESCE(SUM(cost_usd), 0),
+		fmt.Sprintf(`SELECT COALESCE(SUM(cost_usd), 0),
 		        COALESCE(AVG(latency_ms), 0),
 		        COALESCE(AVG(CASE WHEN ttft_ms > 0 THEN ttft_ms END), 0),
 		        COALESCE(SUM(GREATEST(0, (input_tokens * 0.000003 + output_tokens * 0.000015) - cost_usd)), 0)
 		 FROM request_logs rl
 		 INNER JOIN gateway_api_keys gak ON rl.gateway_api_key_id = gak.id
-		 WHERE gak.user_id = $1
-		   AND rl.created_at >= NOW() - ($2 || ' days')::INTERVAL`, userID, days,
+		 WHERE %s
+		   AND rl.created_at >= NOW() - ($%d || ' days')::INTERVAL`, ownerClause, daysIdx), args...,
 	).Scan(&analytics.TotalSpendUSD, &analytics.AvgLatencyMs, &analytics.AvgTTFTMs, &analytics.EstimatedSavingsUSD)
 	if err != nil {
 		return nil, err
@@ -486,16 +534,16 @@ func (r *RequestLogRepository) GetLogAnalytics(ctx context.Context, userID strin
 
 	// 2. Client Apps Breakdown
 	rowsApps, err := r.db.QueryContext(ctx,
-		`SELECT COALESCE(NULLIF(rl.client_app, ''), 'Unknown Client') as client_app,
+		fmt.Sprintf(`SELECT COALESCE(NULLIF(rl.client_app, ''), 'Unknown Client') as client_app,
 		        COUNT(*) as requests,
 		        COALESCE(SUM(total_tokens), 0) as tokens,
 		        COALESCE(SUM(cost_usd), 0) as cost_usd
 		 FROM request_logs rl
 		 INNER JOIN gateway_api_keys gak ON rl.gateway_api_key_id = gak.id
-		 WHERE gak.user_id = $1
-		   AND rl.created_at >= NOW() - ($2 || ' days')::INTERVAL
+		 WHERE %s
+		   AND rl.created_at >= NOW() - ($%d || ' days')::INTERVAL
 		 GROUP BY COALESCE(NULLIF(rl.client_app, ''), 'Unknown Client')
-		 ORDER BY cost_usd DESC, requests DESC`, userID, days,
+		 ORDER BY cost_usd DESC, requests DESC`, ownerClause, daysIdx), args...,
 	)
 	if err == nil {
 		defer func() { _ = rowsApps.Close() }()
@@ -510,7 +558,7 @@ func (r *RequestLogRepository) GetLogAnalytics(ctx context.Context, userID strin
 
 	// 3. Models Breakdown
 	rowsModels, err := r.db.QueryContext(ctx,
-		`SELECT COALESCE(NULLIF(rl.model, ''), 'default') as model,
+		fmt.Sprintf(`SELECT COALESCE(NULLIF(rl.model, ''), 'default') as model,
 		        COUNT(*) as requests,
 		        COALESCE(SUM(total_tokens), 0) as tokens,
 		        COALESCE(SUM(cost_usd), 0) as cost_usd,
@@ -518,10 +566,10 @@ func (r *RequestLogRepository) GetLogAnalytics(ctx context.Context, userID strin
 		        COALESCE(AVG(latency_ms), 0) as avg_latency
 		 FROM request_logs rl
 		 INNER JOIN gateway_api_keys gak ON rl.gateway_api_key_id = gak.id
-		 WHERE gak.user_id = $1
-		   AND rl.created_at >= NOW() - ($2 || ' days')::INTERVAL
+		 WHERE %s
+		   AND rl.created_at >= NOW() - ($%d || ' days')::INTERVAL
 		 GROUP BY COALESCE(NULLIF(rl.model, ''), 'default')
-		 ORDER BY cost_usd DESC, requests DESC`, userID, days,
+		 ORDER BY cost_usd DESC, requests DESC`, ownerClause, daysIdx), args...,
 	)
 	if err == nil {
 		defer func() { _ = rowsModels.Close() }()
@@ -556,8 +604,13 @@ func (r *RequestLogRepository) GetAgentStats(ctx context.Context, userID, agentI
 		WHERE rl.agent_id = $1
 		  AND rl.created_at >= NOW() - ($2 || ' days')::INTERVAL
 	`
+	agentArgs := []any{agentID, days}
+	if orgID := tenantOrgID(ctx); orgID != "" {
+		agentArgs = append(agentArgs, orgID)
+		query += fmt.Sprintf(" AND (rl.org_id = $%d OR rl.org_id IS NULL OR rl.org_id = '')", len(agentArgs))
+	}
 	var successCount int
-	err := r.db.QueryRowContext(ctx, query, agentID, days).Scan(
+	err := r.db.QueryRowContext(ctx, query, agentArgs...).Scan(
 		&stats.TotalRequests,
 		&stats.TotalTokens,
 		&stats.TotalCostUSD,
@@ -573,12 +626,13 @@ func (r *RequestLogRepository) GetAgentStats(ctx context.Context, userID, agentI
 	}
 
 	// Tool invocations count if any
-	_ = r.db.QueryRowContext(ctx,
-		`SELECT COUNT(*) FROM tool_invocations ti
+	toolQuery := `SELECT COUNT(*) FROM tool_invocations ti
 		 INNER JOIN request_logs rl ON ti.request_id = rl.request_id
-		 WHERE rl.agent_id = $1 AND rl.created_at >= NOW() - ($2 || ' days')::INTERVAL`,
-		agentID, days,
-	).Scan(&stats.ToolCallsCount)
+		 WHERE rl.agent_id = $1 AND rl.created_at >= NOW() - ($2 || ' days')::INTERVAL`
+	if orgID := tenantOrgID(ctx); orgID != "" {
+		toolQuery += " AND (rl.org_id = $3 OR rl.org_id IS NULL OR rl.org_id = '')"
+	}
+	_ = r.db.QueryRowContext(ctx, toolQuery, agentArgs...).Scan(&stats.ToolCallsCount)
 
 	return stats, nil
 }
@@ -589,12 +643,16 @@ func (r *RequestLogRepository) GetAgentTotalSpendUSD(ctx context.Context, agentI
 		return 0, nil
 	}
 	var spent sql.NullFloat64
-	err := r.db.QueryRowContext(ctx,
-		`SELECT COALESCE(SUM(cost_usd), 0)
+	query := `SELECT COALESCE(SUM(cost_usd), 0)
 		 FROM request_logs
 		 WHERE agent_id = $1
-		   AND created_at >= date_trunc('month', NOW())`, agentID,
-	).Scan(&spent)
+		   AND created_at >= date_trunc('month', NOW())`
+	args := []any{agentID}
+	if orgID := tenantOrgID(ctx); orgID != "" {
+		args = append(args, orgID)
+		query += " AND (org_id = $2 OR org_id IS NULL OR org_id = '')"
+	}
+	err := r.db.QueryRowContext(ctx, query, args...).Scan(&spent)
 	if err != nil {
 		return 0, err
 	}

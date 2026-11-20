@@ -5,6 +5,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/roozylabs/prism/internal/httputil"
+	"github.com/roozylabs/prism/internal/middleware"
 	"github.com/roozylabs/prism/internal/models"
 	"github.com/roozylabs/prism/internal/proxy"
 	"github.com/roozylabs/prism/internal/repository"
@@ -23,7 +24,7 @@ func (h *BudgetHandler) SetAuditLog(a *AdminAudit) { h.audit = a }
 
 func (h *BudgetHandler) List(c *gin.Context) {
 	userID := c.GetString("userId")
-	budgets, err := h.budgetRepo.ListByUserID(c.Request.Context(), userID)
+	budgets, err := h.budgetRepo.ListByUserID(middleware.ContextWithTenant(c), userID)
 	if err != nil {
 		httputil.RespondInternalError(c, "Failed to list budgets", err, "BUDGETS_LIST_FAILED")
 		return
@@ -37,7 +38,7 @@ func (h *BudgetHandler) List(c *gin.Context) {
 func (h *BudgetHandler) Get(c *gin.Context) {
 	userID := c.GetString("userId")
 	id := c.Param("id")
-	budget, err := h.budgetRepo.FindByID(c.Request.Context(), id, userID)
+	budget, err := h.budgetRepo.FindByID(middleware.ContextWithTenant(c), id, userID)
 	if err != nil {
 		httputil.RespondNotFound(c, "Budget not found", err, "BUDGET_NOT_FOUND")
 		return
@@ -81,7 +82,7 @@ func (h *BudgetHandler) Create(c *gin.Context) {
 		httputil.RespondBadRequest(c, err.Error(), err, "INVALID_BUDGET")
 		return
 	}
-	if err := h.budgetRepo.Create(c.Request.Context(), budget); err != nil {
+	if err := h.budgetRepo.Create(middleware.ContextWithTenant(c), budget); err != nil {
 		httputil.RespondStoreError(c, err, "Budget", "BUDGET_CREATE")
 		return
 	}
@@ -102,7 +103,7 @@ type UpdateBudgetRequest struct {
 func (h *BudgetHandler) Update(c *gin.Context) {
 	userID := c.GetString("userId")
 	id := c.Param("id")
-	existing, err := h.budgetRepo.FindByID(c.Request.Context(), id, userID)
+	existing, err := h.budgetRepo.FindByID(middleware.ContextWithTenant(c), id, userID)
 	if err != nil {
 		httputil.RespondNotFound(c, "Budget not found", err, "BUDGET_NOT_FOUND")
 		return
@@ -137,7 +138,7 @@ func (h *BudgetHandler) Update(c *gin.Context) {
 		httputil.RespondBadRequest(c, err.Error(), err, "INVALID_BUDGET")
 		return
 	}
-	if err := h.budgetRepo.Update(c.Request.Context(), existing); err != nil {
+	if err := h.budgetRepo.Update(middleware.ContextWithTenant(c), existing); err != nil {
 		httputil.RespondStoreError(c, err, "Budget", "BUDGET_UPDATE")
 		return
 	}
@@ -148,7 +149,7 @@ func (h *BudgetHandler) Update(c *gin.Context) {
 func (h *BudgetHandler) Delete(c *gin.Context) {
 	userID := c.GetString("userId")
 	id := c.Param("id")
-	if err := h.budgetRepo.Delete(c.Request.Context(), id, userID); err != nil {
+	if err := h.budgetRepo.Delete(middleware.ContextWithTenant(c), id, userID); err != nil {
 		httputil.RespondStoreError(c, err, "Budget", "BUDGET_DELETE")
 		return
 	}
@@ -166,7 +167,7 @@ func NewBudgetStatusHandler(budgetMgr *proxy.BudgetManager) *BudgetStatusHandler
 
 func (h *BudgetStatusHandler) GetStatus(c *gin.Context) {
 	userID := c.GetString("userId")
-	status, err := h.budgetMgr.GetStatus(c.Request.Context(), userID)
+	status, err := h.budgetMgr.GetStatus(middleware.ContextWithTenant(c), userID)
 	if err != nil {
 		httputil.RespondInternalError(c, "Failed to retrieve budget status", err, "BUDGET_STATUS_FAILED")
 		return

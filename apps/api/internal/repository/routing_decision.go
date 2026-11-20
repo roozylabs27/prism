@@ -14,6 +14,7 @@ type RoutingDecisionLog struct {
 	ID               string          `json:"id" db:"id"`
 	RequestID        string          `json:"requestId" db:"request_id"`
 	UserID           string          `json:"userId" db:"user_id"`
+	OrgID            string          `json:"orgId,omitempty" db:"org_id"`
 	PromptPreview    string          `json:"promptPreview,omitempty" db:"prompt_preview"`
 	TaskType         string          `json:"taskType,omitempty" db:"task_type"`
 	Complexity       string          `json:"complexity,omitempty" db:"complexity"`
@@ -41,6 +42,9 @@ func (r *RoutingDecisionRepository) Create(ctx context.Context, decision *Routin
 	if decision.ID == "" {
 		decision.ID = uuid.New().String()
 	}
+	if decision.OrgID == "" {
+		decision.OrgID = tenantOrgID(ctx)
+	}
 	if decision.CreatedAt.IsZero() {
 		decision.CreatedAt = time.Now()
 	}
@@ -60,11 +64,11 @@ func (r *RoutingDecisionRepository) Create(ctx context.Context, decision *Routin
 	}
 
 	_, err := r.db.ExecContext(ctx,
-		`INSERT INTO routing_decisions (id, request_id, user_id, prompt_preview, task_type, complexity, policy_name,
+		`INSERT INTO routing_decisions (id, request_id, user_id, org_id, prompt_preview, task_type, complexity, policy_name,
 		     candidates, selected_model, selected_provider, budget_status, estimated_cost, actual_cost,
 		     downgrade_reason, scores_breakdown, created_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)`,
-		decision.ID, decision.RequestID, decision.UserID,
+		 VALUES ($1, $2, $3, NULLIF($4, ''), $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)`,
+		decision.ID, decision.RequestID, decision.UserID, decision.OrgID,
 		sql.NullString{String: decision.PromptPreview, Valid: decision.PromptPreview != ""},
 		sql.NullString{String: decision.TaskType, Valid: decision.TaskType != ""},
 		sql.NullString{String: decision.Complexity, Valid: decision.Complexity != ""},
@@ -97,7 +101,7 @@ func (r *RoutingDecisionRepository) ListWithFilter(ctx context.Context, userID s
 		offset = 0
 	}
 
-	query := `SELECT id, request_id, user_id, prompt_preview, task_type, complexity, policy_name,
+	query := `SELECT id, request_id, user_id, COALESCE(org_id, ''), prompt_preview, task_type, complexity, policy_name,
 		        candidates, selected_model, selected_provider, budget_status,
 		        estimated_cost, actual_cost, downgrade_reason, scores_breakdown, created_at
 		 FROM routing_decisions WHERE 1=1`
@@ -106,10 +110,11 @@ func (r *RoutingDecisionRepository) ListWithFilter(ctx context.Context, userID s
 	var args []interface{}
 	var countArgs []interface{}
 
-	if userID != "" {
-		args = append(args, userID)
-		countArgs = append(countArgs, userID)
-		filter := fmt.Sprintf(" AND user_id = $%d", len(args))
+	if userID != "" || tenantOrgID(ctx) != "" {
+		ownerClause, nextArgs := tenantOwnerClause(ctx, "", userID, args)
+		_, countArgs = tenantOwnerClause(ctx, "", userID, countArgs)
+		args = nextArgs
+		filter := " AND (" + ownerClause + ")"
 		query += filter
 		countQuery += filter
 	}
@@ -132,18 +137,17 @@ func (r *RoutingDecisionRepository) ListWithFilter(ctx context.Context, userID s
 	if err != nil {
 		// Fallback for VPS before migration 032 columns exist
 		hasPromptCol = false
-		fallbackQuery := `SELECT id, request_id, user_id, task_type, complexity, policy_name,
+		fallbackQuery := `SELECT id, request_id, user_id, COALESCE(org_id, ''), task_type, complexity, policy_name,
 			        candidates, selected_model, selected_provider, budget_status,
 			        estimated_cost, actual_cost, downgrade_reason, created_at
 			 FROM routing_decisions WHERE 1=1`
-		if userID != "" {
-			fallbackQuery += fmt.Sprintf(" AND user_id = $%d", 1)
+		argsFallback := []interface{}{}
+		if userID != "" || tenantOrgID(ctx) != "" {
+			ownerClause, nextArgs := tenantOwnerClause(ctx, "", userID, argsFallback)
+			argsFallback = nextArgs
+			fallbackQuery += " AND (" + ownerClause + ")"
 		}
 		fallbackQuery += " ORDER BY created_at DESC"
-		argsFallback := []interface{}{}
-		if userID != "" {
-			argsFallback = append(argsFallback, userID)
-		}
 		argsFallback = append(argsFallback, limit, offset)
 		fallbackQuery += fmt.Sprintf(" LIMIT $%d OFFSET $%d", len(argsFallback)-1, len(argsFallback))
 
@@ -161,7 +165,7 @@ func (r *RoutingDecisionRepository) ListWithFilter(ctx context.Context, userID s
 		var promptPreview, taskType, complexity, policyName, selectedModel, selectedProvider, budgetStatus, downgradeReason sql.NullString
 		var scoresBreakdown sql.NullString
 		if hasPromptCol {
-			if err := rows.Scan(&d.ID, &d.RequestID, &d.UserID, &promptPreview, &taskType, &complexity,
+			if err := rows.Scan(&d.ID, &d.RequestID, &d.UserID, &d.OrgID, &promptPreview, &taskType, &complexity,
 				&policyName, &d.Candidates, &selectedModel, &selectedProvider,
 				&budgetStatus, &d.EstimatedCost, &d.ActualCost, &downgradeReason, &scoresBreakdown, &d.CreatedAt); err != nil {
 				return nil, 0, err
@@ -171,7 +175,7 @@ func (r *RoutingDecisionRepository) ListWithFilter(ctx context.Context, userID s
 				d.ScoresBreakdown = json.RawMessage(scoresBreakdown.String)
 			}
 		} else {
-			if err := rows.Scan(&d.ID, &d.RequestID, &d.UserID, &taskType, &complexity,
+			if err := rows.Scan(&d.ID, &d.RequestID, &d.UserID, &d.OrgID, &taskType, &complexity,
 				&policyName, &d.Candidates, &selectedModel, &selectedProvider,
 				&budgetStatus, &d.EstimatedCost, &d.ActualCost, &downgradeReason, &d.CreatedAt); err != nil {
 				return nil, 0, err

@@ -9,6 +9,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/roozylabs/prism/internal/httputil"
+	"github.com/roozylabs/prism/internal/middleware"
 	"github.com/roozylabs/prism/internal/models"
 	"github.com/roozylabs/prism/internal/proxy"
 	"github.com/roozylabs/prism/internal/repository"
@@ -57,7 +58,7 @@ type CreateAgentRequest struct {
 
 func (h *AgentHandler) List(c *gin.Context) {
 	userID := c.GetString("userId")
-	agents, err := h.repo.ListByUserID(c.Request.Context(), userID)
+	agents, err := h.repo.ListByUserID(middleware.ContextWithTenant(c), userID)
 	if err != nil {
 		httputil.RespondInternalError(c, "Failed to list agents", err, "AGENTS_LIST_FAILED")
 		return
@@ -71,7 +72,7 @@ func (h *AgentHandler) List(c *gin.Context) {
 func (h *AgentHandler) Get(c *gin.Context) {
 	userID := c.GetString("userId")
 	id := c.Param("id")
-	agent, err := h.repo.FindByID(c.Request.Context(), id, userID)
+	agent, err := h.repo.FindByID(middleware.ContextWithTenant(c), id, userID)
 	if err != nil {
 		httputil.RespondNotFound(c, "Agent not found", err, "AGENT_NOT_FOUND")
 		return
@@ -155,7 +156,7 @@ func (h *AgentHandler) Create(c *gin.Context) {
 		Enabled:              enabled,
 	}
 
-	if err := h.repo.Create(c.Request.Context(), agent); err != nil {
+	if err := h.repo.Create(middleware.ContextWithTenant(c), agent); err != nil {
 		httputil.RespondStoreError(c, err, "Agent", "AGENT_CREATE")
 		return
 	}
@@ -199,7 +200,7 @@ func nonNilStringSlice(vals []string) []string {
 func (h *AgentHandler) Update(c *gin.Context) {
 	userID := c.GetString("userId")
 	id := c.Param("id")
-	existing, err := h.repo.FindByID(c.Request.Context(), id, userID)
+	existing, err := h.repo.FindByID(middleware.ContextWithTenant(c), id, userID)
 	if err != nil {
 		httputil.RespondNotFound(c, "Agent not found", err, "AGENT_NOT_FOUND")
 		return
@@ -265,7 +266,7 @@ func (h *AgentHandler) Update(c *gin.Context) {
 		existing.Enabled = *req.Enabled
 	}
 
-	if err := h.repo.Update(c.Request.Context(), existing); err != nil {
+	if err := h.repo.Update(middleware.ContextWithTenant(c), existing); err != nil {
 		httputil.RespondStoreError(c, err, "Agent", "AGENT_UPDATE")
 		return
 	}
@@ -275,7 +276,7 @@ func (h *AgentHandler) Update(c *gin.Context) {
 func (h *AgentHandler) Delete(c *gin.Context) {
 	userID := c.GetString("userId")
 	id := c.Param("id")
-	if err := h.repo.Delete(c.Request.Context(), id, userID); err != nil {
+	if err := h.repo.Delete(middleware.ContextWithTenant(c), id, userID); err != nil {
 		httputil.RespondStoreError(c, err, "Agent", "AGENT_DELETE")
 		return
 	}
@@ -286,7 +287,7 @@ func (h *AgentHandler) Stats(c *gin.Context) {
 	userID := c.GetString("userId")
 	id := c.Param("id")
 
-	if _, err := h.repo.FindByID(c.Request.Context(), id, userID); err != nil {
+	if _, err := h.repo.FindByID(middleware.ContextWithTenant(c), id, userID); err != nil {
 		httputil.RespondNotFound(c, "Agent not found", err, "AGENT_NOT_FOUND")
 		return
 	}
@@ -306,7 +307,7 @@ func (h *AgentHandler) Stats(c *gin.Context) {
 		return
 	}
 
-	stats, err := h.requestLogs.GetAgentStats(c.Request.Context(), userID, id, days)
+	stats, err := h.requestLogs.GetAgentStats(middleware.ContextWithTenant(c), userID, id, days)
 	if err != nil {
 		httputil.RespondInternalError(c, "Failed to load agent statistics", err, "AGENT_STATS_LOAD_FAILED")
 		return

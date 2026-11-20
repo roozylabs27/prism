@@ -9,6 +9,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/roozylabs/prism/internal/httputil"
+	"github.com/roozylabs/prism/internal/middleware"
 	"github.com/roozylabs/prism/internal/models"
 	"github.com/roozylabs/prism/internal/proxy"
 	"github.com/roozylabs/prism/internal/repository"
@@ -75,7 +76,7 @@ type UpdateToolRequest struct {
 
 func (h *ToolHandler) List(c *gin.Context) {
 	userID := c.GetString("userId")
-	tools, err := h.tools.ListByUserID(c.Request.Context(), userID)
+	tools, err := h.tools.ListByUserID(middleware.ContextWithTenant(c), userID)
 	if err != nil {
 		httputil.RespondInternalError(c, "Failed to list tools", err, "TOOLS_LIST_FAILED")
 		return
@@ -88,7 +89,7 @@ func (h *ToolHandler) List(c *gin.Context) {
 
 func (h *ToolHandler) Get(c *gin.Context) {
 	userID := c.GetString("userId")
-	twb, err := h.tools.GetToolWithBackendsByID(c.Request.Context(), c.Param("id"), userID)
+	twb, err := h.tools.GetToolWithBackendsByID(middleware.ContextWithTenant(c), c.Param("id"), userID)
 	if err != nil {
 		httputil.RespondNotFound(c, "Tool not found", err, "TOOL_NOT_FOUND")
 		return
@@ -153,12 +154,12 @@ func (h *ToolHandler) Create(c *gin.Context) {
 		backends = append(backends, b)
 	}
 
-	if err := h.tools.CreateWithBackendsTx(c.Request.Context(), tool, backends); err != nil {
+	if err := h.tools.CreateWithBackendsTx(middleware.ContextWithTenant(c), tool, backends); err != nil {
 		httputil.RespondStoreError(c, err, "Tool", "TOOL_CREATE")
 		return
 	}
 
-	twb, _ := h.tools.GetToolWithBackendsByID(c.Request.Context(), tool.ID, userID)
+	twb, _ := h.tools.GetToolWithBackendsByID(middleware.ContextWithTenant(c), tool.ID, userID)
 	c.JSON(http.StatusCreated, twb)
 }
 
@@ -166,7 +167,7 @@ func (h *ToolHandler) Update(c *gin.Context) {
 	userID := c.GetString("userId")
 	id := c.Param("id")
 
-	existing, err := h.tools.FindByID(c.Request.Context(), id, userID)
+	existing, err := h.tools.FindByID(middleware.ContextWithTenant(c), id, userID)
 	if err != nil {
 		httputil.RespondNotFound(c, "Tool not found", err, "TOOL_NOT_FOUND")
 		return
@@ -202,7 +203,7 @@ func (h *ToolHandler) Update(c *gin.Context) {
 	if req.Enabled != nil {
 		existing.Enabled = *req.Enabled
 	}
-	if err := h.tools.Update(c.Request.Context(), existing); err != nil {
+	if err := h.tools.Update(middleware.ContextWithTenant(c), existing); err != nil {
 		httputil.RespondStoreError(c, err, "Tool", "TOOL_UPDATE")
 		return
 	}
@@ -226,13 +227,13 @@ func (h *ToolHandler) Update(c *gin.Context) {
 		}
 	}
 
-	twb, _ := h.tools.GetToolWithBackendsByID(c.Request.Context(), id, userID)
+	twb, _ := h.tools.GetToolWithBackendsByID(middleware.ContextWithTenant(c), id, userID)
 	c.JSON(http.StatusOK, twb)
 }
 
 func (h *ToolHandler) Delete(c *gin.Context) {
 	userID := c.GetString("userId")
-	if err := h.tools.Delete(c.Request.Context(), c.Param("id"), userID); err != nil {
+	if err := h.tools.Delete(middleware.ContextWithTenant(c), c.Param("id"), userID); err != nil {
 		httputil.RespondStoreError(c, err, "Tool", "TOOL_DELETE")
 		return
 	}
@@ -247,7 +248,7 @@ func (h *ToolHandler) TestTool(c *gin.Context) {
 	userID := c.GetString("userId")
 	id := c.Param("id")
 
-	tool, err := h.tools.FindByID(c.Request.Context(), id, userID)
+	tool, err := h.tools.FindByID(middleware.ContextWithTenant(c), id, userID)
 	if err != nil {
 		httputil.RespondNotFound(c, "Tool not found", err, "TOOL_NOT_FOUND")
 		return

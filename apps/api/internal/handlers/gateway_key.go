@@ -35,12 +35,17 @@ type gatewayKeyScopeValidator interface {
 	FindProjectInOrg(ctx context.Context, orgID, projectID string) (*models.Project, error)
 }
 
+type gatewayKeyAgentValidator interface {
+	FindForUser(ctx context.Context, userID, ref string) (*models.Agent, error)
+}
+
 type GatewayKeyHandler struct {
 	keys           gatewayKeyStore
 	credentials    gatewayKeyCredentialCounter
 	cache          GatewayKeyInvalidator
 	audit          *AdminAudit
 	scopeValidator gatewayKeyScopeValidator
+	agentValidator gatewayKeyAgentValidator
 }
 
 func NewGatewayKeyHandler(keys *repository.GatewayKeyRepository, credentials *repository.CredentialRepository, cache GatewayKeyInvalidator) *GatewayKeyHandler {
@@ -61,11 +66,16 @@ func (h *GatewayKeyHandler) SetScopeValidator(v gatewayKeyScopeValidator) {
 	h.scopeValidator = v
 }
 
+func (h *GatewayKeyHandler) SetAgentValidator(v gatewayKeyAgentValidator) {
+	h.agentValidator = v
+}
+
 type CreateGatewayKeyRequest struct {
 	Name          string   `json:"name" binding:"required"`
 	ProviderID    string   `json:"providerId"`
 	WorkspaceID   string   `json:"workspaceId"`
 	ProjectID     string   `json:"projectId"`
+	AgentID       string   `json:"agentId"`
 	RateLimit     int      `json:"rateLimit"`
 	AllowedModels []string `json:"allowedModels"`
 	ExpiresInDays int      `json:"expiresInDays"`
@@ -94,13 +104,14 @@ func (h *GatewayKeyHandler) Create(c *gin.Context) {
 		projID = strings.TrimSpace(tc.ProjectID)
 	}
 
+	ctx := middleware.ContextWithTenant(c)
 	if h.scopeValidator != nil && (wsID != "" || projID != "") {
 		if orgID == "" {
 			httputil.RespondForbidden(c, "Organization context is required to scope gateway key", nil, "TENANT_REQUIRED")
 			return
 		}
 		if projID != "" {
-			proj, err := h.scopeValidator.FindProjectInOrg(c.Request.Context(), orgID, projID)
+			proj, err := h.scopeValidator.FindProjectInOrg(ctx, orgID, projID)
 			if err != nil {
 				httputil.RespondNotFound(c, "Project not found in this organization", err, "PROJECT_NOT_FOUND")
 				return
@@ -114,10 +125,34 @@ func (h *GatewayKeyHandler) Create(c *gin.Context) {
 			}
 		}
 		if wsID != "" {
-			if _, err := h.scopeValidator.FindWorkspaceInOrg(c.Request.Context(), orgID, wsID); err != nil {
+			if _, err := h.scopeValidator.FindWorkspaceInOrg(ctx, orgID, wsID); err != nil {
 				httputil.RespondNotFound(c, "Workspace not found in this organization", err, "WORKSPACE_NOT_FOUND")
 				return
 			}
+		}
+	}
+
+	userID := c.GetString("userId")
+	if userID == "" {
+		userID = c.GetString("user_id")
+	}
+
+	var agentIDPtr *string
+	if agentRef := strings.TrimSpace(req.AgentID); agentRef != "" {
+		if h.agentValidator != nil {
+			ag, err := h.agentValidator.FindForUser(ctx, userID, agentRef)
+			if err != nil || ag == nil {
+				httputil.RespondNotFound(c, "Agent not found in this tenant", err, "AGENT_NOT_FOUND")
+				return
+			}
+			if !ag.Enabled {
+				httputil.RespondBadRequest(c, "Cannot create Gateway Key bound to a disabled agent", nil, "AGENT_DISABLED")
+				return
+			}
+			idCopy := ag.ID
+			agentIDPtr = &idCopy
+		} else {
+			agentIDPtr = &agentRef
 		}
 	}
 
@@ -127,7 +162,7 @@ func (h *GatewayKeyHandler) Create(c *gin.Context) {
 		providerIDPtr = &pID
 
 		if h.credentials != nil {
-			count, err := h.credentials.CountActiveByProviderID(c.Request.Context(), req.ProviderID)
+			count, err := h.credentials.CountActiveByProviderID(ctx, req.ProviderID, userID)
 			if err != nil || count == 0 {
 				httputil.RespondBadRequest(c, "Cannot create Gateway Key: the selected provider has no active credentials", err, "PROVIDER_NO_CREDENTIALS")
 				return
@@ -166,11 +201,12 @@ func (h *GatewayKeyHandler) Create(c *gin.Context) {
 	}
 
 	key := &models.GatewayAPIKey{
-		UserID:        c.GetString("userId"),
+		UserID:        userID,
 		OrgID:         orgIDPtr,
 		WorkspaceID:   wsIDPtr,
 		ProjectID:     projIDPtr,
 		ProviderID:    providerIDPtr,
+		AgentID:       agentIDPtr,
 		Name:          req.Name,
 		KeyHash:       keyHash,
 		KeyPrefix:     keyPrefix,
@@ -180,7 +216,7 @@ func (h *GatewayKeyHandler) Create(c *gin.Context) {
 		ExpiresAt:     expiresAt,
 	}
 
-	if err := h.keys.Create(c.Request.Context(), key); err != nil {
+	if err := h.keys.Create(ctx, key); err != nil {
 		httputil.RespondInternalError(c, "Failed to create gateway key", err, "GATEWAY_KEY_CREATE_FAILED")
 		return
 	}
@@ -190,6 +226,9 @@ func (h *GatewayKeyHandler) Create(c *gin.Context) {
 	}
 	if projID != "" {
 		auditDetails["projectId"] = projID
+	}
+	if agentIDPtr != nil {
+		auditDetails["agentId"] = *agentIDPtr
 	}
 	h.audit.Record(c, "gateway_key.create", "gateway_key", key.ID, auditDetails)
 
@@ -204,8 +243,9 @@ func (h *GatewayKeyHandler) List(c *gin.Context) {
 	search := c.Query("search")
 
 	pg := httputil.ParsePage(c)
+	orgID := middleware.GetTenantContext(c).OrgID
 
-	keys, total, err := h.keys.ListByUserIDWithFilter(c.Request.Context(), userID, search, pg.Limit, pg.Offset)
+	keys, total, err := h.keys.ListByUserIDWithFilter(middleware.ContextWithTenant(c), userID, search, pg.Limit, pg.Offset, orgID)
 	if err != nil {
 		httputil.RespondInternalError(c, "Failed to list gateway keys", err, "GATEWAY_KEYS_LIST_FAILED")
 		return
@@ -216,7 +256,7 @@ func (h *GatewayKeyHandler) List(c *gin.Context) {
 func (h *GatewayKeyHandler) Delete(c *gin.Context) {
 	id := c.Param("id")
 	userID := c.GetString("userId")
-	keyHash, err := h.keys.Delete(c.Request.Context(), id, userID)
+	keyHash, err := h.keys.Delete(middleware.ContextWithTenant(c), id, userID)
 	if err != nil {
 		httputil.RespondNotFound(c, "Gateway key not found", err, "GATEWAY_KEY_NOT_FOUND")
 		return

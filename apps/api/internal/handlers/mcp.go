@@ -12,6 +12,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/roozylabs/prism/internal/httputil"
+	"github.com/roozylabs/prism/internal/middleware"
 	"github.com/roozylabs/prism/internal/models"
 	"github.com/roozylabs/prism/internal/proxy"
 	"github.com/roozylabs/prism/internal/repository"
@@ -269,7 +270,7 @@ func (h *MCPHandler) rejectLocalMCP(c *gin.Context, serverType string) bool {
 
 func (h *MCPHandler) List(c *gin.Context) {
 	userID := c.GetString("userId")
-	servers, err := h.servers.ListByUserID(c.Request.Context(), userID)
+	servers, err := h.servers.ListByUserID(middleware.ContextWithTenant(c), userID)
 	if err != nil {
 		httputil.RespondInternalError(c, "Failed to list MCP servers", err, "MCP_SERVERS_LIST_FAILED")
 		return
@@ -283,7 +284,7 @@ func (h *MCPHandler) List(c *gin.Context) {
 func (h *MCPHandler) Get(c *gin.Context) {
 	userID := c.GetString("userId")
 	id := c.Param("id")
-	srv, err := h.servers.FindByID(c.Request.Context(), id, userID)
+	srv, err := h.servers.FindByID(middleware.ContextWithTenant(c), id, userID)
 	if err != nil {
 		httputil.RespondNotFound(c, "MCP server not found", err, "MCP_SERVER_NOT_FOUND")
 		return
@@ -359,7 +360,7 @@ func (h *MCPHandler) Create(c *gin.Context) {
 		srv.Env = map[string]string{}
 	}
 
-	if err := h.servers.Create(c.Request.Context(), srv); err != nil {
+	if err := h.servers.Create(middleware.ContextWithTenant(c), srv); err != nil {
 		httputil.RespondStoreError(c, err, "MCP server", "MCP_SERVER_CREATE")
 		return
 	}
@@ -369,7 +370,7 @@ func (h *MCPHandler) Create(c *gin.Context) {
 	defer cancel()
 	st, err := h.gateway.SyncServerTools(ctx, srv.ID, userID, h.encKey)
 	if err != nil {
-		st, _ = h.servers.GetServerWithTools(c.Request.Context(), srv)
+		st, _ = h.servers.GetServerWithTools(middleware.ContextWithTenant(c), srv)
 	}
 
 	c.JSON(http.StatusCreated, st)
@@ -393,7 +394,7 @@ type UpdateMCPServerRequest struct {
 func (h *MCPHandler) Update(c *gin.Context) {
 	userID := c.GetString("userId")
 	id := c.Param("id")
-	existing, err := h.servers.FindByID(c.Request.Context(), id, userID)
+	existing, err := h.servers.FindByID(middleware.ContextWithTenant(c), id, userID)
 	if err != nil {
 		httputil.RespondNotFound(c, "MCP server not found", err, "MCP_SERVER_NOT_FOUND")
 		return
@@ -459,19 +460,19 @@ func (h *MCPHandler) Update(c *gin.Context) {
 		existing.HasHeaders = headersEnc != nil
 	}
 
-	if err := h.servers.Update(c.Request.Context(), existing); err != nil {
+	if err := h.servers.Update(middleware.ContextWithTenant(c), existing); err != nil {
 		httputil.RespondStoreError(c, err, "MCP server", "MCP_SERVER_UPDATE")
 		return
 	}
 
-	st, _ := h.servers.GetServerWithTools(c.Request.Context(), existing)
+	st, _ := h.servers.GetServerWithTools(middleware.ContextWithTenant(c), existing)
 	c.JSON(http.StatusOK, st)
 }
 
 func (h *MCPHandler) Delete(c *gin.Context) {
 	userID := c.GetString("userId")
 	id := c.Param("id")
-	if err := h.servers.Delete(c.Request.Context(), id, userID); err != nil {
+	if err := h.servers.Delete(middleware.ContextWithTenant(c), id, userID); err != nil {
 		httputil.RespondStoreError(c, err, "MCP server", "MCP_SERVER_DELETE")
 		return
 	}
@@ -506,7 +507,7 @@ type TestMCPToolRequest struct {
 func (h *MCPHandler) TestTool(c *gin.Context) {
 	userID := c.GetString("userId")
 	id := c.Param("id")
-	srv, err := h.servers.FindByID(c.Request.Context(), id, userID)
+	srv, err := h.servers.FindByID(middleware.ContextWithTenant(c), id, userID)
 	if err != nil {
 		httputil.RespondNotFound(c, "MCP server not found", err, "MCP_SERVER_NOT_FOUND")
 		return
@@ -548,7 +549,7 @@ func (h *MCPHandler) ListTools(c *gin.Context) {
 	userID := c.GetString("userId")
 	id := c.Param("id")
 
-	if _, err := h.servers.FindByID(c.Request.Context(), id, userID); err != nil {
+	if _, err := h.servers.FindByID(middleware.ContextWithTenant(c), id, userID); err != nil {
 		httputil.RespondNotFound(c, "MCP server not found", err, "MCP_SERVER_NOT_FOUND")
 		return
 	}
@@ -566,7 +567,7 @@ func (h *MCPHandler) Stats(c *gin.Context) {
 	userID := c.GetString("userId")
 	id := c.Param("id")
 
-	srv, err := h.servers.FindByID(c.Request.Context(), id, userID)
+	srv, err := h.servers.FindByID(middleware.ContextWithTenant(c), id, userID)
 	if err != nil {
 		httputil.RespondNotFound(c, "MCP server not found", err, "MCP_SERVER_NOT_FOUND")
 		return
@@ -582,13 +583,13 @@ func (h *MCPHandler) Stats(c *gin.Context) {
 		days = 90
 	}
 
-	stats, err := h.invocations.GetStats(c.Request.Context(), userID, id, days)
+	stats, err := h.invocations.GetStats(middleware.ContextWithTenant(c), userID, id, days)
 	if err != nil {
 		httputil.RespondInternalError(c, "Failed to load MCP server stats", err, "MCP_STATS_LOAD_FAILED")
 		return
 	}
 
-	agents, err := h.agents.FindByMCPServerName(c.Request.Context(), userID, srv.Name)
+	agents, err := h.agents.FindByMCPServerName(middleware.ContextWithTenant(c), userID, srv.Name)
 	if err != nil {
 		httputil.RespondInternalError(c, "Failed to load MCP server agent bindings", err, "MCP_AGENTS_LOAD_FAILED")
 		return

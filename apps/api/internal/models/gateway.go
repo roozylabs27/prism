@@ -11,6 +11,7 @@ const SmartRouterModel = "prism-auto"
 type Provider struct {
 	ID               string    `json:"id" db:"id"`
 	UserID           string    `json:"userId" db:"user_id"`
+	OrgID            string    `json:"orgId,omitempty" db:"org_id"`
 	Name             string    `json:"name" db:"name"`
 	Slug             string    `json:"slug" db:"slug"`
 	BaseURL          string    `json:"baseUrl" db:"base_url"`
@@ -89,6 +90,7 @@ type GatewayAPIKey struct {
 	WorkspaceID   *string    `json:"workspaceId,omitempty" db:"workspace_id"`
 	ProjectID     *string    `json:"projectId,omitempty" db:"project_id"`
 	ProviderID    *string    `json:"providerId,omitempty" db:"provider_id"`
+	AgentID       *string    `json:"agentId,omitempty" db:"agent_id"`
 	Name          string     `json:"name" db:"name"`
 	KeyHash       string     `json:"-" db:"key_hash"`
 	KeyPrefix     string     `json:"keyPrefix" db:"key_prefix"`
@@ -169,6 +171,7 @@ type ModelPricing struct {
 type RoutingPolicy struct {
 	ID              string             `json:"id" db:"id"`
 	UserID          string             `json:"userId" db:"user_id"`
+	OrgID           string             `json:"orgId,omitempty" db:"org_id"`
 	Name            string             `json:"name" db:"name"`
 	Weights         map[string]float64 `json:"weights" db:"-"`
 	Constraints     map[string]float64 `json:"constraints" db:"-"`
@@ -183,6 +186,8 @@ type RoutingPolicy struct {
 type Budget struct {
 	ID                string    `json:"id" db:"id"`
 	UserID            string    `json:"userId" db:"user_id"`
+	OrgID             string    `json:"orgId,omitempty" db:"org_id"`
+	WorkspaceID       string    `json:"workspaceId,omitempty" db:"workspace_id"`
 	Name              string    `json:"name" db:"name"`
 	MonthlyLimit      float64   `json:"monthlyLimit" db:"monthly_limit"`
 	DailyLimit        float64   `json:"dailyLimit" db:"daily_limit"`
@@ -210,6 +215,7 @@ type BudgetStatus struct {
 type RoutingRule struct {
 	ID           string    `json:"id" db:"id"`
 	UserID       string    `json:"userId" db:"user_id"`
+	OrgID        string    `json:"orgId,omitempty" db:"org_id"`
 	ModelPattern string    `json:"modelPattern" db:"model_pattern"`
 	ProviderID   *string   `json:"providerId,omitempty" db:"provider_id"`
 	Priority     int       `json:"priority" db:"priority"`

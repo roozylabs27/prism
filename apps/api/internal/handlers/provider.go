@@ -7,6 +7,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/roozylabs/prism/internal/httputil"
+	"github.com/roozylabs/prism/internal/middleware"
 	"github.com/roozylabs/prism/internal/models"
 	"github.com/roozylabs/prism/internal/repository"
 	"github.com/roozylabs/prism/internal/security"
@@ -45,7 +46,7 @@ func NewProviderHandler(providers providerStore, gatewayKeys *repository.Gateway
 // @Router       /api/providers [get]
 func (h *ProviderHandler) List(c *gin.Context) {
 	userID := c.GetString("userId")
-	providers, err := h.providers.ListByUserID(c.Request.Context(), userID)
+	providers, err := h.providers.ListByUserID(middleware.ContextWithTenant(c), userID)
 	if err != nil {
 		httputil.RespondInternalError(c, "Failed to list providers", err, "PROVIDERS_LIST_FAILED")
 		return
@@ -68,8 +69,8 @@ func (h *ProviderHandler) List(c *gin.Context) {
 func (h *ProviderHandler) Get(c *gin.Context) {
 	id := c.Param("id")
 	userID := c.GetString("userId")
-	provider, err := h.providers.FindByID(c.Request.Context(), id)
-	if err != nil || (userID != "" && provider.UserID != userID && !isSharedProvider(provider)) {
+	provider, err := h.providers.FindByID(middleware.ContextWithTenant(c), id)
+	if err != nil || (userID != "" && !callerCanAccessProvider(c, provider, userID)) {
 		httputil.RespondNotFound(c, "Provider not found", err, "PROVIDER_NOT_FOUND")
 		return
 	}
@@ -92,11 +93,12 @@ func (h *ProviderHandler) Create(c *gin.Context) {
 		return
 	}
 	p := buildProviderFromCreate(req, c.GetString("userId"))
+	p.OrgID = middleware.GetTenantContext(c).OrgID
 	if !baseURLAllowed(c, p.BaseURL) {
 		return
 	}
 
-	if err := h.providers.Create(c.Request.Context(), &p); err != nil {
+	if err := h.providers.Create(middleware.ContextWithTenant(c), &p); err != nil {
 		httputil.RespondStoreError(c, err, "Provider", "PROVIDER_CREATE")
 		return
 	}
@@ -130,12 +132,15 @@ func (h *ProviderHandler) Update(c *gin.Context) {
 	if req.BaseURL != nil && !baseURLAllowed(c, trimString(*req.BaseURL)) {
 		return
 	}
+	priorOwner := existing.UserID
+	priorOrg := existing.OrgID
 	applyProviderUpdate(existing, req)
-	// The body may not move the provider to another id or owner.
+	// The body may not move the provider to another id or owner/org.
 	existing.ID = id
-	existing.UserID = userID
+	existing.UserID = priorOwner
+	existing.OrgID = priorOrg
 
-	if err := h.providers.Update(c.Request.Context(), existing); err != nil {
+	if err := h.providers.Update(middleware.ContextWithTenant(c), existing); err != nil {
 		httputil.RespondStoreError(c, err, "Provider", "PROVIDER_UPDATE")
 		return
 	}
@@ -159,32 +164,34 @@ func (h *ProviderHandler) Delete(c *gin.Context) {
 		return
 	}
 
+	ctx := middleware.ContextWithTenant(c)
+
 	// Guard against deleting provider that has active Gateway API Keys
 	if h.gatewayKeys != nil {
-		count, err := h.gatewayKeys.CountByProviderID(c.Request.Context(), id)
+		count, err := h.gatewayKeys.CountByProviderID(ctx, id)
 		if err == nil && count > 0 {
 			httputil.RespondError(c, http.StatusConflict, fmt.Sprintf("Cannot delete provider: %d active Gateway API Key(s) are bound to it. Please revoke or reassign the keys first.", count), nil, "PROVIDER_IN_USE")
 			return
 		}
 	}
 
-	if err := h.providers.Delete(c.Request.Context(), id, userID); err != nil {
+	if err := h.providers.Delete(ctx, id, userID); err != nil {
 		httputil.RespondStoreError(c, err, "Provider", "PROVIDER_DELETE")
 		return
 	}
 	c.Status(http.StatusNoContent)
 }
 
-// ownedProvider returns the provider when userID owns it, and otherwise
-// writes the response: 404 for a provider the user cannot see, 403 for a
-// shared system provider.
+// ownedProvider returns the provider when userID (or caller org) owns it, and
+// otherwise writes the response: 404 for a foreign provider, 403 for a shared
+// system provider.
 func (h *ProviderHandler) ownedProvider(c *gin.Context, id, userID string) (*models.Provider, bool) {
-	p, err := h.providers.FindByID(c.Request.Context(), id)
+	p, err := h.providers.FindByID(middleware.ContextWithTenant(c), id)
 	if err != nil {
 		httputil.RespondNotFound(c, "Provider not found", err, "PROVIDER_NOT_FOUND")
 		return nil, false
 	}
-	if userID != "" && p.UserID == userID {
+	if callerOwnsProvider(c, p, userID) {
 		return p, true
 	}
 	if isSharedProvider(p) {
@@ -197,7 +204,7 @@ func (h *ProviderHandler) ownedProvider(c *gin.Context, id, userID string) (*mod
 
 // isSharedProvider reports whether p is a system provider every user can use.
 func isSharedProvider(p *models.Provider) bool {
-	return p.UserID == ""
+	return isSystemProvider(p)
 }
 
 // baseURLAllowed answers 400 (and returns false) when a provider's base URL

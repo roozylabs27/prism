@@ -67,9 +67,10 @@ func (r *ModelRepository) ListWithFilter(ctx context.Context, providerID, search
 	var countArgs []interface{}
 
 	if len(userID) > 0 && userID[0] != "" {
-		args = append(args, userID[0])
-		countArgs = append(countArgs, userID[0])
-		filter := fmt.Sprintf(" AND (p.user_id = $%d OR p.user_id IS NULL OR p.user_id = '')", len(args))
+		ownerClause, nextArgs := tenantOwnerClause(ctx, "p.", userID[0], args)
+		_, countArgs = tenantOwnerClause(ctx, "p.", userID[0], countArgs)
+		args = nextArgs
+		filter := fmt.Sprintf(" AND ((%s) OR (p.user_id IS NULL AND (p.org_id IS NULL OR p.org_id = '')))", ownerClause)
 		query += filter
 		countQuery += filter
 	}

@@ -114,7 +114,7 @@ func (h *SimulateHandler) Simulate(c *gin.Context) {
 		policy.Constraints = dbPolicy.Constraints
 	}
 
-	ctx := c.Request.Context()
+	ctx := middleware.ContextWithTenant(c)
 	if req.PolicyID != "" {
 		if dbPolicy, err := h.policies.FindByID(ctx, req.PolicyID, userID); err == nil && dbPolicy != nil {
 			applyDBPolicy(dbPolicy)
@@ -132,14 +132,14 @@ func (h *SimulateHandler) Simulate(c *gin.Context) {
 	weights := policy.Weights
 
 	// 3. Load all enabled models
-	allModels, err := h.models.ListEnabled(c.Request.Context())
+	allModels, err := h.models.ListEnabled(ctx)
 	if err != nil {
 		httputil.RespondInternalError(c, "Failed to load models", err, "MODELS_LOAD_FAILED")
 		return
 	}
 
 	// Load providers map
-	allProviders, _ := h.providers.ListByUserID(c.Request.Context(), userID)
+	allProviders, _ := h.providers.ListByUserID(ctx, userID)
 	providerMap := make(map[string]string)
 	for _, p := range allProviders {
 		providerMap[p.ID] = p.Name
@@ -147,7 +147,7 @@ func (h *SimulateHandler) Simulate(c *gin.Context) {
 
 	// Load active provider IDs with credentials owned by this tenant; like the
 	// live router, providers without active credentials are not candidates.
-	activeProviderIDs, _ := h.creds.ListActiveProviderIDs(c.Request.Context(), userID)
+	activeProviderIDs, _ := h.creds.ListActiveProviderIDs(ctx, userID)
 
 	// Filter candidate models
 	var candidates []*models.Model

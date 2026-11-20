@@ -7,6 +7,7 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/roozylabs/prism/internal/database"
 	"github.com/roozylabs/prism/internal/models"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -176,4 +177,48 @@ func TestBudgetManager_ReleaseUpdatesOptimisticSpendAndReclaimsHeadroom(t *testi
 	store.err = errors.New("db down")
 	_, _, err = bm.Reserve(ctx, "u1", 0.01)
 	require.Error(t, err)
+}
+
+func TestBudgetManager_OrgKeyedReservationAndIsolation(t *testing.T) {
+	store := &fakeBudgetStore{
+		budgets: []models.Budget{{
+			ID:                "b_org",
+			UserID:            "alice",
+			Name:              "Org Shared Cap",
+			DailyLimit:        0.10,
+			HardLimit:         true,
+			Enabled:           true,
+			WarningThreshold:  0.80,
+			CriticalThreshold: 0.90,
+		}},
+	}
+	bm := &BudgetManager{budgetRepo: store, inFlight: make(map[string]float64)}
+
+	aliceCtx := database.WithTenantContext(context.Background(), database.TenantDBContext{OrgID: "org_a", UserID: "alice"})
+	bobCtx := database.WithTenantContext(context.Background(), database.TenantDBContext{OrgID: "org_a", UserID: "bob"})
+	carolCtx := database.WithTenantContext(context.Background(), database.TenantDBContext{OrgID: "org_b", UserID: "carol"})
+
+	resAlice, _, err := bm.Reserve(aliceCtx, "alice", 0.06)
+	require.NoError(t, err)
+	require.NotNil(t, resAlice)
+	assert.Equal(t, "org:org_a", resAlice.ScopeKey)
+
+	// Bob in org_a shares the same org in-flight hold and is blocked cleanly.
+	resBobDenied, stBob, err := bm.Reserve(bobCtx, "bob", 0.05)
+	require.NoError(t, err)
+	assert.Nil(t, resBobDenied)
+	require.NotNil(t, stBob)
+	assert.Equal(t, "exceeded", stBob.Status)
+
+	// Carol in org_b is completely isolated from org_a's reservation.
+	resCarol, _, err := bm.Reserve(carolCtx, "carol", 0.08)
+	require.NoError(t, err)
+	require.NotNil(t, resCarol)
+	assert.Equal(t, "org:org_b", resCarol.ScopeKey)
+
+	// Releasing Alice's hold frees headroom for Bob in org_a.
+	bm.Release(resAlice, 0.02)
+	resBobAllowed, _, err := bm.Reserve(bobCtx, "bob", 0.05)
+	require.NoError(t, err)
+	require.NotNil(t, resBobAllowed)
 }
