@@ -55,8 +55,8 @@ export default function GovernancePage() {
       dataIndex: 'effect',
       key: 'effect',
       render: (val) => (
-        <Badge variant={val === 'deny' ? 'destructive' : 'success'}>
-          {String(val)}
+        <Badge variant={val === 'deny' ? 'destructive' : val === 'require_approval' ? 'violet' : 'success'}>
+          {val === 'require_approval' ? 'require approval' : String(val)}
         </Badge>
       ),
     },

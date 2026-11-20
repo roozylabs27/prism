@@ -16,6 +16,7 @@ import {
   Globe,
   Bot,
   Users,
+  ShieldCheck,
   ScrollText,
   Activity,
   Wallet,
@@ -95,6 +96,7 @@ const navGroups: NavGroup[] = [
     title: 'CONTROL',
     items: [
       { key: AppRoutes.GOVERNANCE, label: 'Governance & RBAC', href: AppRoutes.GOVERNANCE, group: 'Control', icon: <Users className="h-4 w-4" /> },
+      { key: AppRoutes.APPROVALS, label: 'Approvals', href: AppRoutes.APPROVALS, group: 'Control', icon: <ShieldCheck className="h-4 w-4" /> },
       { key: AppRoutes.BUDGETS, label: 'Budgets & Quotas', href: AppRoutes.BUDGETS, group: 'Control', icon: <Wallet className="h-4 w-4" /> },
     ],
   },

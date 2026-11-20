@@ -18,10 +18,10 @@ func NewToolRepository(db *sql.DB) *ToolRepository {
 	return &ToolRepository{db: db}
 }
 
-const toolColumns = `id, COALESCE(user_id, ''), COALESCE(org_id, ''), COALESCE(workspace_id, ''), name, display_name, description, input_schema, enabled, created_at, updated_at`
+const toolColumns = `id, COALESCE(user_id, ''), COALESCE(org_id, ''), COALESCE(workspace_id, ''), name, display_name, description, input_schema, enabled, require_approval, created_at, updated_at`
 
 func scanTool(row interface{ Scan(...interface{}) error }, t *models.Tool) error {
-	return row.Scan(&t.ID, &t.UserID, &t.OrgID, &t.WorkspaceID, &t.Name, &t.DisplayName, &t.Description, &t.InputSchema, &t.Enabled, &t.CreatedAt, &t.UpdatedAt)
+	return row.Scan(&t.ID, &t.UserID, &t.OrgID, &t.WorkspaceID, &t.Name, &t.DisplayName, &t.Description, &t.InputSchema, &t.Enabled, &t.RequireApproval, &t.CreatedAt, &t.UpdatedAt)
 }
 
 func (r *ToolRepository) ListByUserID(ctx context.Context, userID string) ([]models.Tool, error) {
@@ -86,9 +86,9 @@ func (r *ToolRepository) Create(ctx context.Context, t *models.Tool) error {
 	t.CreatedAt = now
 	t.UpdatedAt = now
 	_, err := r.db.ExecContext(ctx,
-		`INSERT INTO tools (id, user_id, org_id, workspace_id, name, display_name, description, input_schema, enabled, created_at, updated_at)
-		 VALUES ($1, $2, NULLIF($3, ''), NULLIF($4, ''), $5, $6, $7, $8, $9, $10, $11)`,
-		t.ID, t.UserID, t.OrgID, t.WorkspaceID, t.Name, t.DisplayName, t.Description, []byte(t.InputSchema), t.Enabled, t.CreatedAt, t.UpdatedAt)
+		`INSERT INTO tools (id, user_id, org_id, workspace_id, name, display_name, description, input_schema, enabled, require_approval, created_at, updated_at)
+		 VALUES ($1, $2, NULLIF($3, ''), NULLIF($4, ''), $5, $6, $7, $8, $9, $10, $11, $12)`,
+		t.ID, t.UserID, t.OrgID, t.WorkspaceID, t.Name, t.DisplayName, t.Description, []byte(t.InputSchema), t.Enabled, t.RequireApproval, t.CreatedAt, t.UpdatedAt)
 	return err
 }
 
@@ -112,9 +112,9 @@ func (r *ToolRepository) CreateWithBackendsTx(ctx context.Context, t *models.Too
 	t.CreatedAt = now
 	t.UpdatedAt = now
 	_, err = tx.ExecContext(ctx,
-		`INSERT INTO tools (id, user_id, org_id, workspace_id, name, display_name, description, input_schema, enabled, created_at, updated_at)
-		 VALUES ($1, $2, NULLIF($3, ''), NULLIF($4, ''), $5, $6, $7, $8, $9, $10, $11)`,
-		t.ID, t.UserID, t.OrgID, t.WorkspaceID, t.Name, t.DisplayName, t.Description, []byte(t.InputSchema), t.Enabled, t.CreatedAt, t.UpdatedAt)
+		`INSERT INTO tools (id, user_id, org_id, workspace_id, name, display_name, description, input_schema, enabled, require_approval, created_at, updated_at)
+		 VALUES ($1, $2, NULLIF($3, ''), NULLIF($4, ''), $5, $6, $7, $8, $9, $10, $11, $12)`,
+		t.ID, t.UserID, t.OrgID, t.WorkspaceID, t.Name, t.DisplayName, t.Description, []byte(t.InputSchema), t.Enabled, t.RequireApproval, t.CreatedAt, t.UpdatedAt)
 	if err != nil {
 		return err
 	}
@@ -147,11 +147,11 @@ func (r *ToolRepository) CreateWithBackendsTx(ctx context.Context, t *models.Too
 
 func (r *ToolRepository) Update(ctx context.Context, t *models.Tool) error {
 	t.UpdatedAt = time.Now()
-	args := []any{t.DisplayName, t.Description, []byte(t.InputSchema), t.Enabled, t.UpdatedAt, t.ID}
+	args := []any{t.DisplayName, t.Description, []byte(t.InputSchema), t.Enabled, t.RequireApproval, t.UpdatedAt, t.ID}
 	ownerClause, args := tenantOwnerClause(ctx, "", t.UserID, args)
 	_, err := r.db.ExecContext(ctx,
-		`UPDATE tools SET display_name=$1, description=$2, input_schema=$3, enabled=$4, updated_at=$5
-		 WHERE id=$6 AND (`+ownerClause+`)`,
+		`UPDATE tools SET display_name=$1, description=$2, input_schema=$3, enabled=$4, require_approval=$5, updated_at=$6
+		 WHERE id=$7 AND (`+ownerClause+`)`,
 		args...)
 	return err
 }

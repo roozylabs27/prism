@@ -211,6 +211,7 @@ export function GovernancePolicyForm({
                       <SelectContent>
                         <SelectItem value="allow">Allow</SelectItem>
                         <SelectItem value="deny">Deny</SelectItem>
+                        <SelectItem value="require_approval">Require Human Approval</SelectItem>
                       </SelectContent>
                     </Select>
                   </FormControl>

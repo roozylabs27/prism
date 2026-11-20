@@ -4,7 +4,7 @@ export const governancePolicySchema = z.object({
   name: z.string().min(1, 'Policy name is required'),
   description: z.string().default(''),
   role: z.string().default(''),
-  effect: z.enum(['allow', 'deny']).default('allow'),
+  effect: z.enum(['allow', 'deny', 'require_approval']).default('allow'),
   agentPattern: z.string().default('*'),
   modelPattern: z.string().default('*'),
   toolPattern: z.string().default('*'),

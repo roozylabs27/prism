@@ -12,7 +12,7 @@ type GovernancePolicy struct {
 	Name            string    `json:"name"`
 	Description     string    `json:"description"`
 	Role            string    `json:"role"`
-	Effect          string    `json:"effect"` // "allow" | "deny"
+	Effect          string    `json:"effect"` // "allow" | "deny" | "require_approval"
 	AgentPattern    string    `json:"agentPattern"`
 	ModelPattern    string    `json:"modelPattern"`
 	ToolPattern     string    `json:"toolPattern"`
@@ -33,8 +33,9 @@ type RBACEvaluationRequest struct {
 }
 
 type RBACEvaluationResult struct {
-	Allowed        bool              `json:"allowed"`
-	MatchedPolicy  *GovernancePolicy `json:"matchedPolicy,omitempty"`
-	Reason         string            `json:"reason"`
-	EvaluatedCount int               `json:"evaluatedCount"`
+	Allowed          bool              `json:"allowed"`
+	RequiresApproval bool              `json:"requiresApproval,omitempty"`
+	MatchedPolicy    *GovernancePolicy `json:"matchedPolicy,omitempty"`
+	Reason           string            `json:"reason"`
+	EvaluatedCount   int               `json:"evaluatedCount"`
 }

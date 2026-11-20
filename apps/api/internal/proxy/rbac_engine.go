@@ -75,6 +75,7 @@ func (e *RBACEngine) Evaluate(ctx context.Context, userID string, req models.RBA
 	}
 
 	var matchedAllow *models.GovernancePolicy
+	var matchedApproval *models.GovernancePolicy
 	evaluated := 0
 
 	for i := range policies {
@@ -131,9 +132,23 @@ func (e *RBACEngine) Evaluate(ctx context.Context, userID string, req models.RBA
 			}, nil
 		}
 
+		if matchedApproval == nil && strings.EqualFold(p.Effect, "require_approval") {
+			matchedApproval = p
+		}
+
 		if matchedAllow == nil && strings.EqualFold(p.Effect, "allow") {
 			matchedAllow = p
 		}
+	}
+
+	if matchedApproval != nil {
+		return &models.RBACEvaluationResult{
+			Allowed:          false,
+			RequiresApproval: true,
+			MatchedPolicy:    matchedApproval,
+			Reason:           fmt.Sprintf("human approval required by policy %q (%s)", matchedApproval.Name, matchedApproval.ID),
+			EvaluatedCount:   evaluated,
+		}, nil
 	}
 
 	if matchedAllow != nil {

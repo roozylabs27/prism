@@ -13,6 +13,8 @@ import (
 	"github.com/roozylabs/prism/internal/middleware"
 	"github.com/roozylabs/prism/internal/models"
 	"github.com/roozylabs/prism/internal/proxy"
+	goredis "github.com/roozylabs/prism/internal/redis"
+	"github.com/roozylabs/prism/internal/repository"
 	"github.com/roozylabs/prism/internal/service"
 	"github.com/roozylabs/prism/internal/utils"
 )
@@ -64,7 +66,18 @@ type MCPServerHandler struct {
 	auditRecorder   *proxy.AuditRecorder
 	roleResolver    MemberRoleResolver
 	routingPolicies routingPolicyFinder
+	approvals       approvalStore
+	eventPub        *goredis.EventPublisher
 	encKey          string
+}
+
+// SetApprovals wires HITL approval persistence and SSE event publishing for MCP tool holds.
+func (h *MCPServerHandler) SetApprovals(approvals approvalStore, eventPub *goredis.EventPublisher) {
+	if h == nil {
+		return
+	}
+	h.approvals = approvals
+	h.eventPub = eventPub
 }
 
 func NewMCPServerHandler(
@@ -361,7 +374,25 @@ func (h *MCPServerHandler) handleToolsCall(c *gin.Context, gatewayKey *models.Ga
 		return
 	}
 
+	// Prepare canonical arguments without synthetic _approval_id replay token.
+	cleanArgs := make(map[string]interface{}, len(params.Arguments))
+	approvalID := strings.TrimSpace(c.GetHeader("X-Prism-Approval-ID"))
+	for k, v := range params.Arguments {
+		if k == "_approval_id" {
+			if approvalID == "" {
+				if s, ok := v.(string); ok {
+					approvalID = strings.TrimSpace(s)
+				}
+			}
+			continue
+		}
+		cleanArgs[k] = v
+	}
+	argsJSON, argsHash := repository.HashToolArguments(cleanArgs)
+
 	// Enforce RBAC, Quotas, Budgets & MCP server allowance through AdmissionController.
+	var approvalRequired bool
+	var approvalPolicyID, approvalPolicyName, approvalReason string
 	if h.admission != nil {
 		admRes, admErr := h.admission.Evaluate(ctx, proxy.AdmissionRequest{
 			UserID:        gatewayKey.UserID,
@@ -394,6 +425,81 @@ func (h *MCPServerHandler) handleToolsCall(c *gin.Context, gatewayKey *models.Ga
 			})
 			return
 		}
+		if admRes.Decision == proxy.AdmissionRequireApproval {
+			approvalRequired = true
+			approvalPolicyID = admRes.PolicyID
+			approvalPolicyName = admRes.PolicyName
+			approvalReason = admRes.Reason
+		}
+	}
+
+	if approvalID != "" {
+		if h.approvals == nil {
+			c.JSON(http.StatusForbidden, mcpJSONRPCResponse{
+				JSONRPC: "2.0",
+				ID:      rpcReq.ID,
+				Error:   &mcpRPCError{Code: -32001, Message: "Approval store unavailable", Data: map[string]string{"code": "APPROVAL_STORE_UNAVAILABLE"}},
+			})
+			return
+		}
+		if _, err := h.approvals.VerifyAndConsume(ctx, approvalID, gatewayKey.UserID, params.Name, serverName, argsHash); err != nil {
+			h.recordMCPAudit(ctx, requestID, gatewayKey, agentID, agentName, userRole, params.Name, serverName, http.StatusForbidden, 0, "denied", err.Error())
+			c.JSON(http.StatusForbidden, mcpJSONRPCResponse{
+				JSONRPC: "2.0",
+				ID:      rpcReq.ID,
+				Error:   &mcpRPCError{Code: -32001, Message: "Approval is not valid, approved, matching arguments, or unexpired", Data: map[string]string{"code": "APPROVAL_INVALID"}},
+			})
+			return
+		}
+	} else if approvalRequired {
+		if h.approvals == nil {
+			c.JSON(http.StatusForbidden, mcpJSONRPCResponse{
+				JSONRPC: "2.0",
+				ID:      rpcReq.ID,
+				Error:   &mcpRPCError{Code: -32001, Message: "Approval workflow unavailable", Data: map[string]string{"code": "APPROVAL_WORKFLOW_UNAVAILABLE"}},
+			})
+			return
+		}
+		approval := &models.ApprovalRequest{
+			OrgID:         tenantCtx.OrgID,
+			UserID:        gatewayKey.UserID,
+			AgentID:       agentID,
+			AgentName:     agentName,
+			ToolName:      params.Name,
+			MCPServerName: serverName,
+			ArgumentsJSON: argsJSON,
+			ArgumentsHash: argsHash,
+			PolicyID:      approvalPolicyID,
+			PolicyName:    approvalPolicyName,
+			Reason:        approvalReason,
+			Status:        models.ApprovalStatusPending,
+		}
+		if err := h.approvals.Create(ctx, approval); err != nil {
+			c.JSON(http.StatusInternalServerError, mcpJSONRPCResponse{
+				JSONRPC: "2.0",
+				ID:      rpcReq.ID,
+				Error:   &mcpRPCError{Code: -32603, Message: "Failed to persist approval request"},
+			})
+			return
+		}
+		notifyApprovalRequired(c.Request.Context(), h.eventPub, approval)
+		h.recordMCPAudit(ctx, requestID, gatewayKey, agentID, agentName, userRole, params.Name, serverName, http.StatusAccepted, 0, "approval_required", approval.Reason)
+		c.JSON(http.StatusAccepted, mcpJSONRPCResponse{
+			JSONRPC: "2.0",
+			ID:      rpcReq.ID,
+			Error: &mcpRPCError{
+				Code:    -32003,
+				Message: approval.Reason,
+				Data: map[string]interface{}{
+					"code":       "APPROVAL_REQUIRED",
+					"approvalId": approval.ID,
+					"status":     approval.Status,
+					"expiresAt":  approval.ExpiresAt,
+					"pollUrl":    "/v1/approvals/" + approval.ID,
+				},
+			},
+		})
+		return
 	}
 
 	if h.gateway == nil {
@@ -405,7 +511,7 @@ func (h *MCPServerHandler) handleToolsCall(c *gin.Context, gatewayKey *models.Ga
 		return
 	}
 
-	res, err := h.gateway.ExecuteTool(ctx, gatewayKey.UserID, serverName, toolName, params.Arguments, h.encKey)
+	res, err := h.gateway.ExecuteTool(ctx, gatewayKey.UserID, serverName, toolName, cleanArgs, h.encKey)
 	if err != nil {
 		h.recordMCPAudit(ctx, requestID, gatewayKey, agentID, agentName, userRole, params.Name, serverName, http.StatusBadGateway, 0, "error", err.Error())
 		c.JSON(http.StatusOK, mcpJSONRPCResponse{
@@ -419,7 +525,6 @@ func (h *MCPServerHandler) handleToolsCall(c *gin.Context, gatewayKey *models.Ga
 		return
 	}
 
-	argsJSON, _ := json.Marshal(params.Arguments)
 	h.recordMCPAudit(ctx, requestID, gatewayKey, agentID, agentName, userRole, params.Name, serverName, res.StatusCode, res.LatencyMs, "compliant", string(argsJSON))
 
 	outBytes, _ := json.Marshal(map[string]interface{}{

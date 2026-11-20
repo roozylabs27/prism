@@ -6,6 +6,7 @@ export interface ApiTool {
   category: string;
   inputSchema: Record<string, unknown>;
   enabled: boolean;
+  requireApproval?: boolean;
   timeoutMs: number;
   maxRetries: number;
   cacheTtlSeconds: number;
@@ -61,6 +62,7 @@ export interface ApiCreateToolRequest {
   category?: string;
   inputSchema?: Record<string, unknown>;
   enabled?: boolean;
+  requireApproval?: boolean;
   timeoutMs?: number;
   maxRetries?: number;
   cacheTtlSeconds?: number;
