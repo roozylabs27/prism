@@ -4,6 +4,8 @@ import {
   ApiRoutingDecision,
   ApiRoutingSimulationReq,
   ApiRoutingSimulationRes,
+  ApiRoutingReplayReq,
+  ApiRoutingReplayRes,
   ApiFinOpsSummary,
 } from './types/policy';
 
@@ -41,6 +43,11 @@ export async function apiGetRoutingDecisions(limit?: number): Promise<ApiRouting
 
 export async function apiSimulateRouting(data: ApiRoutingSimulationReq): Promise<ApiRoutingSimulationRes> {
   const response = await api.post<ApiRoutingSimulationRes>('/routing/simulate', data);
+  return response.data;
+}
+
+export async function apiReplayRouting(data: ApiRoutingReplayReq = {}): Promise<ApiRoutingReplayRes> {
+  const response = await api.post<ApiRoutingReplayRes>('/routing/replay', data);
   return response.data;
 }
 

@@ -54,6 +54,12 @@ func MatchModelPattern(pattern, slug string) bool {
 	return re.MatchString(slug)
 }
 
+// MatchRoutingRule returns the first rule in rules (already ordered by
+// priority) that matches slug and names a provider, or nil.
+func MatchRoutingRule(rules []models.RoutingRule, slug string) *models.RoutingRule {
+	return matchRoutingRule(rules, slug)
+}
+
 // matchRoutingRule returns the first rule in rules (already ordered by
 // priority) that matches slug and names a provider, or nil.
 func matchRoutingRule(rules []models.RoutingRule, slug string) *models.RoutingRule {

@@ -719,7 +719,11 @@ func (e *Engine) Proxy(c *gin.Context, req *ProxyRequest, gatewayKey *models.Gat
 		inputCost := (float64(resp.Usage.PromptTokens) / 1_000_000.0) * route.Model.InputPricePer1M
 		outputCost := (float64(resp.Usage.CompletionTokens) / 1_000_000.0) * route.Model.OutputPricePer1M
 		costUSD := inputCost + outputCost
-		e.backfillActualCost(reqID, costUSD)
+		errMsg := ""
+		if resp.Error != nil {
+			errMsg = resp.Error.Message
+		}
+		e.backfillRoutingOutcome(reqID, costUSD, httpResp.StatusCode, latency, 0, retryCount, errMsg)
 
 		if c != nil {
 			c.Header("X-Prism-Model", route.Model.Slug)
@@ -783,7 +787,9 @@ func (e *Engine) Proxy(c *gin.Context, req *ProxyRequest, gatewayKey *models.Gat
 		})
 	}
 
-	return nil, nil, fmt.Errorf("all credentials exhausted after %d retries: %w", retryCount, lastErr)
+	failErr := fmt.Errorf("all credentials exhausted after %d retries: %w", retryCount, lastErr)
+	e.backfillRoutingOutcome(reqID, 0, lastAttemptStatus, int(time.Since(start).Milliseconds()), 0, retryCount, failErr.Error())
+	return nil, nil, failErr
 }
 
 func (e *Engine) ProxyStream(c *gin.Context, req *ProxyRequest, gatewayKey *models.GatewayAPIKey) (*models.RequestLog, error) {
@@ -1297,7 +1303,11 @@ func (e *Engine) ProxyStream(c *gin.Context, req *ProxyRequest, gatewayKey *mode
 		inputCost := (float64(totalTokens.PromptTokens) / 1_000_000.0) * route.Model.InputPricePer1M
 		outputCost := (float64(totalTokens.CompletionTokens) / 1_000_000.0) * route.Model.OutputPricePer1M
 		costUSD := inputCost + outputCost
-		e.backfillActualCost(reqID, costUSD)
+		streamErrMsg := ""
+		if streamInterrupted {
+			streamErrMsg = "stream interrupted upstream"
+		}
+		e.backfillRoutingOutcome(reqID, costUSD, httpResp.StatusCode, latency, ttftMs, retryCount, streamErrMsg)
 
 		var gwKeyIDPtr *string
 		if gatewayKey != nil && gatewayKey.ID != "" {
@@ -1347,7 +1357,9 @@ func (e *Engine) ProxyStream(c *gin.Context, req *ProxyRequest, gatewayKey *mode
 		})
 	}
 
-	return failStream(fmt.Errorf("all credentials exhausted after %d retries: %w", retryCount, lastErr))
+	failErr := fmt.Errorf("all credentials exhausted after %d retries: %w", retryCount, lastErr)
+	e.backfillRoutingOutcome(reqID, 0, lastAttemptStatus, int(time.Since(start).Milliseconds()), ttftMs, retryCount, failErr.Error())
+	return failStream(failErr)
 }
 
 // recordModelFailure feeds a failed upstream attempt (network error, 5xx or
@@ -1370,6 +1382,17 @@ func (e *Engine) backfillActualCost(requestID string, cost float64) {
 	e.effects.Go("actual cost", func(ctx context.Context) {
 		if err := e.decisionRepo.UpdateActualCostByRequestID(ctx, requestID, cost); err != nil {
 			log.Printf("backfill actual cost: %v", err)
+		}
+	})
+}
+
+func (e *Engine) backfillRoutingOutcome(requestID string, actualCost float64, statusCode, latencyMs, ttftMs, retryCount int, errMsg string) {
+	if e.decisionRepo == nil || requestID == "" {
+		return
+	}
+	e.effects.Go("routing outcome", func(ctx context.Context) {
+		if err := e.decisionRepo.UpdateOutcomeByRequestID(ctx, requestID, actualCost, statusCode, latencyMs, ttftMs, retryCount, errMsg); err != nil {
+			log.Printf("backfill routing outcome: %v", err)
 		}
 	})
 }

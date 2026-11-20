@@ -27,6 +27,11 @@ type RoutingDecisionLog struct {
 	ActualCost       float64         `json:"actualCost" db:"actual_cost"`
 	DowngradeReason  string          `json:"downgradeReason,omitempty" db:"downgrade_reason"`
 	ScoresBreakdown  json.RawMessage `json:"scoresBreakdown,omitempty" db:"scores_breakdown"`
+	StatusCode       *int            `json:"statusCode,omitempty" db:"status_code"`
+	LatencyMs        *int            `json:"latencyMs,omitempty" db:"latency_ms"`
+	TTFTMs           *int            `json:"ttftMs,omitempty" db:"ttft_ms"`
+	RetryCount       int             `json:"retryCount" db:"retry_count"`
+	ErrorMessage     string          `json:"errorMessage,omitempty" db:"error_message"`
 	CreatedAt        time.Time       `json:"createdAt" db:"created_at"`
 }
 
@@ -66,8 +71,8 @@ func (r *RoutingDecisionRepository) Create(ctx context.Context, decision *Routin
 	_, err := r.db.ExecContext(ctx,
 		`INSERT INTO routing_decisions (id, request_id, user_id, org_id, prompt_preview, task_type, complexity, policy_name,
 		     candidates, selected_model, selected_provider, budget_status, estimated_cost, actual_cost,
-		     downgrade_reason, scores_breakdown, created_at)
-		 VALUES ($1, $2, $3, NULLIF($4, ''), $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)`,
+		     downgrade_reason, scores_breakdown, status_code, latency_ms, ttft_ms, retry_count, error_message, created_at)
+		 VALUES ($1, $2, $3, NULLIF($4, ''), $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22)`,
 		decision.ID, decision.RequestID, decision.UserID, decision.OrgID,
 		sql.NullString{String: decision.PromptPreview, Valid: decision.PromptPreview != ""},
 		sql.NullString{String: decision.TaskType, Valid: decision.TaskType != ""},
@@ -80,15 +85,57 @@ func (r *RoutingDecisionRepository) Create(ctx context.Context, decision *Routin
 		decision.EstimatedCost, decision.ActualCost,
 		sql.NullString{String: decision.DowngradeReason, Valid: decision.DowngradeReason != ""},
 		scoresBreakdown,
+		nullIntPtr(decision.StatusCode),
+		nullIntPtr(decision.LatencyMs),
+		nullIntPtr(decision.TTFTMs),
+		decision.RetryCount,
+		sql.NullString{String: decision.ErrorMessage, Valid: decision.ErrorMessage != ""},
 		decision.CreatedAt,
 	)
 	return err
+}
+
+func nullIntPtr(v *int) sql.NullInt64 {
+	if v == nil {
+		return sql.NullInt64{}
+	}
+	return sql.NullInt64{Int64: int64(*v), Valid: true}
 }
 
 func (r *RoutingDecisionRepository) UpdateActualCostByRequestID(ctx context.Context, requestID string, cost float64) error {
 	_, err := r.db.ExecContext(ctx,
 		`UPDATE routing_decisions SET actual_cost = $1 WHERE request_id = $2`,
 		cost, requestID,
+	)
+	return err
+}
+
+// UpdateOutcomeByRequestID backfills execution status, timing, retries, error details, and final cost
+// onto the routing decision created at route selection time.
+func (r *RoutingDecisionRepository) UpdateOutcomeByRequestID(
+	ctx context.Context,
+	requestID string,
+	actualCost float64,
+	statusCode int,
+	latencyMs int,
+	ttftMs int,
+	retryCount int,
+	errMsg string,
+) error {
+	var ttftVal sql.NullInt64
+	if ttftMs > 0 {
+		ttftVal = sql.NullInt64{Int64: int64(ttftMs), Valid: true}
+	}
+	_, err := r.db.ExecContext(ctx,
+		`UPDATE routing_decisions
+		 SET actual_cost = CASE WHEN $1 > 0 THEN $1 ELSE actual_cost END,
+		     status_code = $2,
+		     latency_ms = $3,
+		     ttft_ms = COALESCE($4, ttft_ms),
+		     retry_count = $5,
+		     error_message = NULLIF($6, '')
+		 WHERE request_id = $7`,
+		actualCost, statusCode, latencyMs, ttftVal, retryCount, errMsg, requestID,
 	)
 	return err
 }
@@ -103,7 +150,8 @@ func (r *RoutingDecisionRepository) ListWithFilter(ctx context.Context, userID s
 
 	query := `SELECT id, request_id, user_id, COALESCE(org_id, ''), prompt_preview, task_type, complexity, policy_name,
 		        candidates, selected_model, selected_provider, budget_status,
-		        estimated_cost, actual_cost, downgrade_reason, scores_breakdown, created_at
+		        estimated_cost, actual_cost, downgrade_reason, scores_breakdown,
+		        status_code, latency_ms, ttft_ms, retry_count, error_message, created_at
 		 FROM routing_decisions WHERE 1=1`
 	countQuery := `SELECT COUNT(*) FROM routing_decisions WHERE 1=1`
 
@@ -162,18 +210,37 @@ func (r *RoutingDecisionRepository) ListWithFilter(ctx context.Context, userID s
 	var decisions []RoutingDecisionLog
 	for rows.Next() {
 		var d RoutingDecisionLog
-		var promptPreview, taskType, complexity, policyName, selectedModel, selectedProvider, budgetStatus, downgradeReason sql.NullString
+		var promptPreview, taskType, complexity, policyName, selectedModel, selectedProvider, budgetStatus, downgradeReason, errorMsg sql.NullString
 		var scoresBreakdown sql.NullString
+		var statusCode, latencyMs, ttftMs sql.NullInt64
+		var retryCount sql.NullInt64
 		if hasPromptCol {
 			if err := rows.Scan(&d.ID, &d.RequestID, &d.UserID, &d.OrgID, &promptPreview, &taskType, &complexity,
 				&policyName, &d.Candidates, &selectedModel, &selectedProvider,
-				&budgetStatus, &d.EstimatedCost, &d.ActualCost, &downgradeReason, &scoresBreakdown, &d.CreatedAt); err != nil {
+				&budgetStatus, &d.EstimatedCost, &d.ActualCost, &downgradeReason, &scoresBreakdown,
+				&statusCode, &latencyMs, &ttftMs, &retryCount, &errorMsg, &d.CreatedAt); err != nil {
 				return nil, 0, err
 			}
 			d.PromptPreview = promptPreview.String
 			if scoresBreakdown.Valid && scoresBreakdown.String != "" {
 				d.ScoresBreakdown = json.RawMessage(scoresBreakdown.String)
 			}
+			if statusCode.Valid {
+				v := int(statusCode.Int64)
+				d.StatusCode = &v
+			}
+			if latencyMs.Valid {
+				v := int(latencyMs.Int64)
+				d.LatencyMs = &v
+			}
+			if ttftMs.Valid {
+				v := int(ttftMs.Int64)
+				d.TTFTMs = &v
+			}
+			if retryCount.Valid {
+				d.RetryCount = int(retryCount.Int64)
+			}
+			d.ErrorMessage = errorMsg.String
 		} else {
 			if err := rows.Scan(&d.ID, &d.RequestID, &d.UserID, &d.OrgID, &taskType, &complexity,
 				&policyName, &d.Candidates, &selectedModel, &selectedProvider,
