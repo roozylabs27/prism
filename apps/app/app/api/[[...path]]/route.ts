@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { sanitizeProxyPath } from '@/lib/proxy/sanitize-path';
 
 export const dynamic = 'force-dynamic';
 
@@ -14,8 +15,14 @@ function getBackendApiUrl(): string {
 
 async function proxyHandler(request: NextRequest, { params }: { params: Promise<{ path?: string[] }> }) {
   const resolvedParams = await params;
-  const pathArray = resolvedParams?.path || [];
-  const subPath = pathArray.join('/');
+  const sanitized = sanitizeProxyPath(resolvedParams?.path);
+  if (!sanitized.ok) {
+    return NextResponse.json(
+      { error: { message: 'Invalid request path', code: 'INVALID_PROXY_PATH' } },
+      { status: 400 }
+    );
+  }
+  const subPath = sanitized.subPath;
   const searchParams = request.nextUrl.search;
 
   const backendApiUrl = getBackendApiUrl();
@@ -53,6 +60,7 @@ async function proxyHandler(request: NextRequest, { params }: { params: Promise<
       body: body && body.byteLength > 0 ? body : undefined,
       cache: 'no-store',
       redirect: 'manual',
+      signal: request.signal,
     });
 
     const responseHeaders = new Headers(backendResponse.headers);
@@ -78,15 +86,17 @@ async function proxyHandler(request: NextRequest, { params }: { params: Promise<
     }
 
     const contentType = responseHeaders.get('content-type') || '';
+    const isSseContentType = contentType.includes('text/event-stream');
+    const isNdjson = contentType.includes('application/x-ndjson');
     const isEventStream =
-      contentType.includes('text/event-stream') ||
-      contentType.includes('application/x-ndjson') ||
-      subPath === 'sse';
+      backendResponse.ok && (isSseContentType || isNdjson || subPath === 'sse');
 
     const isNoBodyStatus = backendResponse.status === 204 || backendResponse.status === 304;
 
     if (isEventStream) {
-      responseHeaders.set('Content-Type', 'text/event-stream');
+      if (isSseContentType || (subPath === 'sse' && !isNdjson && !contentType.includes('application/json'))) {
+        responseHeaders.set('Content-Type', 'text/event-stream');
+      }
       responseHeaders.set('Cache-Control', 'no-cache, no-transform');
       responseHeaders.set('Connection', 'keep-alive');
       responseHeaders.set('X-Accel-Buffering', 'no');
