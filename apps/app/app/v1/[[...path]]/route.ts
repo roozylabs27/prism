@@ -1,20 +1,32 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { sanitizeProxyPath } from '@/lib/proxy/sanitize-path';
 
 export const dynamic = 'force-dynamic';
 
 function getBackendApiUrl(): string {
-  const url = process.env.API_URL || 'http://api:8080';
-  return url.replace(/\/+$/, '');
+  if (process.env.API_URL) {
+    return process.env.API_URL.replace(/\/+$/, '');
+  }
+  if (process.env.NODE_ENV === 'development') {
+    return 'http://localhost:8080';
+  }
+  return 'http://api:8080';
 }
 
 async function proxyV1Handler(request: NextRequest, { params }: { params: Promise<{ path?: string[] }> }) {
   const resolvedParams = await params;
-  const pathArray = resolvedParams?.path || [];
-  const subPath = pathArray.join('/');
+  const sanitized = sanitizeProxyPath(resolvedParams?.path);
+  if (!sanitized.ok) {
+    return NextResponse.json(
+      { error: { message: 'Invalid request path', type: 'invalid_request_error', code: 'invalid_path' } },
+      { status: 400 }
+    );
+  }
+  const subPath = sanitized.subPath;
   const searchParams = request.nextUrl.search;
 
   const backendApiUrl = getBackendApiUrl();
-  const targetUrl = `${backendApiUrl}/v1/${subPath}${searchParams}`;
+  const targetUrl = subPath ? `${backendApiUrl}/v1/${subPath}${searchParams}` : `${backendApiUrl}/v1${searchParams}`;
 
   const headers = new Headers(request.headers);
   headers.delete('host');
@@ -34,22 +46,36 @@ async function proxyV1Handler(request: NextRequest, { params }: { params: Promis
       headers: headers,
       body: body && body.byteLength > 0 ? body : undefined,
       cache: 'no-store',
+      redirect: 'manual',
+      signal: request.signal,
     });
 
     const responseHeaders = new Headers(backendResponse.headers);
     responseHeaders.delete('content-encoding');
     responseHeaders.delete('content-length');
+    responseHeaders.delete('transfer-encoding');
 
     const contentType = responseHeaders.get('content-type') || '';
-    const isEventStream = contentType.includes('text/event-stream');
+    const isSseContentType = contentType.includes('text/event-stream');
+    const isNdjson = contentType.includes('application/x-ndjson');
 
-    if (isEventStream) {
-      responseHeaders.set('Content-Type', 'text/event-stream');
+    if (backendResponse.ok && (isSseContentType || isNdjson)) {
+      if (isSseContentType) {
+        responseHeaders.set('Content-Type', 'text/event-stream');
+      }
       responseHeaders.set('Cache-Control', 'no-cache, no-transform');
       responseHeaders.set('Connection', 'keep-alive');
       responseHeaders.set('X-Accel-Buffering', 'no');
 
       return new NextResponse(backendResponse.body, {
+        status: backendResponse.status,
+        statusText: backendResponse.statusText,
+        headers: responseHeaders,
+      });
+    }
+
+    if (backendResponse.status === 204 || backendResponse.status === 304) {
+      return new NextResponse(null, {
         status: backendResponse.status,
         statusText: backendResponse.statusText,
         headers: responseHeaders,

@@ -78,9 +78,19 @@ describe('middleware', () => {
     expect(redirectTarget(await middleware(request('/logs', 'tok')))).toBeNull();
   });
 
-  it('does not challenge the build-time page collector', async () => {
+  it('does not let spoofed Next.js headers bypass auth checks', async () => {
     globalThis.fetch = vi.fn();
-    const res = await middleware(request('/logs', undefined, { 'user-agent': 'Next.js collector' }));
-    expect(redirectTarget(res)).toBeNull();
+    expect(redirectTarget(await middleware(request('/logs', undefined, { 'user-agent': 'Next.js collector' })))).toBe(
+      '/signin'
+    );
+    expect(redirectTarget(await middleware(request('/logs', undefined, { 'x-next-data': '1' })))).toBe('/signin');
+    expect(globalThis.fetch).not.toHaveBeenCalled();
+  });
+
+  it('routes signed-in un-onboarded invite visitors to accept-invite instead of onboarding', async () => {
+    globalThis.fetch = permissions(false);
+    const res = await middleware(request('/signin?invite=tok-1', 'tok'));
+    expect(redirectTarget(res)).toBe('/accept-invite');
+    expect(new URL(res.headers.get('location') ?? '').searchParams.get('token')).toBe('tok-1');
   });
 });

@@ -32,12 +32,6 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  // Allow internal Next.js build-time static page collection requests
-  const userAgent = request.headers.get('user-agent') || '';
-  if (userAgent.includes('Next.js') || request.headers.has('x-next-data')) {
-    return NextResponse.next();
-  }
-
   // Restrict protected pages if no auth_token cookie
   if (!token && !isAuthPage && !isInvitePage) {
     const signinUrl = new URL('/signin', request.url);
@@ -63,17 +57,18 @@ export async function middleware(request: NextRequest) {
         const data = await res.json();
         const isOnboarded = Boolean(data?.isOnboarded);
 
-        // If user is not yet onboarded, redirect immediately on the server to /onboarding
-        if (!isOnboarded && !isOnboardingPage) {
-          const onboardingUrl = new URL('/onboarding', request.url);
-          return NextResponse.redirect(onboardingUrl);
-        }
-
-        // A signed-in user following an invitation link goes back to it.
+        // A signed-in user following an invitation link must be able to reach it
+        // even before completing organization onboarding.
         if (isAuthPage && inviteToken) {
           const inviteUrl = new URL('/accept-invite', request.url);
           inviteUrl.searchParams.set('token', inviteToken);
           return NextResponse.redirect(inviteUrl);
+        }
+
+        // If user is not yet onboarded, redirect immediately on the server to /onboarding
+        if (!isOnboarded && !isOnboardingPage) {
+          const onboardingUrl = new URL('/onboarding', request.url);
+          return NextResponse.redirect(onboardingUrl);
         }
 
         // If user is already onboarded, redirect away from /onboarding and /signin or /signup to /
