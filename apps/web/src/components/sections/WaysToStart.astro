@@ -1,0 +1,41 @@
+---
+import Section from '../ui/Section.astro';
+import Button from '../ui/Button.astro';
+import Icon from '../ui/Icon.astro';
+import { startOptions } from '../../data/content';
+import { links } from '../../data/site';
+---
+
+<Section
+	id="start"
+	label="07 · Start"
+	title="Two ways to try Prism."
+	intro="There are no paid plans yet. Run it yourself, or set it up with us as a design partner."
+	class="bg-raised/60"
+>
+	<div class="grid gap-6 md:grid-cols-2">
+		{startOptions.map((opt, i) => (
+			<article class="border border-rule rounded-sm bg-paper p-6 flex flex-col">
+				<h3 class="font-semibold text-xl">{opt.title}</h3>
+				<p class="mt-2 text-muted">{opt.who}</p>
+				<ol class="mt-5 space-y-2 flex-1">
+					{opt.steps.map((step, n) => (
+						<li class="flex gap-3">
+							<span class="font-mono text-sm text-muted w-5 shrink-0 pt-0.5">{n + 1}</span>
+							<span>{step}</span>
+						</li>
+					))}
+				</ol>
+				<div class="mt-6">
+					<Button href={links[opt.linkKey]} variant={i === 0 ? 'primary' : 'secondary'} external class="w-full sm:w-auto">
+						{opt.linkLabel}
+						<Icon name="external" class="h-4 w-4" />
+					</Button>
+				</div>
+			</article>
+		))}
+	</div>
+	<p class="mt-6 text-muted">
+		How the pilot works: <a href={links.pilotProgram} target="_blank" rel="noopener noreferrer" class="link">design-partner pilot program</a>.
+	</p>
+</Section>

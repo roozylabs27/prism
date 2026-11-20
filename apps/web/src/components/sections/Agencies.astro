@@ -1,0 +1,43 @@
+---
+import Section from '../ui/Section.astro';
+import { agencyRows } from '../../data/content';
+---
+
+<Section
+	id="agencies"
+	label="02 · For agencies"
+	title="More clients without more spreadsheets."
+	intro="Built for agencies running AI automations for 5 to 30 clients, where every new account adds keys, budgets and permissions to track."
+>
+	<!-- Table on wide screens, stacked rows on small ones. -->
+	<div class="hidden md:block border border-rule rounded-sm overflow-hidden">
+		<table class="w-full text-left">
+			<caption class="sr-only">Agency problems and what Prism does about them</caption>
+			<thead class="bg-raised">
+				<tr class="border-b border-rule">
+					<th scope="col" class="p-4 font-mono text-sm font-normal text-muted w-[28%]">Problem</th>
+					<th scope="col" class="p-4 font-mono text-sm font-normal text-muted">What Prism does</th>
+					<th scope="col" class="p-4 font-mono text-sm font-normal text-muted w-[20%]">Where</th>
+				</tr>
+			</thead>
+			<tbody>
+				{agencyRows.map((row) => (
+					<tr class="border-b border-rule last:border-0 align-top">
+						<th scope="row" class="p-4 font-medium">{row.problem}</th>
+						<td class="p-4 text-muted">{row.prism}</td>
+						<td class="p-4 font-mono text-sm">{row.where}</td>
+					</tr>
+				))}
+			</tbody>
+		</table>
+	</div>
+	<dl class="md:hidden divide-y divide-rule border-y border-rule">
+		{agencyRows.map((row) => (
+			<div class="py-5">
+				<dt class="font-medium">{row.problem}</dt>
+				<dd class="mt-2 text-muted">{row.prism}</dd>
+				<dd class="mt-2 font-mono text-sm">{row.where}</dd>
+			</div>
+		))}
+	</dl>
+</Section>

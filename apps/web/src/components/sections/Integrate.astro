@@ -1,0 +1,18 @@
+---
+import Section from '../ui/Section.astro';
+import CodeTabs from '../ui/CodeTabs.astro';
+import { links } from '../../data/site';
+---
+
+<Section
+	id="integrate"
+	label="05 · Integrate"
+	title="Change a base URL, or add an MCP server."
+	intro="Examples assume a self-hosted gateway on localhost:8080. Use a gateway key scoped to the client you are working for."
+	class="bg-raised/60"
+>
+	<CodeTabs />
+	<p class="mt-5 text-muted">
+		Full setup, including keys and agents, is in the <a href={links.gettingStarted} target="_blank" rel="noopener noreferrer" class="link">getting started guide</a>.
+	</p>
+</Section>

@@ -1,0 +1,41 @@
+---
+import Section from '../ui/Section.astro';
+import Icon from '../ui/Icon.astro';
+import { shipped, inProgress } from '../../data/content';
+import { links } from '../../data/site';
+---
+
+<Section
+	id="status"
+	label="06 · Status"
+	title="What ships today, and what does not yet."
+	intro="Prism is at v0.4. Check what is missing before you install, so nothing surprises you later."
+>
+	<div class="grid gap-10 md:grid-cols-2">
+		<div>
+			<h3 class="font-semibold text-lg">Shipped</h3>
+			<ul class="mt-4 space-y-3">
+				{shipped.map((item) => (
+					<li class="flex gap-3">
+						<Icon name="check" class="h-5 w-5 shrink-0 mt-0.5 text-allow" />
+						<span>{item}</span>
+					</li>
+				))}
+			</ul>
+		</div>
+		<div>
+			<h3 class="font-semibold text-lg">Not yet</h3>
+			<ul class="mt-4 space-y-4">
+				{inProgress.map((row) => (
+					<li class="pl-4 border-l-2 border-dashed border-rule">
+						<span class="block">{row.item}</span>
+						<span class="block text-sm text-muted mt-0.5">{row.note}</span>
+					</li>
+				))}
+			</ul>
+		</div>
+	</div>
+	<p class="mt-8 text-muted">
+		Details in the <a href={links.changelog} target="_blank" rel="noopener noreferrer" class="link">changelog</a> and the <a href={links.roadmap} target="_blank" rel="noopener noreferrer" class="link">roadmap</a>.
+	</p>
+</Section>
