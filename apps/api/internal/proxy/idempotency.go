@@ -391,8 +391,19 @@ func SaveIdempotencyResult(c *gin.Context, store *IdempotencyStore) {
 	if gkID == "" || idemKey == "" {
 		return
 	}
-	bw, ok := c.Writer.(*bufferingResponseWriter)
-	if !ok || bw.written == 0 {
+	var bw *bufferingResponseWriter
+	for w := http.ResponseWriter(c.Writer); w != nil; {
+		if b, ok := w.(*bufferingResponseWriter); ok {
+			bw = b
+			break
+		}
+		unwrapper, ok := w.(interface{ Unwrap() http.ResponseWriter })
+		if !ok {
+			break
+		}
+		w = unwrapper.Unwrap()
+	}
+	if bw == nil || bw.written == 0 {
 		return
 	}
 	status := c.Writer.Status()

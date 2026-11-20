@@ -10,6 +10,23 @@ import (
 
 type ToolCallRecord = models.ToolCallRecord
 
+func extractToolCallMaps(raw interface{}) []map[string]interface{} {
+	switch arr := raw.(type) {
+	case []interface{}:
+		out := make([]map[string]interface{}, 0, len(arr))
+		for _, item := range arr {
+			if m, ok := item.(map[string]interface{}); ok {
+				out = append(out, m)
+			}
+		}
+		return out
+	case []map[string]interface{}:
+		return arr
+	default:
+		return nil
+	}
+}
+
 func ExtractToolCallsFromResponse(resp *ProviderResponse) []ToolCallRecord {
 	if resp == nil {
 		return nil
@@ -24,15 +41,7 @@ func ExtractToolCallsFromResponse(resp *ProviderResponse) []ToolCallRecord {
 		if !ok || raw == nil {
 			continue
 		}
-		arr, ok := raw.([]interface{})
-		if !ok {
-			continue
-		}
-		for _, item := range arr {
-			tc, ok := item.(map[string]interface{})
-			if !ok {
-				continue
-			}
+		for _, tc := range extractToolCallMaps(raw) {
 			fn, ok := tc["function"].(map[string]interface{})
 			if !ok {
 				continue

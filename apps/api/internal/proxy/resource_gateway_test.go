@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/roozylabs/prism/internal/models"
 	"github.com/stretchr/testify/assert"
@@ -26,6 +27,7 @@ func TestResourceGatewayRestSuccess(t *testing.T) {
 	t.Setenv("ALLOW_INTERNAL_SSRF", "true")
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, "GET", r.Method)
+		time.Sleep(15 * time.Millisecond)
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]interface{}{"name": "test", "id": "123"})
 	}))
@@ -43,6 +45,7 @@ func TestResourceGatewayRestSuccess(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, 200, result.StatusCode)
 	assert.Equal(t, "get_customer", result.Resource)
+	assert.Greater(t, result.LatencyMs, 0)
 }
 
 func TestResourceGatewayGraphqlSuccess(t *testing.T) {
@@ -162,4 +165,10 @@ func TestCountRows(t *testing.T) {
 	assert.Equal(t, 2, countRows(map[string]interface{}{"data": []interface{}{"a", "b"}}))
 	assert.Equal(t, 1, countRows(map[string]interface{}{"result": "ok"}))
 	assert.Equal(t, 0, countRows(""))
+}
+
+func TestEffectiveResourceTimeoutMs(t *testing.T) {
+	assert.Equal(t, defaultResourceTimeoutMs, effectiveTimeoutMs(0))
+	assert.Equal(t, defaultResourceTimeoutMs, effectiveTimeoutMs(-100))
+	assert.Equal(t, 2500, effectiveTimeoutMs(2500))
 }

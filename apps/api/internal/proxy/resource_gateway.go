@@ -115,7 +115,9 @@ func (g *ResourceGateway) executeRestBackend(ctx context.Context, b *models.Reso
 	}
 	setAuthHeader(req, b.AuthTokenEncrypted, b.AuthHeaderName, b.AuthHeaderPrefix, encKey)
 
-	data, status, err := doHTTP(ctx, req, time.Duration(b.TimeoutMs)*time.Millisecond)
+	start := time.Now()
+	data, status, err := doHTTP(ctx, req, time.Duration(effectiveTimeoutMs(b.TimeoutMs))*time.Millisecond)
+	latency := int(time.Since(start).Milliseconds())
 	if err != nil {
 		return nil, err
 	}
@@ -131,7 +133,7 @@ func (g *ResourceGateway) executeRestBackend(ctx context.Context, b *models.Reso
 		BackendType: b.BackendType,
 		StatusCode:  status,
 		Data:        parsed,
-		LatencyMs:   0,
+		LatencyMs:   latency,
 	}, nil
 }
 
@@ -158,7 +160,7 @@ func (g *ResourceGateway) executeGraphQLBackend(ctx context.Context, b *models.R
 	setAuthHeader(req, b.AuthTokenEncrypted, b.AuthHeaderName, b.AuthHeaderPrefix, encKey)
 
 	start := time.Now()
-	data, status, err := doHTTP(ctx, req, time.Duration(b.TimeoutMs)*time.Millisecond)
+	data, status, err := doHTTP(ctx, req, time.Duration(effectiveTimeoutMs(b.TimeoutMs))*time.Millisecond)
 	latency := int(time.Since(start).Milliseconds())
 	if err != nil {
 		return nil, err
@@ -202,7 +204,8 @@ func (g *ResourceGateway) executePostgresBackend(ctx context.Context, b *models.
 		return nil, fmt.Errorf("open pool: %w", err)
 	}
 
-	timeout := time.Duration(b.TimeoutMs) * time.Millisecond
+	timeoutMs := effectiveTimeoutMs(b.TimeoutMs)
+	timeout := time.Duration(timeoutMs) * time.Millisecond
 	queryCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
@@ -214,7 +217,7 @@ func (g *ResourceGateway) executePostgresBackend(ctx context.Context, b *models.
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	if _, err := tx.ExecContext(queryCtx, fmt.Sprintf("SET LOCAL statement_timeout = '%dms'", b.TimeoutMs)); err != nil {
+	if _, err := tx.ExecContext(queryCtx, fmt.Sprintf("SET LOCAL statement_timeout = '%dms'", timeoutMs)); err != nil {
 		return nil, fmt.Errorf("set statement_timeout: %w", err)
 	}
 
@@ -339,6 +342,15 @@ func setAuthHeader(req *http.Request, encryptedToken *string, headerName, header
 		headerName = "Authorization"
 	}
 	req.Header.Set(headerName, headerPrefix+token)
+}
+
+const defaultResourceTimeoutMs = 10000
+
+func effectiveTimeoutMs(ms int) int {
+	if ms <= 0 {
+		return defaultResourceTimeoutMs
+	}
+	return ms
 }
 
 func doHTTP(ctx context.Context, req *http.Request, timeout time.Duration) ([]byte, int, error) {

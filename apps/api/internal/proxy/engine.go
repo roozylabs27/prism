@@ -139,9 +139,9 @@ func NewEngine(router *Router, creds *repository.CredentialRepository, cooldown 
 		encKey:       encKey,
 		maxRetries:   maxRetries,
 		cooldownSecs: cooldownSecs,
-		client:       &http.Client{Transport: tr, Timeout: 15 * time.Minute},
+		client:       &http.Client{Transport: tr, Timeout: 15 * time.Minute, CheckRedirect: security.SafeCheckRedirect},
 
-		streamClient:         &http.Client{Transport: tr},
+		streamClient:         &http.Client{Transport: tr, CheckRedirect: security.SafeCheckRedirect},
 		streamKeepalive:      defaultStreamKeepalive,
 		streamIdleTimeout:    defaultStreamIdleTimeout,
 		streamAttemptTimeout: defaultStreamAttemptTimeout,
@@ -168,7 +168,7 @@ type ProxyRequest struct {
 	ToolChoice  interface{}              `json:"tool_choice,omitempty"`
 	Stream      bool                     `json:"stream"`
 	MaxTokens   int                      `json:"max_tokens,omitempty"`
-	Temperature float64                  `json:"temperature,omitempty"`
+	Temperature *float64                 `json:"temperature,omitempty"`
 	// RoutingPolicyID selects the caller's routing policy for prism-auto
 	// requests (the sandbox sets it from X-Routing-Policy). It is kept out
 	// of Extra so it never reaches a provider, and survives async jobs.
@@ -529,7 +529,7 @@ func (e *Engine) Proxy(c *gin.Context, req *ProxyRequest, gatewayKey *models.Gat
 
 		providerReq := &ProviderRequest{
 			Model:       targetModel,
-			Messages:    SanitizeMessagesForGoogle(req.Messages),
+			Messages:    req.Messages,
 			Tools:       req.Tools,
 			ToolChoice:  req.ToolChoice,
 			Stream:      req.Stream,
@@ -897,7 +897,7 @@ func (e *Engine) ProxyStream(c *gin.Context, req *ProxyRequest, gatewayKey *mode
 
 		providerReq := &ProviderRequest{
 			Model:       targetModel,
-			Messages:    SanitizeMessagesForGoogle(req.Messages),
+			Messages:    req.Messages,
 			Tools:       req.Tools,
 			ToolChoice:  req.ToolChoice,
 			Stream:      true,
@@ -931,9 +931,14 @@ func (e *Engine) ProxyStream(c *gin.Context, req *ProxyRequest, gatewayKey *mode
 
 		attemptStart := time.Now()
 		upstreamCalls++
+		canFailover := i < len(routes)-1 && upstreamCalls < e.maxAttempts()
 		// Reasoning models can take minutes before the first byte; keep the
-		// client's connection alive meanwhile.
-		stopHeaderPings := sse.pingWhileWaiting(route)
+		// client's connection alive only once failover candidates are exhausted
+		// so a failing primary route never flushes HTTP 200 / X-Prism-Model prematurely.
+		stopHeaderPings := func() {}
+		if !canFailover {
+			stopHeaderPings = sse.pingWhileWaiting(route)
+		}
 		httpResp, err := e.streamClient.Do(httpReq)
 		stopHeaderPings()
 		if err != nil {
@@ -1106,7 +1111,9 @@ func (e *Engine) ProxyStream(c *gin.Context, req *ProxyRequest, gatewayKey *mode
 				resetTimer(keepalive, e.streamKeepalive)
 				resetTimer(idle, e.streamIdleTimeout)
 			case <-keepalive.C:
-				sse.ping(route)
+				if !canFailover || forwardedAny {
+					sse.ping(route)
+				}
 				keepalive.Reset(e.streamKeepalive)
 				continue
 			case <-idle.C:
@@ -1208,6 +1215,8 @@ func (e *Engine) ProxyStream(c *gin.Context, req *ProxyRequest, gatewayKey *mode
 			if !forwardedAny {
 				return nil, ErrClientCanceled
 			}
+			streamInterrupted = true
+			c.Set("_stream_interrupted", true)
 			log.Printf("client disconnected mid-stream: %v", scanErr)
 		} else {
 			var attemptErr error

@@ -596,6 +596,7 @@ func main() {
 		rg.Use(proxy.IdempotencyMiddlewareWithPolicy(idemStore, cfg.RedisFailClosed))
 		rg.POST("/chat/completions", gatewayHandler.ChatCompletions)
 		rg.POST("/chat/completions/async", gatewayHandler.AsyncChatCompletions)
+		rg.POST("/messages", gatewayHandler.Messages)
 		rg.GET("/jobs/:jobId", gatewayHandler.GetJobStatus)
 		rg.GET("/models", gatewayHandler.Models)
 		rg.POST("/tools/:toolName/execute", toolGatewayHandler.ExecuteTool)

@@ -44,7 +44,6 @@ func (a *OpenCodeAdapter) detectAdapter(model, baseURL string) ProviderAdapter {
 func (a *OpenCodeAdapter) BuildRequest(baseURL, apiKey string, req *ProviderRequest) (*http.Request, error) {
 	a.baseURL = baseURL
 	reqCopy := *req
-	reqCopy.Messages = SanitizeMessagesForGoogle(req.Messages)
 	a.subAdapter = a.detectAdapter(reqCopy.Model, baseURL)
 	httpReq, err := a.subAdapter.BuildRequest(baseURL, apiKey, &reqCopy)
 	if err != nil {

@@ -12,7 +12,7 @@ type ProviderRequest struct {
 	ToolChoice  interface{}
 	Stream      bool
 	MaxTokens   int
-	Temperature float64
+	Temperature *float64
 	Extra       map[string]interface{}
 }
 

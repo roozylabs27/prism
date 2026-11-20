@@ -266,6 +266,38 @@ func SafeHTTPTransport(timeout time.Duration) *http.Transport {
 	}
 }
 
+func originKey(u *url.URL) string {
+	if u == nil {
+		return ""
+	}
+	return strings.ToLower(u.Scheme) + "://" + strings.ToLower(u.Host)
+}
+
+func stripSensitiveRedirectHeaders(req *http.Request, via []*http.Request) {
+	if req == nil || len(via) == 0 {
+		return
+	}
+	dst := originKey(req.URL)
+	if dst != originKey(via[0].URL) || dst != originKey(via[len(via)-1].URL) {
+		for _, h := range []string{"Authorization", "Proxy-Authorization", "X-Api-Key", "X-Goog-Api-Key", "Cookie"} {
+			req.Header.Del(h)
+		}
+	}
+}
+
+// SafeCheckRedirect enforces redirect hop limits, strips credentials when
+// crossing HTTP origins, and validates redirect destinations against SSRF rules.
+func SafeCheckRedirect(req *http.Request, via []*http.Request) error {
+	if len(via) >= 10 {
+		return errors.New("stopped after 10 redirects")
+	}
+	stripSensitiveRedirectHeaders(req, via)
+	if isSSRFBypassAllowed() {
+		return nil
+	}
+	return ValidateOutboundURL(req.URL.String())
+}
+
 // NewSafeHTTPClient returns an http.Client equipped with transport-level SSRF protection
 // and strict redirect checks to prevent redirect-based SSRF bypass.
 func NewSafeHTTPClient(timeout time.Duration) *http.Client {
@@ -274,17 +306,8 @@ func NewSafeHTTPClient(timeout time.Duration) *http.Client {
 	}
 
 	return &http.Client{
-		Timeout:   timeout,
-		Transport: SafeHTTPTransport(timeout),
-		CheckRedirect: func(req *http.Request, via []*http.Request) error {
-			if len(via) >= 10 {
-				return errors.New("stopped after 10 redirects")
-			}
-			if isSSRFBypassAllowed() {
-				return nil
-			}
-			// Re-validate redirect target URL
-			return ValidateOutboundURL(req.URL.String())
-		},
+		Timeout:       timeout,
+		Transport:     SafeHTTPTransport(timeout),
+		CheckRedirect: SafeCheckRedirect,
 	}
 }
