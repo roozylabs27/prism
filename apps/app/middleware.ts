@@ -53,6 +53,16 @@ export async function middleware(request: NextRequest) {
         cache: 'no-store',
       });
 
+      if (res.status === 401) {
+        // Session token expired or revoked: clear stale cookie so protected
+        // pages never get stuck in a loop and auth pages can sign in cleanly.
+        const out = !isAuthPage
+          ? NextResponse.redirect(new URL('/signin', request.url))
+          : NextResponse.next();
+        out.cookies.delete('auth_token');
+        return out;
+      }
+
       if (res.ok) {
         const data = await res.json();
         const isOnboarded = Boolean(data?.isOnboarded);

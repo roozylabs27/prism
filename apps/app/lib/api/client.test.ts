@@ -38,6 +38,7 @@ describe('api client', () => {
     Cookies.set('auth_token', 'tok_123');
     useTenantStore.getState().setSelectedOrg('org_1', 'Org One');
     useTenantStore.getState().setSelectedWorkspaceId('ws_1');
+    useTenantStore.getState().setSelectedProjectId('proj_1');
 
     await api.get('/gateway-keys');
 
@@ -45,7 +46,22 @@ describe('api client', () => {
     expect(seen[0].headers.Authorization).toBe('Bearer tok_123');
     expect(seen[0].headers['X-Prism-Org-ID']).toBe('org_1');
     expect(seen[0].headers['X-Prism-Workspace-ID']).toBe('ws_1');
+    expect(seen[0].headers['X-Prism-Project-ID']).toBe('proj_1');
     expect(seen[0].baseURL).toBe('/api');
+  });
+
+  it('clears workspace and project scope when switching organizations', () => {
+    useTenantStore.getState().setSelectedOrg('org_1', 'Org One');
+    useTenantStore.getState().setSelectedWorkspaceId('ws_1');
+    useTenantStore.getState().setSelectedProjectId('proj_1');
+
+    useTenantStore.getState().setSelectedOrg('org_2', 'Org Two');
+
+    expect(useTenantStore.getState().selectedOrgId).toBe('org_2');
+    expect(useTenantStore.getState().selectedWorkspaceId).toBeNull();
+    expect(useTenantStore.getState().selectedProjectId).toBeNull();
+    expect(localStorage.getItem('workspace_id')).toBeNull();
+    expect(localStorage.getItem('project_id')).toBeNull();
   });
 
   it('sends no auth or tenant headers when nothing is selected', async () => {

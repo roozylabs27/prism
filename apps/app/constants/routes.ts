@@ -33,6 +33,9 @@ export enum ApiEndpoints {
   LOGOUT = '/api/auth/logout',
   OAUTH_GOOGLE = '/api/auth/oauth/google',
   OAUTH_GITHUB = '/api/auth/oauth/github',
+  SANDBOX_CHAT_COMPLETIONS = '/api/sandbox/chat/completions',
+  SANDBOX_CHAT_COMPLETIONS_ASYNC = '/api/sandbox/chat/completions/async',
+  JOBS = '/jobs',
 }
 
 export enum CookieKeys {
