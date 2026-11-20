@@ -13,10 +13,11 @@ import { ErrorState } from '@/components/molecules/StateAlerts';
 import { Cpu, Send, RefreshCw, Box, Layers, Zap } from 'lucide-react';
 import { toast } from 'sonner';
 import { usePlaygroundStore } from '@/stores/usePlaygroundStore';
-import { useSimulateRoutingMutation } from '@/hooks/mutations/usePlaygroundMutations';
+import { useSimulateRoutingMutation, useReplayRoutingMutation } from '@/hooks/mutations/usePlaygroundMutations';
 import { useModelsListQuery } from '@/hooks/queries/useModelsListQuery';
 import { getErrorMessage } from '@/types/ui';
-import { ApiModel, ApiModelScoreDetail } from '@/lib/api';
+import { ApiModel, ApiModelScoreDetail, ApiRoutingReplayRes } from '@/lib/api';
+import { AppRoutes } from '@/constants/routes';
 
 export default function PlaygroundPage() {
   const {
@@ -31,9 +32,21 @@ export default function PlaygroundPage() {
   } = usePlaygroundStore();
 
   const [simulationError, setSimulationError] = useState<string | null>(null);
+  const [replayResult, setReplayResult] = useState<ApiRoutingReplayRes | null>(null);
   const { data: modelsData } = useModelsListQuery();
   const models: ApiModel[] = Array.isArray(modelsData) ? modelsData : (modelsData as unknown as { data?: ApiModel[] })?.data ?? [];
   const simulateMutation = useSimulateRoutingMutation();
+  const replayMutation = useReplayRoutingMutation();
+
+  const handleReplay = async () => {
+    try {
+      const res = await replayMutation.mutateAsync({ limit: 20 });
+      setReplayResult(res);
+      toast.success(`Replayed ${res.evaluatedCount} historical decisions (${res.changedCount} changed)`);
+    } catch (error: unknown) {
+      toast.error(`Replay failed: ${getErrorMessage(error)}`);
+    }
+  };
 
   const handleSimulate = async () => {
     try {
@@ -41,16 +54,22 @@ export default function PlaygroundPage() {
       setSimulationError(null);
       setDecisionDetails(null);
 
-      const decision = await simulateMutation.mutateAsync({ prompt });
+      const decision = await simulateMutation.mutateAsync({
+        prompt,
+        targetModel: model,
+      });
       const candidateList = decision.candidates || [];
       const topCand = candidateList[0];
+      const topScore = topCand ? (topCand.totalScore ?? topCand.score ?? 0) : decision.confidenceScore ?? 0;
+      const topLatency = topCand?.estimatedLatencyMs ?? decision.simulatedLatencyMs;
+      const topCost = topCand?.estimatedCostUSD ?? decision.simulatedCostUSD;
       setDecisionDetails({
         selectedModel: decision.selectedModel,
         provider: decision.selectedProvider,
-        routingPolicy: decision.strategy,
-        score: topCand ? `${Math.round((topCand.totalScore ?? 0) * 100)}%` : '100%',
-        latency: topCand ? `${topCand.estimatedLatencyMs}ms` : '-',
-        cost: topCand?.estimatedCostUSD != null ? `$${topCand.estimatedCostUSD.toFixed(4)}/1K` : '-',
+        routingPolicy: decision.strategy || decision.policyName || 'balanced',
+        score: topCand ? `${Math.round(topScore * 100)}%` : `${Math.round((decision.confidenceScore ?? 1) * 100)}%`,
+        latency: topLatency != null ? `${topLatency}ms` : '-',
+        cost: topCost != null ? `$${topCost.toFixed(4)}/1K` : '-',
         candidates: candidateList,
       });
 
@@ -124,10 +143,20 @@ export default function PlaygroundPage() {
               </Button>
 
               <Button variant="outline" asChild className="gap-2 text-xs">
-                <Link href="/sandbox">
+                <Link href={AppRoutes.SANDBOX}>
                   <Box className="h-4 w-4 text-primary" />
                   <span>Live Sandbox</span>
                 </Link>
+              </Button>
+
+              <Button
+                variant="outline"
+                className="gap-2 text-xs"
+                onClick={handleReplay}
+                disabled={replayMutation.isPending}
+              >
+                <RefreshCw className={`h-4 w-4 text-primary ${replayMutation.isPending ? 'animate-spin' : ''}`} />
+                <span>Replay Traffic</span>
               </Button>
             </div>
           </CardContent>
@@ -180,7 +209,7 @@ export default function PlaygroundPage() {
                         <div className="flex items-center gap-3">
                           <span className="text-emerald-700 dark:text-emerald-400 text-[10px]">${cand.estimatedCostUSD != null ? cand.estimatedCostUSD.toFixed(4) : '0'}/1K</span>
                           <Badge variant="outline" className="font-mono text-[10px]">
-                            {Math.round((cand.totalScore || 0) * 100)}%
+                            {Math.round(((cand.totalScore ?? cand.score) || 0) * 100)}%
                           </Badge>
                         </div>
                       </div>
@@ -207,6 +236,51 @@ export default function PlaygroundPage() {
           </CardContent>
         </Card>
       </div>
+
+      {replayResult && (
+        <Card className="mt-6">
+          <CardHeader>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <CardTitle className="text-sm font-semibold">
+                Historical Policy Replay ({replayResult.policyName})
+              </CardTitle>
+              <div className="flex items-center gap-3 font-mono text-xs">
+                <span>Evaluated: <strong>{replayResult.evaluatedCount}</strong></span>
+                <span>Changed: <strong>{replayResult.changedCount}</strong></span>
+                <span>
+                  Est. Cost Delta:{' '}
+                  <strong className={replayResult.estimatedCostDelta <= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400'}>
+                    {replayResult.estimatedCostDelta >= 0 ? '+' : ''}${replayResult.estimatedCostDelta.toFixed(4)}
+                  </strong>
+                </span>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            {replayResult.items.length === 0 ? (
+              <p className="text-xs text-muted-foreground">No historical routing decisions found to replay yet.</p>
+            ) : (
+              <div className="space-y-2">
+                {replayResult.items.map((item) => (
+                  <div key={item.requestId} className="flex flex-wrap items-center justify-between gap-2 rounded border border-border px-3 py-2 text-xs font-mono">
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate font-semibold">{item.promptPreview || item.requestId}</div>
+                      <div className="text-[11px] text-muted-foreground">
+                        {item.originalModel} -&gt; {item.simulatedModel}
+                        {item.originalStatusCode ? ` · HTTP ${item.originalStatusCode}` : ''}
+                        {item.originalLatencyMs != null ? ` · ${item.originalLatencyMs}ms` : ''}
+                      </div>
+                    </div>
+                    <Badge variant={item.changed ? 'violet' : 'outline'} className="text-[10px]">
+                      {item.changed ? 'Changed' : 'Unchanged'}
+                    </Badge>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
     </AppLayout>
   );
 }

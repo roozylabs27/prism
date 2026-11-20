@@ -35,9 +35,15 @@ export interface ApiRoutingDecision {
   policyId?: string;
   policyName?: string;
   strategy: string;
+  statusCode?: number;
   latencyMs: number;
+  ttftMs?: number;
+  retryCount?: number;
+  estimatedCost?: number;
+  actualCost?: number;
   costUSD: number;
   candidatesCount: number;
+  downgradeReason?: string;
   scoresBreakdown?: Record<string, unknown>;
   errorMessage?: string;
   createdAt: string;
@@ -47,6 +53,8 @@ export interface ApiRoutingSimulationReq {
   prompt: string;
   targetModel?: string;
   policyId?: string;
+  budgetStatus?: string;
+  customWeights?: Record<string, number>;
   weightLatency?: number;
   weightCost?: number;
   weightThroughput?: number;
@@ -75,12 +83,51 @@ export interface ApiModelScoreDetail {
 export interface ApiRoutingSimulationRes {
   selectedModel: string;
   selectedProvider: string;
+  policyName?: string;
   strategy: string;
+  taskType?: string;
+  complexity?: string;
   confidenceScore: number;
   simulatedLatencyMs: number;
   simulatedCostUSD: number;
   candidates: ApiModelScoreDetail[];
   reasoning: string;
+}
+
+export interface ApiRoutingReplayReq {
+  policyId?: string;
+  customWeights?: Record<string, number>;
+  budgetStatus?: string;
+  limit?: number;
+}
+
+export interface ApiRoutingReplayItem {
+  requestId: string;
+  promptPreview?: string;
+  taskType?: string;
+  complexity?: string;
+  originalModel: string;
+  originalProvider: string;
+  originalCost: number;
+  originalStatusCode?: number;
+  originalLatencyMs?: number;
+  originalError?: string;
+  simulatedModel: string;
+  simulatedProvider: string;
+  simulatedCost: number;
+  changed: boolean;
+  costDelta: number;
+}
+
+export interface ApiRoutingReplayRes {
+  policyName: string;
+  evaluatedCount: number;
+  changedCount: number;
+  changeRate: number;
+  historicalTotalCost: number;
+  simulatedTotalCost: number;
+  estimatedCostDelta: number;
+  items: ApiRoutingReplayItem[];
 }
 
 export interface ApiCostRecommendation {
