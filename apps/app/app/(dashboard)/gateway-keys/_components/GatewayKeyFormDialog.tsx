@@ -24,7 +24,7 @@ import {
   FormMessage,
 } from "@/components/molecules/Form";
 import { useCreateGatewayKey } from "@/hooks/queries/useGatewayKeysQuery";
-import type { ApiProvider } from "@/lib/api";
+import type { ApiAgent, ApiProvider } from "@/lib/api";
 import { toast } from "sonner";
 import { SecretReveal } from "@/components/molecules/SecretReveal";
 import { getErrorMessage } from "@/types/ui";
@@ -34,6 +34,7 @@ import { gatewayKeySchema, GatewayKeyFormValues } from "@/features/gateway-keys/
 const defaultValues: GatewayKeyFormValues = {
   name: "",
   providerId: "",
+  agentId: "",
   rateLimit: "100",
 };
 
@@ -41,12 +42,14 @@ interface GatewayKeyFormDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   providers?: ApiProvider[];
+  agents?: ApiAgent[];
 }
 
 export function GatewayKeyFormDialog({
   open,
   onOpenChange,
   providers,
+  agents,
 }: GatewayKeyFormDialogProps) {
   const createMutation = useCreateGatewayKey();
   // The API returns the secret only in the create response; it is shown here
@@ -80,6 +83,7 @@ export function GatewayKeyFormDialog({
         name: values.name.trim(),
         providerId: values.providerId,
         rateLimit: Number(values.rateLimit) || undefined,
+        ...(values.agentId?.trim() ? { agentId: values.agentId.trim() } : {}),
       },
       {
         onSuccess: (created) => {
@@ -161,6 +165,37 @@ export function GatewayKeyFormDialog({
                 </FormItem>
               )}
             />
+            {agents && agents.length > 0 && (
+              <FormField
+                control={form.control}
+                name="agentId"
+                render={({ field }) => (
+                  <FormItem className="space-y-2">
+                    <FormLabel>Bound Agent (Optional)</FormLabel>
+                    <FormControl>
+                      <Select
+                        value={field.value || "__none__"}
+                        onValueChange={(v) => field.onChange(v === "__none__" ? "" : v)}
+                        disabled={createMutation.isPending}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="No pinned agent" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="__none__">No pinned agent</SelectItem>
+                          {agents.map((ag) => (
+                            <SelectItem key={ag.id} value={ag.id}>
+                              {ag.displayName || ag.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            )}
             <FormField
               control={form.control}
               name="rateLimit"

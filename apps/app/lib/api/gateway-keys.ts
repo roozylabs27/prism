@@ -19,6 +19,7 @@ export type ApiCreatedGatewayKey = ApiGatewayKey & { key: string };
 export async function apiCreateGatewayKey(data: {
   name: string;
   providerId?: string;
+  agentId?: string;
   rateLimit?: number | string;
   budgetLimitMonthly?: number;
   allowedModels?: string[];

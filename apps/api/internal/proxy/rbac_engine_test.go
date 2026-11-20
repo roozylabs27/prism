@@ -91,3 +91,54 @@ func TestRBACEnginePrecedenceAndMatching(t *testing.T) {
 	assert.Equal(t, "p-deny", res.MatchedPolicy.ID)
 	assert.Contains(t, res.Reason, "access denied by policy \"Deny Payroll Access\"")
 }
+
+func TestMatchPattern_ExactAndOSIndependentGlobs(t *testing.T) {
+	// Substring leakage regression: exact pattern must NOT match superstrings
+	assert.True(t, matchPattern("gpt-4", "gpt-4"))
+	assert.True(t, matchPattern("gpt-4", "GPT-4"))
+	assert.False(t, matchPattern("gpt-4", "gpt-4o-mini"))
+	assert.False(t, matchPattern("gpt-4", "my-gpt-4"))
+	assert.False(t, matchPattern("gpt-4o", "gpt-4o-mini"))
+
+	// Wildcards work consistently including slash-delimited model slugs
+	assert.True(t, matchPattern("gpt-4*", "gpt-4"))
+	assert.True(t, matchPattern("gpt-4*", "gpt-4o-mini"))
+	assert.False(t, matchPattern("gpt-4*", "openai/gpt-4o"))
+	assert.True(t, matchPattern("openrouter/*", "openrouter/anthropic/claude-3.5"))
+	assert.True(t, matchPattern("*payroll*", "run/query_payroll/v1"))
+	assert.True(t, matchPattern("gpt-?", "gpt-4"))
+	assert.False(t, matchPattern("gpt-?", "gpt-4o"))
+	assert.False(t, matchPattern("gpt-4", ""))
+	assert.True(t, matchPattern("*", ""))
+
+	// Ensure unused sql import isn't needed if not referenced; wait - test Deny model exact match in Evaluate
+	policies := []models.GovernancePolicy{
+		{
+			ID:           "deny-gpt4",
+			Name:         "Deny legacy gpt-4",
+			Role:         "developer",
+			Effect:       "deny",
+			AgentPattern: "*",
+			ModelPattern: "gpt-4",
+			Priority:     1,
+			Enabled:      true,
+		},
+	}
+	engine := NewRBACEngine(&policyFinderMock{policies: policies})
+
+	denyRes, err := engine.Evaluate(context.Background(), "u1", models.RBACEvaluationRequest{
+		Role:      "developer",
+		AgentName: "coder",
+		ModelSlug: "gpt-4",
+	})
+	require.NoError(t, err)
+	assert.False(t, denyRes.Allowed)
+
+	allowRes, err := engine.Evaluate(context.Background(), "u1", models.RBACEvaluationRequest{
+		Role:      "developer",
+		AgentName: "coder",
+		ModelSlug: "gpt-4o-mini",
+	})
+	require.NoError(t, err)
+	assert.True(t, allowRes.Allowed)
+}

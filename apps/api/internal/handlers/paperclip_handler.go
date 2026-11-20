@@ -6,6 +6,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/roozylabs/prism/internal/httputil"
+	"github.com/roozylabs/prism/internal/middleware"
 	"github.com/roozylabs/prism/internal/models"
 	"github.com/roozylabs/prism/internal/proxy"
 	"github.com/roozylabs/prism/internal/repository"
@@ -71,7 +72,9 @@ func (h *PaperclipHandler) RegisterAgent(c *gin.Context) {
 func (h *PaperclipHandler) ChatCompletions(c *gin.Context) {
 	paperclipCtx := proxy.ExtractPaperclipContext(c)
 	if paperclipCtx != nil && paperclipCtx.AgentID != "" {
-		c.Set("agentID", paperclipCtx.AgentID)
+		if middleware.AgentFromContext(c) == nil {
+			c.Set("agentID", paperclipCtx.AgentID)
+		}
 		c.Header("X-Paperclip-Agent-ID", paperclipCtx.AgentID)
 		if paperclipCtx.TaskID != "" {
 			c.Header("X-Paperclip-Task-ID", paperclipCtx.TaskID)

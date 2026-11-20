@@ -5,6 +5,7 @@ export interface ApiGatewayKey {
   maskedKey?: string;
   apiKey?: string;
   providerId?: string;
+  agentId?: string;
   rateLimit: number;
   rateLimitWindow?: string;
   budgetLimitMonthly?: number;
