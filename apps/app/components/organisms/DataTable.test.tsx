@@ -32,7 +32,7 @@ describe('DataTable (client paging)', () => {
   afterEach(() => vi.useRealTimers());
 
   it('pages, searches and sorts the rows it is given', async () => {
-    const user = userEvent.setup();
+    const user = userEvent.setup({ delay: null });
     render(<DataTable dataSource={rows} columns={columns} rowKey="id" pageSize={10} />);
 
     expect(totalLine(25)).toBeInTheDocument();
@@ -74,7 +74,7 @@ describe('DataTable (client paging)', () => {
 describe('DataTable (server paging)', () => {
   it('reports the API totals and hands paging and search to the parent', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
-    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime, delay: null });
     const onPageChange = vi.fn();
     const onSearchChange = vi.fn();
     render(

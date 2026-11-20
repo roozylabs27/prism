@@ -39,16 +39,12 @@ export const SSEProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, []);
 
   useEffect(() => {
-    const token = Cookies.get(CookieKeys.AUTH_TOKEN);
-    if (!token) {
-      setIsConnected(false);
-      return;
-    }
-
     let eventSource: EventSource | null = null;
-    let reconnectTimeout: NodeJS.Timeout | null = null;
+    let reconnectTimeout: ReturnType<typeof setTimeout> | null = null;
+    let cancelled = false;
 
     const connect = () => {
+      if (cancelled) return;
       const currentToken = Cookies.get(CookieKeys.AUTH_TOKEN);
       if (!currentToken) {
         setIsConnected(false);
@@ -138,9 +134,10 @@ export const SSEProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
     };
 
-    connect();
+    reconnectTimeout = setTimeout(connect, 0);
 
     return () => {
+      cancelled = true;
       if (reconnectTimeout) clearTimeout(reconnectTimeout);
       if (eventSource) {
         eventSource.close();

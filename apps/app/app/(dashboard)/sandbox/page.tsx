@@ -607,7 +607,9 @@ export default function SandboxPage() {
               if (delta?.content) accumulatedContent += delta.content;
               if (delta?.reasoning_content) accumulatedReasoning += delta.reasoning_content;
               updateDisplay();
-            } catch {}
+            } catch {
+              /* ignore malformed trailing frame */
+            }
           }
         }
 

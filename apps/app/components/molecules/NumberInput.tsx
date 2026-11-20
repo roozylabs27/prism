@@ -40,20 +40,18 @@ function NumberInput({
   error,
   ...props
 }: NumberInputProps) {
-  const [draft, setDraft] = React.useState<string>(String(value));
-
-  React.useEffect(() => {
-    setDraft(String(value));
-  }, [value]);
+  const [editingDraft, setEditingDraft] = React.useState<string | null>(null);
+  const displayValue = editingDraft !== null ? editingDraft : String(value);
 
   const commit = (raw: string) => {
     const parsed = Number(raw);
     const next = Number.isFinite(parsed) ? clamp(parsed, min, max) : 0;
-    setDraft(String(next));
+    setEditingDraft(null);
     if (next !== value) onValueChange(next);
   };
 
   const stepBy = (delta: number) => {
+    setEditingDraft(null);
     const current = Number.isFinite(value) ? value : 0;
     onValueChange(clamp((isNaN(current) ? 0 : current) + delta * step, min, max));
   };
@@ -66,14 +64,14 @@ function NumberInput({
         min={min}
         max={max}
         step={step}
-        value={draft}
+        value={displayValue}
         disabled={disabled}
         error={error}
         aria-invalid={props['aria-invalid']}
         data-invalid={props['data-invalid']}
         placeholder={placeholder}
         onChange={(e) => {
-          setDraft(e.target.value);
+          setEditingDraft(e.target.value);
           const parsed = Number(e.target.value);
           if (e.target.value !== '' && Number.isFinite(parsed)) {
             onValueChange(clamp(parsed, min, max));
@@ -81,9 +79,9 @@ function NumberInput({
             onValueChange(0);
           }
         }}
-        onBlur={() => commit(draft)}
+        onBlur={(e) => commit(e.target.value)}
         onKeyDown={(e) => {
-          if (e.key === 'Enter') commit(draft);
+          if (e.key === 'Enter') commit(e.currentTarget.value);
         }}
         className="pr-16"
       />
