@@ -134,6 +134,7 @@ func main() {
 	workspaceRepo := repository.NewWorkspaceRepository(sqlDB)
 	pilotOutcomesRepo := repository.NewPilotOutcomesRepository(sqlDB)
 	outboxRepo := repository.NewOutboxRepository(sqlDB)
+	approvalRepo := repository.NewApprovalRepository(sqlDB)
 
 	// Services
 	authService := service.NewAuthService(userRepo, sessionRepo, accountRepo)
@@ -145,6 +146,8 @@ func main() {
 	cooldown := goredis.NewCooldownStore(rdb)
 	modelTelemetry := goredis.NewModelTelemetryStore(rdb)
 	budgetMgr := proxy.NewBudgetManager(budgetRepo)
+	budgetMgr.SetDistributedStore(goredis.NewBudgetReservationStore(rdb))
+	budgetMgr.SetFailClosed(cfg.RedisFailClosed)
 	healthStore := proxy.NewProviderHealthStore(requestLogRepo, 30*time.Second)
 	idemStore := proxy.NewIdempotencyStore(rdb)
 	router := proxy.NewRouter(modelRepo, providerRepo, credentialRepo, settingRepo, healthStore)
@@ -178,6 +181,7 @@ func main() {
 	pilotOutcomesHandler := handlers.NewPilotOutcomesHandler(pilotOutcomesRepo)
 	admissionCtrl := proxy.NewAdmissionController(rbacEngine, agentGovernance, proxy.NewCachedQuotaEvaluator(quotaRepo, proxy.DefaultQuotaCacheTTL), budgetMgr)
 	admissionCtrl.SetAgentSpendFinder(requestLogRepo)
+	admissionCtrl.SetStreamConcurrencyLimiter(cooldown, cfg.RedisFailClosed)
 	orchestrator := service.NewExecutionOrchestrator(engine, admissionCtrl, gatewayKeyRepo, requestLogRepo, eventPublisher, pricingRepo, auditRecorder)
 	orchestrator.SetBudgetManager(budgetMgr)
 	orchestrator.SetOutbox(outboxRepo)
@@ -255,17 +259,20 @@ func main() {
 	budgetStatusHandler := handlers.NewBudgetStatusHandler(budgetMgr)
 	routingDecisionHandler := handlers.NewRoutingDecisionHandler(decisionRepo)
 	simulateHandler := handlers.NewSimulateHandler(modelRepo, providerRepo, credentialRepo, routingPolicyRepo, modelTelemetry, healthStore)
+	simulateHandler.SetRoutingDependencies(routingRuleRepo, cooldown, agentRepo, decisionRepo)
 	finopsHandler := handlers.NewFinOpsHandler(requestLogRepo, budgetRepo, modelRepo, settingRepo, anomalyRepo)
 	finopsAnomaliesHandler := handlers.NewFinOpsAnomaliesHandler(anomalyRepo, budgetAlertRepo)
 	toolHandler := handlers.NewToolHandler(toolRepo, toolBackendRepo, toolGateway, cfg.EncryptionKey)
 	toolGatewayHandler := handlers.NewToolGatewayHandler(toolGateway, toolInvocationRepo, eventPublisher, cfg.EncryptionKey)
 	toolGatewayHandler.SetGovernance(admissionCtrl, auditRecorder, rbacRepo)
+	toolGatewayHandler.SetApprovals(approvalRepo, toolRepo)
 	resourceHandler := handlers.NewResourceHandler(resourceRepo, resourceBackendRepo, resourceGateway, cfg.EncryptionKey)
 	resourceHandler.SetPostgresBackends(cfg.ResourcePostgresEnabled)
 	resourceGatewayHandler := handlers.NewResourceGatewayHandler(resourceGateway, toolInvocationRepo, eventPublisher, cfg.EncryptionKey)
 	resourceGatewayHandler.SetGovernance(admissionCtrl, auditRecorder, rbacRepo)
 	mcpHandler := handlers.NewMCPHandler(mcpServerRepo, mcpToolRepo, mcpGateway, mcpInvocationRepo, agentRepo, cfg.EncryptionKey)
 	mcpServerHandler := handlers.NewMCPServerHandler(mcpServerRepo, mcpToolRepo, mcpGateway, orchestrator, admissionCtrl, auditRecorder, rbacRepo, routingPolicyRepo, cfg.EncryptionKey)
+	mcpServerHandler.SetApprovals(approvalRepo, eventPublisher)
 	mcpRegistryHandler := handlers.NewMCPRegistryHandler(mcpRegistryRepo)
 	agentHandler := handlers.NewAgentHandler(agentRepo, agentGovernance, requestLogRepo)
 	agentTemplateHandler := handlers.NewAgentTemplateHandler(agentTemplateRepo, agentRepo)
@@ -291,6 +298,7 @@ func main() {
 	governancePolicyHandler.SetAuditLog(adminAudit)
 	settingsHandler.SetAuditLog(adminAudit)
 	budgetHandler.SetAuditLog(adminAudit)
+	approvalHandler := handlers.NewApprovalHandler(approvalRepo, eventPublisher, adminAudit)
 	userPermissionsHandler := handlers.NewUserPermissionsHandler(rbacRepo, userRepo)
 	onboardingHandler := handlers.NewOnboardingHandler(db.DB, userRepo, gatewayKeyRepo)
 	oauthHandler := handlers.NewOAuthHandler(authService)
@@ -511,6 +519,8 @@ func main() {
 			protected.GET("/routing-decisions", requirePermission("routing:read"), routingDecisionHandler.List)
 			protected.POST("/routing/simulate", requirePermission("routing:read"), simulateHandler.Simulate)
 			protected.POST("/routing-simulate", requirePermission("routing:read"), simulateHandler.Simulate)
+			protected.POST("/routing/replay", requirePermission("routing:read"), simulateHandler.Replay)
+			protected.POST("/routing-replay", requirePermission("routing:read"), simulateHandler.Replay)
 
 			// Budgets
 			protected.GET("/budgets", requirePermission("budget:read"), budgetHandler.List)
@@ -573,6 +583,12 @@ func main() {
 			protected.DELETE("/governance/policies/:id", requirePermission("governance:delete"), governancePolicyHandler.Delete)
 			protected.POST("/governance/evaluate", requirePermission("governance:evaluate"), governancePolicyHandler.Evaluate)
 
+			// Human-in-the-Loop Approvals
+			protected.GET("/approvals", requirePermission("governance:read"), approvalHandler.List)
+			protected.GET("/approvals/:id", requirePermission("governance:read"), approvalHandler.Get)
+			protected.POST("/approvals/:id/approve", requirePermission("governance:update"), approvalHandler.Approve)
+			protected.POST("/approvals/:id/deny", requirePermission("governance:update"), approvalHandler.Deny)
+
 			// End-to-End AI Audit Trail
 			protected.GET("/audit-trail", requirePermission("audit:read"), auditTrailHandler.List)
 			protected.GET("/audit-trail/logs", requirePermission("audit:read"), auditTrailHandler.ListLogs)
@@ -602,6 +618,7 @@ func main() {
 		rg.POST("/tools/:toolName/execute", toolGatewayHandler.ExecuteTool)
 		rg.POST("/resources/:resourceName/query", resourceGatewayHandler.ExecuteQuery)
 		rg.POST("/mcp", mcpServerHandler.Handle)
+		rg.GET("/approvals/:approvalId", approvalHandler.GetForGateway)
 		// Registering creates or changes an agent of the key's owner, so the
 		// owner needs agent:create like in the dashboard.
 		rg.POST("/adapters/paperclip/agent/register", middleware.GatewayKeyOwner(), middleware.RequirePermission(authzEngine, "agent:create"), paperclipHandler.RegisterAgent)

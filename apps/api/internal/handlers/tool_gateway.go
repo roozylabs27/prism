@@ -2,8 +2,8 @@ package handlers
 
 import (
 	"context"
-	"encoding/json"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -21,6 +21,10 @@ type toolGatewayExecutor interface {
 	Execute(ctx context.Context, userID, toolName string, args map[string]interface{}, encKey string) (*proxy.ToolExecutionResult, error)
 }
 
+type toolDefinitionFinder interface {
+	FindByUserAndName(ctx context.Context, userID, name string) (*models.Tool, error)
+}
+
 type ToolGatewayHandler struct {
 	gateway       toolGatewayExecutor
 	toolInv       *repository.ToolInvocationRepository
@@ -29,6 +33,8 @@ type ToolGatewayHandler struct {
 	admission     *proxy.AdmissionController
 	auditRecorder *proxy.AuditRecorder
 	roleResolver  MemberRoleResolver
+	approvals     approvalStore
+	tools         toolDefinitionFinder
 }
 
 func NewToolGatewayHandler(gw *proxy.ToolGateway, toolInv *repository.ToolInvocationRepository, eventPub *goredis.EventPublisher, encKey string) *ToolGatewayHandler {
@@ -51,8 +57,18 @@ func (h *ToolGatewayHandler) SetGovernance(admission *proxy.AdmissionController,
 	h.roleResolver = roleResolver
 }
 
+// SetApprovals wires persistent HITL approval storage and tool require_approval lookup.
+func (h *ToolGatewayHandler) SetApprovals(approvals approvalStore, tools toolDefinitionFinder) {
+	if h == nil {
+		return
+	}
+	h.approvals = approvals
+	h.tools = tools
+}
+
 type ExecuteToolRequest struct {
-	Args map[string]interface{} `json:"args" binding:"required"`
+	Args       map[string]interface{} `json:"args" binding:"required"`
+	ApprovalID string                 `json:"approvalId"`
 }
 
 func (h *ToolGatewayHandler) ExecuteTool(c *gin.Context) {
@@ -85,10 +101,26 @@ func (h *ToolGatewayHandler) ExecuteTool(c *gin.Context) {
 		userRole = resolvedRole
 	}
 
+	var req ExecuteToolRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		httputil.RespondBadRequest(c, "Invalid request payload", err, "INVALID_REQUEST_BODY")
+		return
+	}
+
+	argsJSON, argsHash := repository.HashToolArguments(req.Args)
+	approvalID := strings.TrimSpace(c.GetHeader("X-Prism-Approval-ID"))
+	if approvalID == "" {
+		approvalID = strings.TrimSpace(req.ApprovalID)
+	}
+
 	executionID := uuid.New().String()
+	tenantScopedCtx := middleware.ContextWithTenant(c)
+
+	var approvalRequired bool
+	var approvalPolicyID, approvalPolicyName, approvalReason string
 
 	if h.admission != nil {
-		admRes, admErr := h.admission.Evaluate(middleware.ContextWithTenant(c), proxy.AdmissionRequest{
+		admRes, admErr := h.admission.Evaluate(tenantScopedCtx, proxy.AdmissionRequest{
 			UserID:    gatewayKey.UserID,
 			Role:      userRole,
 			AgentID:   agentID,
@@ -102,37 +134,90 @@ func (h *ToolGatewayHandler) ExecuteTool(c *gin.Context) {
 			return
 		}
 		if admRes.Decision == proxy.AdmissionDeny {
-			h.recordAudit(middleware.ContextWithTenant(c), executionID, gatewayKey, tenantCtx.OrgID, agentID, agentName, userRole, toolName, admRes.HTTPStatus, 0, "denied", admRes.Reason)
+			h.recordAudit(tenantScopedCtx, executionID, gatewayKey, tenantCtx.OrgID, agentID, agentName, userRole, toolName, admRes.HTTPStatus, 0, "denied", admRes.Reason)
 			utils.RespondWithError(c, admRes.HTTPStatus, admRes.ErrorCode, admRes.Reason, "FORBIDDEN", admRes.PolicyID, admRes.PolicyName)
 			return
 		}
+		if admRes.Decision == proxy.AdmissionRequireApproval {
+			approvalRequired = true
+			approvalPolicyID = admRes.PolicyID
+			approvalPolicyName = admRes.PolicyName
+			approvalReason = admRes.Reason
+		}
 	} else if agent != nil {
 		if res := proxy.CheckAgentToolAccess(agent, toolName); !res.ToolAllowed {
-			h.recordAudit(middleware.ContextWithTenant(c), executionID, gatewayKey, tenantCtx.OrgID, agentID, agentName, userRole, toolName, http.StatusForbidden, 0, "denied", res.Reason)
+			h.recordAudit(tenantScopedCtx, executionID, gatewayKey, tenantCtx.OrgID, agentID, agentName, userRole, toolName, http.StatusForbidden, 0, "denied", res.Reason)
 			httputil.RespondForbidden(c, res.Reason, nil, "TOOL_PERMISSION_DENIED")
 			return
 		}
 	}
 
-	var req ExecuteToolRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		httputil.RespondBadRequest(c, "Invalid request payload", err, "INVALID_REQUEST_BODY")
+	if !approvalRequired && h.tools != nil {
+		if toolDef, err := h.tools.FindByUserAndName(tenantScopedCtx, gatewayKey.UserID, toolName); err == nil && toolDef != nil && toolDef.RequireApproval {
+			approvalRequired = true
+			approvalReason = "tool requires human approval before execution"
+		}
+	}
+
+	if approvalID != "" {
+		if h.approvals == nil {
+			httputil.RespondForbidden(c, "Approval verification store is unavailable", nil, "APPROVAL_STORE_UNAVAILABLE")
+			return
+		}
+		if _, err := h.approvals.VerifyAndConsume(tenantScopedCtx, approvalID, gatewayKey.UserID, toolName, "", argsHash); err != nil {
+			h.recordAudit(tenantScopedCtx, executionID, gatewayKey, tenantCtx.OrgID, agentID, agentName, userRole, toolName, http.StatusForbidden, 0, "denied", err.Error())
+			httputil.RespondForbidden(c, "Approval request is not valid, approved, matching arguments, or unexpired", err, "APPROVAL_INVALID")
+			return
+		}
+	} else if approvalRequired {
+		if h.approvals == nil {
+			httputil.RespondForbidden(c, "Approval workflow unavailable", nil, "APPROVAL_WORKFLOW_UNAVAILABLE")
+			return
+		}
+		approval := &models.ApprovalRequest{
+			OrgID:         tenantCtx.OrgID,
+			UserID:        gatewayKey.UserID,
+			AgentID:       agentID,
+			AgentName:     agentName,
+			ToolName:      toolName,
+			ArgumentsJSON: argsJSON,
+			ArgumentsHash: argsHash,
+			PolicyID:      approvalPolicyID,
+			PolicyName:    approvalPolicyName,
+			Reason:        approvalReason,
+			Status:        models.ApprovalStatusPending,
+		}
+		if err := h.approvals.Create(tenantScopedCtx, approval); err != nil {
+			httputil.RespondInternalError(c, "Failed to create approval request", err, "APPROVAL_CREATE_FAILED")
+			return
+		}
+		notifyApprovalRequired(c.Request.Context(), h.eventPub, approval)
+		h.recordAudit(tenantScopedCtx, executionID, gatewayKey, tenantCtx.OrgID, agentID, agentName, userRole, toolName, http.StatusAccepted, 0, "approval_required", approval.Reason)
+		c.JSON(http.StatusAccepted, gin.H{
+			"status":     "approval_required",
+			"code":       "APPROVAL_REQUIRED",
+			"approvalId": approval.ID,
+			"expiresAt":  approval.ExpiresAt,
+			"pollUrl":    "/v1/approvals/" + approval.ID,
+			"policyId":   approval.PolicyID,
+			"policyName": approval.PolicyName,
+			"reason":     approval.Reason,
+		})
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(middleware.ContextWithTenant(c), 60*time.Second)
+	ctx, cancel := context.WithTimeout(tenantScopedCtx, 60*time.Second)
 	defer cancel()
 
 	result, err := h.gateway.Execute(ctx, gatewayKey.UserID, toolName, req.Args, h.encKey)
 	if err != nil {
-		h.recordAudit(middleware.ContextWithTenant(c), executionID, gatewayKey, tenantCtx.OrgID, agentID, agentName, userRole, toolName, http.StatusBadGateway, 0, "error", err.Error())
+		h.recordAudit(tenantScopedCtx, executionID, gatewayKey, tenantCtx.OrgID, agentID, agentName, userRole, toolName, http.StatusBadGateway, 0, "error", err.Error())
 		httputil.RespondError(c, http.StatusBadGateway, "Tool execution failed: "+err.Error(), err, "TOOL_EXECUTION_FAILED")
 		return
 	}
 
-	argsJSON, _ := json.Marshal(req.Args)
 	if h.toolInv != nil {
-		_ = h.toolInv.CreateBatch(middleware.ContextWithTenant(c), executionID, []models.ToolCallRecord{
+		_ = h.toolInv.CreateBatch(tenantScopedCtx, executionID, []models.ToolCallRecord{
 			{Name: toolName, Arguments: argsJSON},
 		})
 	}
@@ -147,7 +232,7 @@ func (h *ToolGatewayHandler) ExecuteTool(c *gin.Context) {
 		})
 	}
 
-	h.recordAudit(middleware.ContextWithTenant(c), executionID, gatewayKey, tenantCtx.OrgID, agentID, agentName, userRole, toolName, result.StatusCode, result.LatencyMs, "compliant", string(argsJSON))
+	h.recordAudit(tenantScopedCtx, executionID, gatewayKey, tenantCtx.OrgID, agentID, agentName, userRole, toolName, result.StatusCode, result.LatencyMs, "compliant", string(argsJSON))
 	c.JSON(http.StatusOK, result)
 }
 

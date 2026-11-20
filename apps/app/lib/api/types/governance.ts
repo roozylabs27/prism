@@ -7,7 +7,7 @@ export interface ApiGovernancePolicy {
   enforcementLevel?: 'enforce' | 'audit_only' | 'disabled';
   rulesConfig?: Record<string, unknown>;
   role?: string;
-  effect?: 'allow' | 'deny';
+  effect?: 'allow' | 'deny' | 'require_approval';
   agentPattern?: string;
   modelPattern?: string;
   toolPattern?: string;
@@ -26,7 +26,7 @@ export interface ApiCreateGovernancePolicyRequest {
   enforcementLevel?: 'enforce' | 'audit_only' | 'disabled';
   rulesConfig?: Record<string, unknown>;
   role?: string;
-  effect?: 'allow' | 'deny';
+  effect?: 'allow' | 'deny' | 'require_approval';
   agentPattern?: string;
   modelPattern?: string;
   toolPattern?: string;

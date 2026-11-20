@@ -30,13 +30,13 @@ func validateBudget(b *models.Budget) error {
 }
 
 // normalizeEffect accepts a governance effect in any case and spacing and
-// returns "allow" or "deny"; an empty effect stays empty (the store
-// defaults it). "Deny " used to be stored as is and never matched.
+// returns "allow", "deny", or "require_approval"; an empty effect stays empty
+// (the store defaults it).
 func normalizeEffect(effect string) (string, error) {
 	e := strings.ToLower(strings.TrimSpace(effect))
 	switch e {
-	case "", "allow", "deny":
+	case "", "allow", "deny", "require_approval":
 		return e, nil
 	}
-	return "", fmt.Errorf(`effect must be "allow" or "deny", got %q`, effect)
+	return "", fmt.Errorf(`effect must be "allow", "deny", or "require_approval", got %q`, effect)
 }

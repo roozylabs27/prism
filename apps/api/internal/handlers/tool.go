@@ -58,20 +58,22 @@ type BackendRequest struct {
 }
 
 type CreateToolRequest struct {
-	Name        string           `json:"name" binding:"required"`
-	DisplayName string           `json:"displayName"`
-	Description string           `json:"description"`
-	InputSchema json.RawMessage  `json:"inputSchema"`
-	Enabled     *bool            `json:"enabled"`
-	Backends    []BackendRequest `json:"backends"`
+	Name            string           `json:"name" binding:"required"`
+	DisplayName     string           `json:"displayName"`
+	Description     string           `json:"description"`
+	InputSchema     json.RawMessage  `json:"inputSchema"`
+	Enabled         *bool            `json:"enabled"`
+	RequireApproval *bool            `json:"requireApproval"`
+	Backends        []BackendRequest `json:"backends"`
 }
 
 type UpdateToolRequest struct {
-	DisplayName *string           `json:"displayName"`
-	Description *string           `json:"description"`
-	InputSchema json.RawMessage   `json:"inputSchema"`
-	Enabled     *bool             `json:"enabled"`
-	Backends    *[]BackendRequest `json:"backends"`
+	DisplayName     *string           `json:"displayName"`
+	Description     *string           `json:"description"`
+	InputSchema     json.RawMessage   `json:"inputSchema"`
+	Enabled         *bool             `json:"enabled"`
+	RequireApproval *bool             `json:"requireApproval"`
+	Backends        *[]BackendRequest `json:"backends"`
 }
 
 func (h *ToolHandler) List(c *gin.Context) {
@@ -113,14 +115,19 @@ func (h *ToolHandler) Create(c *gin.Context) {
 	if req.Enabled != nil {
 		enabled = *req.Enabled
 	}
+	requireApproval := false
+	if req.RequireApproval != nil {
+		requireApproval = *req.RequireApproval
+	}
 
 	tool := &models.Tool{
-		UserID:      userID,
-		Name:        req.Name,
-		DisplayName: req.DisplayName,
-		Description: req.Description,
-		InputSchema: schema,
-		Enabled:     enabled,
+		UserID:          userID,
+		Name:            req.Name,
+		DisplayName:     req.DisplayName,
+		Description:     req.Description,
+		InputSchema:     schema,
+		Enabled:         enabled,
+		RequireApproval: requireApproval,
 	}
 
 	var backends []models.ToolBackend
@@ -202,6 +209,9 @@ func (h *ToolHandler) Update(c *gin.Context) {
 	}
 	if req.Enabled != nil {
 		existing.Enabled = *req.Enabled
+	}
+	if req.RequireApproval != nil {
+		existing.RequireApproval = *req.RequireApproval
 	}
 	if err := h.tools.Update(middleware.ContextWithTenant(c), existing); err != nil {
 		httputil.RespondStoreError(c, err, "Tool", "TOOL_UPDATE")

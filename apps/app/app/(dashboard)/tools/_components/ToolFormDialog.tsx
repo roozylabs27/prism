@@ -52,6 +52,7 @@ const defaultValues: ToolFormValues = {
   displayName: "",
   description: "",
   enabled: true,
+  requireApproval: false,
   inputSchema: "{}",
   backends: [],
 };
@@ -85,6 +86,7 @@ export function ToolFormDialog({
   });
 
   const enabled = watch("enabled");
+  const requireApproval = watch("requireApproval");
 
   useEffect(() => {
     if (!open) return;
@@ -98,6 +100,7 @@ export function ToolFormDialog({
         displayName: detail.tool?.displayName ?? detail.displayName ?? editingTool.displayName,
         description: detail.tool?.description ?? detail.description ?? editingTool.description,
         enabled: detail.tool?.enabled ?? detail.enabled ?? editingTool.enabled,
+        requireApproval: detail.tool?.requireApproval ?? detail.requireApproval ?? editingTool.requireApproval ?? false,
         inputSchema: formatSchemaJSON(detail.tool?.inputSchema ?? detail.inputSchema ?? editingTool.inputSchema),
         backends: (detail.backends || []).map((b) => ({
           id: b.id,
@@ -114,6 +117,7 @@ export function ToolFormDialog({
         displayName: editingTool.displayName,
         description: editingTool.description,
         enabled: editingTool.enabled,
+        requireApproval: editingTool.requireApproval ?? false,
         inputSchema: formatSchemaJSON(editingTool.inputSchema),
         backends: [],
       });
@@ -147,6 +151,7 @@ export function ToolFormDialog({
       displayName: values.displayName.trim() || values.name.trim(),
       description: values.description.trim(),
       enabled: values.enabled,
+      requireApproval: values.requireApproval,
       inputSchema: parsedSchema,
       backends,
     };
@@ -405,6 +410,26 @@ export function ToolFormDialog({
                   id="tool-enabled"
                   checked={enabled}
                   onCheckedChange={(val) => form.setValue("enabled", val)}
+                  disabled={isSubmitting || detailLoading}
+                />
+              </div>
+
+              <div className="flex items-center justify-between p-3 rounded border border-border bg-card">
+                <div className="space-y-0.5">
+                  <Label
+                    htmlFor="tool-require-approval"
+                    className="text-xs font-semibold cursor-pointer"
+                  >
+                    Require Human Approval
+                  </Label>
+                  <p className="text-[11px] text-muted-foreground">
+                    Pause agent executions with 202 APPROVAL_REQUIRED until approved in Approvals Inbox.
+                  </p>
+                </div>
+                <Switch
+                  id="tool-require-approval"
+                  checked={requireApproval}
+                  onCheckedChange={(val) => form.setValue("requireApproval", val)}
                   disabled={isSubmitting || detailLoading}
                 />
               </div>

@@ -15,6 +15,7 @@ export enum AppRoutes {
   MCP = '/mcp',
   AGENTS = '/agents',
   GOVERNANCE = '/governance',
+  APPROVALS = '/approvals',
   AUDIT_TRAIL = '/audit-trail',
   LOGS = '/logs',
   BUDGETS = '/budgets',

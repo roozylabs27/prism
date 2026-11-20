@@ -12,5 +12,6 @@ export * from './resource';
 export * from './mcp';
 export * from './agent';
 export * from './governance';
+export * from './approval';
 export * from './audit';
 export * from './billing';

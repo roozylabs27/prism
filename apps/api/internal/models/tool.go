@@ -13,9 +13,10 @@ type Tool struct {
 	Name        string          `json:"name" db:"name"`
 	DisplayName string          `json:"displayName" db:"display_name"`
 	Description string          `json:"description" db:"description"`
-	InputSchema json.RawMessage `json:"inputSchema" db:"input_schema"`
-	Enabled     bool            `json:"enabled" db:"enabled"`
-	CreatedAt   time.Time       `json:"createdAt" db:"created_at"`
+	InputSchema     json.RawMessage `json:"inputSchema" db:"input_schema"`
+	Enabled         bool            `json:"enabled" db:"enabled"`
+	RequireApproval bool            `json:"requireApproval" db:"require_approval"`
+	CreatedAt       time.Time       `json:"createdAt" db:"created_at"`
 	UpdatedAt   time.Time       `json:"updatedAt" db:"updated_at"`
 }
 

@@ -21,6 +21,7 @@ export const toolSchema = z.object({
   displayName: z.string().default(''),
   description: z.string().default(''),
   enabled: z.boolean().default(true),
+  requireApproval: z.boolean().default(false),
   inputSchema: z
     .string()
     .default('{}')
