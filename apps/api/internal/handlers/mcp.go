@@ -130,8 +130,12 @@ func (h *MCPHandler) toEdit(srv *models.MCPServer) (*MCPServerEdit, error) {
 	if err != nil {
 		return nil, err
 	}
+	hasAuthHeader := false
 	masked := make(map[string]string, len(headers))
 	for k, v := range headers {
+		if strings.EqualFold(strings.TrimSpace(k), "Authorization") && strings.TrimSpace(v) != "" {
+			hasAuthHeader = true
+		}
 		if isSensitiveHeaderKey(k) {
 			masked[k] = maskHeaderValue(k, v)
 		} else {
@@ -147,7 +151,7 @@ func (h *MCPHandler) toEdit(srv *models.MCPServer) (*MCPServerEdit, error) {
 		TransportType: srv.TransportType,
 		EndpointURL:   srv.EndpointURL,
 		Headers:       masked,
-		HasAuthToken:  srv.AuthTokenEncrypted != nil,
+		HasAuthToken:  srv.AuthTokenEncrypted != nil || hasAuthHeader,
 		Command:       srv.Command,
 		Args:          srv.Args,
 		Env:           srv.Env,
@@ -179,6 +183,10 @@ func (h *MCPHandler) buildConfigHeaders(req CreateMCPServerRequest) (*string, er
 	return h.buildMergedConfigHeaders(nil, req)
 }
 
+func isMaskedSecret(val string) bool {
+	return strings.Contains(val, "••••") || strings.Contains(val, "\u2022\u2022\u2022\u2022")
+}
+
 func (h *MCPHandler) buildMergedConfigHeaders(existing *models.MCPServer, req CreateMCPServerRequest) (*string, error) {
 	prevHeaders := map[string]string{}
 	if existing != nil {
@@ -188,6 +196,10 @@ func (h *MCPHandler) buildMergedConfigHeaders(existing *models.MCPServer, req Cr
 	}
 
 	headers := map[string]string{}
+	if prevAuth, hasPrevAuth := lookupHeaderCaseInsensitive(prevHeaders, "Authorization"); hasPrevAuth && strings.TrimSpace(prevAuth) != "" {
+		// Keep prior Authorization Bearer secret on edit unless replaced with a non-masked value.
+		headers["Authorization"] = prevAuth
+	}
 	for k, v := range req.Headers {
 		kClean := strings.TrimSpace(k)
 		vClean := strings.TrimSpace(v)
@@ -195,18 +207,24 @@ func (h *MCPHandler) buildMergedConfigHeaders(existing *models.MCPServer, req Cr
 			continue
 		}
 		if prevVal, hasPrev := lookupHeaderCaseInsensitive(prevHeaders, kClean); hasPrev && isSensitiveHeaderKey(kClean) {
-			if strings.Contains(vClean, "••••") || vClean == maskHeaderValue(kClean, prevVal) {
+			if isMaskedSecret(vClean) || vClean == maskHeaderValue(kClean, prevVal) {
 				headers[kClean] = prevVal
 				continue
 			}
 		}
 		if strings.EqualFold(kClean, "Authorization") {
+			if isMaskedSecret(vClean) {
+				continue
+			}
 			vClean = cleanAuthorizationHeader(vClean)
+			if vClean == "" {
+				continue
+			}
 		}
 		headers[kClean] = vClean
 	}
 
-	if req.AuthToken != "" {
+	if req.AuthToken != "" && !isMaskedSecret(req.AuthToken) {
 		token := cleanToken(req.AuthToken)
 		if token != "" {
 			headers["Authorization"] = "Bearer " + token
@@ -357,6 +375,21 @@ func (h *MCPHandler) Create(c *gin.Context) {
 	c.JSON(http.StatusCreated, st)
 }
 
+type UpdateMCPServerRequest struct {
+	Name          *string           `json:"name"`
+	DisplayName   *string           `json:"displayName"`
+	Description   *string           `json:"description"`
+	Type          *string           `json:"type"`
+	TransportType *string           `json:"transportType"`
+	EndpointURL   *string           `json:"endpointUrl"`
+	AuthToken     *string           `json:"authToken"`
+	Headers       map[string]string `json:"headers"`
+	Command       *string           `json:"command"`
+	Args          []string          `json:"args"`
+	Env           map[string]string `json:"env"`
+	Enabled       *bool             `json:"enabled"`
+}
+
 func (h *MCPHandler) Update(c *gin.Context) {
 	userID := c.GetString("userId")
 	id := c.Param("id")
@@ -366,25 +399,29 @@ func (h *MCPHandler) Update(c *gin.Context) {
 		return
 	}
 
-	var req CreateMCPServerRequest
+	var req UpdateMCPServerRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		httputil.RespondBadRequest(c, "Invalid request payload", err, "INVALID_REQUEST_BODY")
 		return
 	}
 
-	existing.DisplayName = req.DisplayName
-	existing.Description = req.Description
-	if req.Type != "" {
-		existing.Type = strings.ToLower(strings.TrimSpace(req.Type))
+	if req.DisplayName != nil {
+		existing.DisplayName = *req.DisplayName
 	}
-	if req.TransportType != "" {
-		existing.TransportType = req.TransportType
+	if req.Description != nil {
+		existing.Description = *req.Description
 	}
-	if req.EndpointURL != "" {
-		existing.EndpointURL = req.EndpointURL
+	if req.Type != nil && *req.Type != "" {
+		existing.Type = strings.ToLower(strings.TrimSpace(*req.Type))
 	}
-	if req.Command != "" {
-		existing.Command = req.Command
+	if req.TransportType != nil && *req.TransportType != "" {
+		existing.TransportType = *req.TransportType
+	}
+	if req.EndpointURL != nil && *req.EndpointURL != "" {
+		existing.EndpointURL = *req.EndpointURL
+	}
+	if req.Command != nil && *req.Command != "" {
+		existing.Command = *req.Command
 	}
 	if req.Args != nil {
 		existing.Args = req.Args
@@ -396,13 +433,24 @@ func (h *MCPHandler) Update(c *gin.Context) {
 		existing.Enabled = *req.Enabled
 	}
 
-	touchesLocalConfig := req.Type != "" || req.Command != "" || req.Args != nil || req.Env != nil
+	touchesLocalConfig := (req.Type != nil && *req.Type != "") ||
+		(req.Command != nil && *req.Command != "") ||
+		req.Args != nil ||
+		req.Env != nil
 	if touchesLocalConfig && h.rejectLocalMCP(c, existing.Type) {
 		return
 	}
 
-	if req.AuthToken != "" || len(req.Headers) > 0 {
-		headersEnc, err := h.buildMergedConfigHeaders(existing, req)
+	authTokenVal := ""
+	if req.AuthToken != nil && !isMaskedSecret(*req.AuthToken) {
+		authTokenVal = *req.AuthToken
+	}
+	if authTokenVal != "" || len(req.Headers) > 0 {
+		headerReq := CreateMCPServerRequest{
+			AuthToken: authTokenVal,
+			Headers:   req.Headers,
+		}
+		headersEnc, err := h.buildMergedConfigHeaders(existing, headerReq)
 		if err != nil {
 			httputil.RespondInternalError(c, "Failed to encrypt headers", err, "ENCRYPTION_FAILED")
 			return

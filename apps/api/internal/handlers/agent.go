@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -13,13 +14,23 @@ import (
 	"github.com/roozylabs/prism/internal/repository"
 )
 
+type agentStore interface {
+	ListByUserID(ctx context.Context, userID string) ([]models.Agent, error)
+	FindByID(ctx context.Context, id, userID string) (*models.Agent, error)
+	Create(ctx context.Context, a *models.Agent) error
+	Update(ctx context.Context, a *models.Agent) error
+	Delete(ctx context.Context, id, userID string) error
+}
+
+var _ agentStore = (*repository.AgentRepository)(nil)
+
 type AgentHandler struct {
-	repo        *repository.AgentRepository
+	repo        agentStore
 	governance  *proxy.AgentGovernanceEngine
 	requestLogs *repository.RequestLogRepository
 }
 
-func NewAgentHandler(repo *repository.AgentRepository, governance *proxy.AgentGovernanceEngine, requestLogs *repository.RequestLogRepository) *AgentHandler {
+func NewAgentHandler(repo agentStore, governance *proxy.AgentGovernanceEngine, requestLogs *repository.RequestLogRepository) *AgentHandler {
 	return &AgentHandler{repo: repo, governance: governance, requestLogs: requestLogs}
 }
 
@@ -151,6 +162,40 @@ func (h *AgentHandler) Create(c *gin.Context) {
 	c.JSON(http.StatusCreated, agent)
 }
 
+type UpdateAgentRequest struct {
+	DisplayName            *string   `json:"displayName"`
+	Description            *string   `json:"description"`
+	AgentType              *string   `json:"agentType"`
+	SystemPromptOverride   *string   `json:"systemPromptOverride"`
+	AllowedModels          *[]string `json:"allowedModels"`
+	AllowedModelsSnake     *[]string `json:"allowed_models"`
+	AllowedTools           *[]string `json:"allowedTools"`
+	AllowedToolsSnake      *[]string `json:"allowed_tools"`
+	AllowedResources       *[]string `json:"allowedResources"`
+	AllowedResourcesSnake  *[]string `json:"allowed_resources"`
+	AllowedMCPServers      *[]string `json:"allowedMcpServers"`
+	AllowedMCPServersSnake *[]string `json:"allowed_mcp_servers"`
+	MaxBudgetCents         *int      `json:"maxBudgetCents"`
+	MaxBudgetCentsSnake    *int      `json:"max_budget_cents"`
+	BudgetCapUSD           *float64  `json:"budget_cap_usd"`
+	Status                 *string   `json:"status"`
+	Enabled                *bool     `json:"enabled"`
+}
+
+func firstNonNilStringSlice(primary, fallback *[]string) *[]string {
+	if primary != nil {
+		return primary
+	}
+	return fallback
+}
+
+func nonNilStringSlice(vals []string) []string {
+	if vals == nil {
+		return []string{}
+	}
+	return vals
+}
+
 func (h *AgentHandler) Update(c *gin.Context) {
 	userID := c.GetString("userId")
 	id := c.Param("id")
@@ -160,60 +205,61 @@ func (h *AgentHandler) Update(c *gin.Context) {
 		return
 	}
 
-	var req CreateAgentRequest
+	var req UpdateAgentRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		httputil.RespondBadRequest(c, "Invalid request payload", err, "INVALID_REQUEST_BODY")
 		return
 	}
 
-	existing.DisplayName = req.DisplayName
-	existing.Description = req.Description
-	if req.AgentType != "" {
-		existing.AgentType = req.AgentType
+	if req.DisplayName != nil {
+		existing.DisplayName = *req.DisplayName
 	}
-	existing.SystemPromptOverride = req.SystemPromptOverride
-
-	allowedModels := req.AllowedModels
-	if len(allowedModels) == 0 && len(req.AllowedModelsSnake) > 0 {
-		allowedModels = req.AllowedModelsSnake
+	if req.Description != nil {
+		existing.Description = *req.Description
 	}
-	if len(allowedModels) > 0 {
-		existing.AllowedModels = allowedModels
+	if req.AgentType != nil && *req.AgentType != "" {
+		existing.AgentType = *req.AgentType
+	}
+	if req.SystemPromptOverride != nil {
+		existing.SystemPromptOverride = *req.SystemPromptOverride
 	}
 
-	allowedTools := req.AllowedTools
-	if len(allowedTools) == 0 && len(req.AllowedToolsSnake) > 0 {
-		allowedTools = req.AllowedToolsSnake
+	if modelsPtr := firstNonNilStringSlice(req.AllowedModels, req.AllowedModelsSnake); modelsPtr != nil {
+		existing.AllowedModels = nonNilStringSlice(*modelsPtr)
 	}
-	if len(allowedTools) > 0 {
-		existing.AllowedTools = allowedTools
+	if toolsPtr := firstNonNilStringSlice(req.AllowedTools, req.AllowedToolsSnake); toolsPtr != nil {
+		existing.AllowedTools = nonNilStringSlice(*toolsPtr)
 	}
-
-	allowedResources := req.AllowedResources
-	if len(allowedResources) == 0 && len(req.AllowedResourcesSnake) > 0 {
-		allowedResources = req.AllowedResourcesSnake
+	if resourcesPtr := firstNonNilStringSlice(req.AllowedResources, req.AllowedResourcesSnake); resourcesPtr != nil {
+		existing.AllowedResources = nonNilStringSlice(*resourcesPtr)
 	}
-	if len(allowedResources) > 0 {
-		existing.AllowedResources = allowedResources
+	if mcpPtr := firstNonNilStringSlice(req.AllowedMCPServers, req.AllowedMCPServersSnake); mcpPtr != nil {
+		existing.AllowedMCPServers = nonNilStringSlice(*mcpPtr)
 	}
 
-	allowedMCPServers := req.AllowedMCPServers
-	if len(allowedMCPServers) == 0 && len(req.AllowedMCPServersSnake) > 0 {
-		allowedMCPServers = req.AllowedMCPServersSnake
-	}
-	if len(allowedMCPServers) > 0 {
-		existing.AllowedMCPServers = allowedMCPServers
+	switch {
+	case req.MaxBudgetCents != nil:
+		if *req.MaxBudgetCents < 0 {
+			httputil.RespondBadRequest(c, "Budget must be non-negative", nil, "INVALID_BUDGET")
+			return
+		}
+		existing.MaxBudgetCents = *req.MaxBudgetCents
+	case req.MaxBudgetCentsSnake != nil:
+		if *req.MaxBudgetCentsSnake < 0 {
+			httputil.RespondBadRequest(c, "Budget must be non-negative", nil, "INVALID_BUDGET")
+			return
+		}
+		existing.MaxBudgetCents = *req.MaxBudgetCentsSnake
+	case req.BudgetCapUSD != nil:
+		if *req.BudgetCapUSD < 0 {
+			httputil.RespondBadRequest(c, "Budget must be non-negative", nil, "INVALID_BUDGET")
+			return
+		}
+		existing.MaxBudgetCents = int(*req.BudgetCapUSD * 100)
 	}
 
-	maxBudgetCents := req.MaxBudgetCents
-	if maxBudgetCents == 0 && req.MaxBudgetCentsSnake > 0 {
-		maxBudgetCents = req.MaxBudgetCentsSnake
-	}
-	if maxBudgetCents == 0 && req.BudgetCapUSD > 0 {
-		maxBudgetCents = int(req.BudgetCapUSD * 100)
-	}
-	if maxBudgetCents > 0 {
-		existing.MaxBudgetCents = maxBudgetCents
+	if req.Status != nil && *req.Status != "" {
+		existing.Status = *req.Status
 	}
 	if req.Enabled != nil {
 		existing.Enabled = *req.Enabled

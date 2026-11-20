@@ -123,6 +123,8 @@ func (h *OAuthHandler) InitiateOAuth(c *gin.Context) {
 		return
 	}
 
+	captureOAuthInviteCookie(c)
+
 	clientID, _ := oauthClient(provider)
 	if clientID == "" {
 		if h.allowDevLogin {
@@ -175,7 +177,7 @@ func (h *OAuthHandler) devLogin(c *gin.Context, provider string) {
 		return
 	}
 	setOAuthCookie(c, "auth_token", resp.Token, 7*24*3600, "/")
-	c.Redirect(http.StatusTemporaryRedirect, "/")
+	c.Redirect(http.StatusTemporaryRedirect, consumeOAuthPostLoginRedirect(c))
 }
 
 func (h *OAuthHandler) OAuthCallback(c *gin.Context) {
@@ -230,7 +232,7 @@ func (h *OAuthHandler) OAuthCallback(c *gin.Context) {
 	}
 
 	setOAuthCookie(c, "auth_token", resp.Token, 7*24*3600, "/")
-	c.Redirect(http.StatusTemporaryRedirect, "/")
+	c.Redirect(http.StatusTemporaryRedirect, consumeOAuthPostLoginRedirect(c))
 }
 
 type oauthIdentity struct {
