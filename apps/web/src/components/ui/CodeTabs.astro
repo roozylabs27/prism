@@ -1,0 +1,45 @@
+---
+import Icon from './Icon.astro';
+import { integrations } from '../../data/integrations';
+---
+
+<div data-tabs class="border border-rule rounded-sm bg-raised">
+	<div class="flex items-stretch justify-between border-b border-rule min-w-0">
+		<div role="tablist" aria-label="Integration examples" class="flex flex-1 min-w-0 overflow-x-auto">
+			{integrations.map((item, i) => (
+				<button
+					type="button"
+					role="tab"
+					id={`tab-${item.id}`}
+					aria-controls={`panel-${item.id}`}
+					aria-selected={i === 0 ? 'true' : 'false'}
+					tabindex={i === 0 ? 0 : -1}
+					class="shrink-0 min-h-[48px] px-4 font-mono text-sm whitespace-nowrap border-b-2 border-transparent text-muted hover:text-ink aria-selected:text-ink aria-selected:border-accent transition-colors duration-150"
+				>
+					{item.label}
+				</button>
+			))}
+		</div>
+		<button
+			type="button"
+			data-copy
+			class="shrink-0 inline-flex items-center gap-1.5 min-h-[48px] px-4 border-l border-rule text-sm text-muted hover:text-ink transition-colors duration-150"
+		>
+			<Icon name="copy" class="h-4 w-4" />
+			<span data-copy-label>Copy</span>
+		</button>
+	</div>
+	{integrations.map((item, i) => (
+		<div
+			role="tabpanel"
+			id={`panel-${item.id}`}
+			aria-labelledby={`tab-${item.id}`}
+			hidden={i !== 0}
+			tabindex="0"
+		>
+			<p class="px-4 pt-4 text-sm text-muted">{item.note}</p>
+			<pre class="p-4 overflow-x-auto text-sm leading-relaxed"><code>{item.code}</code></pre>
+		</div>
+	))}
+	<p data-copy-status class="sr-only" aria-live="polite"></p>
+</div>

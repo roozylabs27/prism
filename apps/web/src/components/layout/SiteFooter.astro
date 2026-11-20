@@ -1,0 +1,59 @@
+---
+import { links, site } from '../../data/site';
+
+const groups = [
+	{
+		title: 'Product',
+		items: [
+			{ label: 'What Prism governs', href: '#boundary' },
+			{ label: 'For agencies', href: '#agencies' },
+			{ label: 'Integrate', href: '#integrate' },
+			{ label: 'What ships today', href: '#status' },
+		],
+	},
+	{
+		title: 'Project',
+		items: [
+			{ label: 'Repository', href: links.repo, external: true },
+			{ label: 'Documentation', href: links.docs, external: true },
+			{ label: 'Changelog', href: links.changelog, external: true },
+			{ label: 'Issues', href: links.issues, external: true },
+		],
+	},
+];
+---
+
+<footer class="border-t border-rule mt-auto">
+	<div class="mx-auto max-w-page px-5 sm:px-8 py-12 grid gap-10 sm:grid-cols-2 lg:grid-cols-12">
+		<div class="lg:col-span-6">
+			<p class="font-semibold text-lg">{site.name}</p>
+			<p class="mt-2 text-muted max-w-prose">
+				A gateway for model calls and agent tool calls, with keys, budgets and permissions per client.
+			</p>
+		</div>
+		{groups.map((group) => (
+			<div class="lg:col-span-3">
+				<h2 class="eyebrow">{group.title}</h2>
+				<ul class="mt-3">
+					{group.items.map((item) => (
+						<li>
+							<a
+								href={item.href}
+								target={item.external ? '_blank' : undefined}
+								rel={item.external ? 'noopener noreferrer' : undefined}
+								class="inline-flex items-center min-h-[44px] text-ink hover:text-accent transition-colors duration-150"
+							>
+								{item.label}
+							</a>
+						</li>
+					))}
+				</ul>
+			</div>
+		))}
+	</div>
+	<div class="border-t border-rule">
+		<p class="mx-auto max-w-page px-5 sm:px-8 py-6 text-sm text-muted">
+			© 2026 {site.org}. Prism v{site.version}.
+		</p>
+	</div>
+</footer>
