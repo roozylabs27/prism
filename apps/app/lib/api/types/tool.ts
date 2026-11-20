@@ -40,6 +40,7 @@ export interface ApiToolWithBackends extends Partial<ApiTool> {
 }
 
 export interface ApiCreateToolBackend {
+  id?: string;
   name: string;
   endpointUrl: string;
   backendType?: 'http' | 'lambda' | 'sql' | 'grpc';

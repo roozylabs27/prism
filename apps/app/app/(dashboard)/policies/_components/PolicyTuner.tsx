@@ -17,12 +17,19 @@ import {
   FormControl,
 } from "@/components/molecules/Form";
 import type { ApiRoutingPolicy } from "@/lib/api";
+import {
+  DEFAULT_POLICY_UI_WEIGHTS,
+  toApiNormalizedWeights,
+  toUiWeightPercents,
+  type PolicyUiWeights,
+} from "@/features/routing/utils/weights";
 import { Save, SlidersHorizontal } from "lucide-react";
 
 const tunerSchema = z.object({
-  quality: z.number().default(40),
-  cost: z.number().default(30),
-  speed: z.number().default(20),
+  task_match: z.number().min(0).max(100).default(35),
+  quality: z.number().min(0).max(100).default(35),
+  cost: z.number().min(0).max(100).default(15),
+  speed: z.number().min(0).max(100).default(15),
 });
 
 type TunerFormValues = z.infer<typeof tunerSchema>;
@@ -33,14 +40,10 @@ interface PolicyTunerProps {
   selectedPolicy?: ApiRoutingPolicy;
   onSelectedPolicyChange: (id: string) => void;
   saving: boolean;
-  onSave: (weights: { quality: number; cost: number; speed: number }) => void;
+  onSave: (weights: PolicyUiWeights) => void;
 }
 
-const defaultValues: TunerFormValues = {
-  quality: 40,
-  cost: 30,
-  speed: 20,
-};
+const defaultValues: TunerFormValues = { ...DEFAULT_POLICY_UI_WEIGHTS };
 
 export function PolicyTuner({
   policies,
@@ -62,19 +65,18 @@ export function PolicyTuner({
       reset(defaultValues);
       return;
     }
-    reset({
-      quality: selectedPolicy.weights?.quality ?? 40,
-      cost: selectedPolicy.weights?.cost ?? 30,
-      speed: selectedPolicy.weights?.speed ?? 20,
-    });
+    reset(toUiWeightPercents(selectedPolicy.weights));
   }, [selectedPolicy, reset]);
 
   const onSubmit = (values: TunerFormValues) => {
-    onSave({
-      quality: values.quality,
-      cost: values.cost,
-      speed: values.speed,
-    });
+    onSave(
+      toApiNormalizedWeights({
+        task_match: values.task_match,
+        quality: values.quality,
+        cost: values.cost,
+        speed: values.speed,
+      })
+    );
   };
 
   return (
@@ -108,6 +110,31 @@ export function PolicyTuner({
 
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+            <FormField
+              control={form.control}
+              name="task_match"
+              render={({ field }) => (
+                <FormItem className="space-y-2">
+                  <div className="flex justify-between text-xs">
+                    <span className="font-semibold text-foreground">
+                      Task Match
+                    </span>
+                    <span className="font-mono font-bold text-violet-500">
+                      {field.value}%
+                    </span>
+                  </div>
+                  <FormControl>
+                    <Slider
+                      value={[field.value]}
+                      onValueChange={(val) => field.onChange(val[0])}
+                      max={100}
+                      step={5}
+                      disabled={saving}
+                    />
+                  </FormControl>
+                </FormItem>
+              )}
+            />
             <FormField
               control={form.control}
               name="quality"

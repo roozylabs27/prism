@@ -46,7 +46,10 @@ api.interceptors.response.use(
       // The session is gone; send the user to sign in instead of leaving
       // every query on the page failing. Sign-in itself answers 401 for a
       // wrong password, so stay put on the auth pages.
-      if (typeof window !== 'undefined' && !['/signin', '/signup'].includes(window.location.pathname)) {
+      if (
+        typeof window !== 'undefined' &&
+        !['/signin', '/signup', '/accept-invite'].includes(window.location.pathname)
+      ) {
         window.location.assign('/signin');
       }
     }

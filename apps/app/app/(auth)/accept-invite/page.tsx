@@ -19,9 +19,10 @@ function AcceptInviteForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const token = searchParams?.get('token') || '';
-  const { user, isAuthenticated, isLoading: authLoading } = useAuth();
+  const { user, isAuthenticated, isLoading: authLoading, logout } = useAuth();
   const { mutateAsync: acceptInvite, isPending: accepting } = useAcceptInviteMutation();
   const [done, setDone] = useState(false);
+  const [switchingAccount, setSwitchingAccount] = useState(false);
 
   const {
     data: preview,
@@ -90,10 +91,20 @@ function AcceptInviteForm() {
                 <div className="space-y-3">
                   <p className="text-xs text-muted-foreground">
                     You are signed in as <span className="font-medium text-foreground">{user?.email}</span>, but this
-                    invitation was sent to {preview.email}. Sign in with that account to accept it.
+                    invitation was sent to {preview.email}. Sign out and sign in with that account to accept it.
                   </p>
-                  <Button asChild variant="outline" className="w-full">
-                    <Link href={signInHref}>Sign in with {preview.email}</Link>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="w-full"
+                    disabled={switchingAccount}
+                    onClick={async () => {
+                      setSwitchingAccount(true);
+                      await logout(signInHref);
+                    }}
+                  >
+                    {switchingAccount ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                    Sign out and sign in with {preview.email}
                   </Button>
                 </div>
               ) : (

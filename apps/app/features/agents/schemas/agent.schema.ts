@@ -5,10 +5,13 @@ export const agentSchema = z.object({
   displayName: z.string().default(''),
   description: z.string().default(''),
   agentType: z.string().default('general'),
-  maxBudgetCents: z.number().default(0),
+  systemPromptOverride: z.string().default(''),
+  maxBudgetCents: z.number().min(0).default(0),
+  allowedModels: z.array(z.string()).default([]),
   allowedTools: z.array(z.string()).default([]),
   allowedResources: z.array(z.string()).default([]),
   allowedMcpServers: z.array(z.string()).default([]),
+  enabled: z.boolean().default(true),
 });
 
 export type AgentFormValues = z.infer<typeof agentSchema>;

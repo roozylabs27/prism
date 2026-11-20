@@ -28,12 +28,14 @@ import { toast } from "sonner";
 import { getErrorMessage } from "@/types/ui";
 
 import { policySchema, PolicyFormValues } from "@/features/routing/schemas/create-policy.schema";
+import { toApiNormalizedWeights } from "@/features/routing/utils/weights";
 
 const defaultValues: PolicyFormValues = {
   name: "",
-  quality: 40,
-  cost: 30,
-  speed: 20,
+  task_match: 35,
+  quality: 35,
+  cost: 15,
+  speed: 15,
 };
 
 interface PolicyFormDialogProps {
@@ -59,11 +61,12 @@ export function PolicyFormDialog({ open, onOpenChange }: PolicyFormDialogProps) 
     createMutation.mutate(
       {
         name: values.name.trim(),
-        weights: {
+        weights: toApiNormalizedWeights({
+          task_match: values.task_match,
           quality: values.quality,
           cost: values.cost,
           speed: values.speed,
-        },
+        }),
         constraints: {},
         enabled: true,
       },
@@ -102,6 +105,30 @@ export function PolicyFormDialog({ open, onOpenChange }: PolicyFormDialogProps) 
                     <Input
                       {...field}
                       placeholder="e.g. cost-priority"
+                      disabled={createMutation.isPending}
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="task_match"
+              render={({ field }) => (
+                <FormItem className="space-y-2">
+                  <div className="flex justify-between text-xs">
+                    <FormLabel>Task Match</FormLabel>
+                    <span className="font-mono font-bold text-violet-500">
+                      {field.value}%
+                    </span>
+                  </div>
+                  <FormControl>
+                    <Slider
+                      value={[field.value]}
+                      onValueChange={(val) => field.onChange(val[0])}
+                      max={100}
+                      step={5}
                       disabled={createMutation.isPending}
                     />
                   </FormControl>

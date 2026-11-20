@@ -9,6 +9,7 @@ import { Button } from "@/components/atoms/Button";
 import { Badge, StatusDot } from "@/components/atoms/Badge";
 import { useAgentsQuery, useDeleteAgent } from "@/hooks/queries/useAgentsQuery";
 import { useToolsQuery } from "@/hooks/queries/useToolsQuery";
+import { useModelsListQuery } from "@/hooks/queries/useModelsListQuery";
 import { useResourcesQuery } from "@/hooks/queries/useResourcesQuery";
 import { useMCPServersQuery } from "@/hooks/queries/useMCPServersQuery";
 import { ApiAgent } from "@/lib/api";
@@ -29,9 +30,14 @@ function formatBudgetCents(cents: number): string {
 export default function AgentsPage() {
   const { data, isLoading, isError, refetch } = useAgentsQuery();
   const deleteMutation = useDeleteAgent();
+  const modelsData = useModelsListQuery();
   const toolsData = useToolsQuery();
   const resourcesData = useResourcesQuery();
   const mcpServersData = useMCPServersQuery();
+
+  const modelOptions: MultiSelectOption[] = ((modelsData.data && Array.isArray(modelsData.data) ? modelsData.data : []) as Array<{ slug?: string; name?: string; displayName?: string }>)
+    .filter((m) => m.slug || m.name)
+    .map((m) => ({ value: m.slug || m.name || "", label: m.displayName || m.name || m.slug || "" }));
 
   const toolOptions: MultiSelectOption[] = ((toolsData.data && Array.isArray(toolsData.data) ? toolsData.data : []) as Array<{ name: string; displayName?: string }>)
     .filter((t) => t.name)
@@ -210,6 +216,7 @@ export default function AgentsPage() {
         open={modalOpen}
         onOpenChange={setModalOpen}
         editingAgent={editingAgent}
+        modelOptions={modelOptions}
         toolOptions={toolOptions}
         resourceOptions={resourceOptions}
         mcpServerOptions={mcpServerOptions}

@@ -6,13 +6,15 @@ import { PageHeader } from '@/components/molecules/PageHeader';
 import { Card, CardHeader, CardTitle, CardContent, CardFooter } from '@/components/molecules/Card';
 import { Button } from '@/components/atoms/Button';
 import { Badge, StatusDot } from '@/components/atoms/Badge';
+import { Switch } from '@/components/atoms/Switch';
 import { useProvidersQuery, useDeleteProvider } from '@/hooks/queries/useProvidersQuery';
+import { useUpdateProvider } from '@/hooks/mutations/useProviderMutations';
 import { ApiProvider } from '@/lib/api';
 import { ErrorState, EmptyState } from '@/components/molecules/StateAlerts';
 import { CardSkeletonGrid } from '@/components/molecules/CardSkeleton';
 import Link from 'next/link';
 import { AppRoutes } from '@/constants/routes';
-import { Server, Plus, Trash2, KeyRound } from 'lucide-react';
+import { Server, Plus, Trash2, KeyRound, Pencil } from 'lucide-react';
 import { toast } from 'sonner';
 import { ConfirmDialog } from '@/components/molecules/ConfirmDialog';
 import { getErrorMessage } from '@/types/ui';
@@ -21,8 +23,30 @@ import { ProviderFormDialog } from './_components/ProviderFormDialog';
 export default function ProvidersPage() {
   const { data, isLoading, isError, refetch } = useProvidersQuery();
   const deleteMutation = useDeleteProvider();
+  const updateMutation = useUpdateProvider();
 
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [editingProvider, setEditingProvider] = useState<ApiProvider | null>(null);
+
+  const openCreateDialog = () => {
+    setEditingProvider(null);
+    setDrawerOpen(true);
+  };
+
+  const openEditDialog = (provider: ApiProvider) => {
+    setEditingProvider(provider);
+    setDrawerOpen(true);
+  };
+
+  const handleToggle = (provider: ApiProvider, enabled: boolean) => {
+    updateMutation.mutate(
+      { id: provider.id, data: { enabled } },
+      {
+        onSuccess: () => toast.success(`${provider.name} ${enabled ? 'enabled' : 'disabled'}`),
+        onError: (err) => toast.error(`Failed to update: ${getErrorMessage(err)}`),
+      }
+    );
+  };
 
   const handleDelete = (provider: ApiProvider) => {
     deleteMutation.mutate(provider.id, {
@@ -39,7 +63,7 @@ export default function ProvidersPage() {
         title="AI Model Providers"
         description="Manage connected AI provider adapters, rate limits, and health status."
         extra={
-          <Button variant="prismViolet" size="sm" className="gap-1.5" onClick={() => setDrawerOpen(true)}>
+          <Button variant="prismViolet" size="sm" className="gap-1.5" onClick={openCreateDialog}>
             <Plus className="h-4 w-4" /> Connect Custom Provider
           </Button>
         }
@@ -58,7 +82,7 @@ export default function ProvidersPage() {
           title="No Connected Providers"
           description="There are no AI providers configured in this workspace."
           action={
-            <Button variant="prismViolet" size="sm" className="gap-1.5" onClick={() => setDrawerOpen(true)}>
+            <Button variant="prismViolet" size="sm" className="gap-1.5" onClick={openCreateDialog}>
               <Plus className="h-4 w-4" /> Connect Custom Provider
             </Button>
           }
@@ -94,9 +118,19 @@ export default function ProvidersPage() {
                 <CardContent className="space-y-3">
                   <div className="flex items-center justify-between text-xs border-b border-border pb-2">
                     <span className="text-muted-foreground">Status</span>
-                    <Badge variant={provider.enabled ? 'success' : 'default'}>
-                      {provider.enabled ? 'Enabled' : 'Disabled'}
-                    </Badge>
+                    <div className="flex items-center gap-2">
+                      <Badge variant={provider.enabled ? 'success' : 'default'}>
+                        {provider.enabled ? 'Enabled' : 'Disabled'}
+                      </Badge>
+                      {!isSystem && (
+                        <Switch
+                          checked={provider.enabled}
+                          onCheckedChange={(checked) => handleToggle(provider, checked)}
+                          disabled={updateMutation.isPending}
+                          aria-label={`Toggle ${provider.name}`}
+                        />
+                      )}
+                    </div>
                   </div>
                   <div className="flex items-center justify-between text-xs">
                     <span className="text-muted-foreground">Base URL</span>
@@ -118,22 +152,33 @@ export default function ProvidersPage() {
                   </Button>
 
                   {!isSystem && (
-                    <ConfirmDialog
-                      title="Remove Provider"
-                      description={`Remove custom provider "${provider.name}"? This cannot be undone.`}
-                      confirmText="Remove"
-                      onConfirm={() => handleDelete(provider)}
-                      trigger={
-                        <Button
-                          variant="destructive"
-                          size="sm"
-                          className="w-full gap-1.5 text-xs"
-                          disabled={deleteMutation.isPending}
-                        >
-                          <Trash2 className="h-3.5 w-3.5" /> Remove
-                        </Button>
-                      }
-                    />
+                    <>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="gap-1.5 text-xs shrink-0"
+                        onClick={() => openEditDialog(provider)}
+                        aria-label={`Edit ${provider.name}`}
+                      >
+                        <Pencil className="h-3.5 w-3.5" /> Edit
+                      </Button>
+                      <ConfirmDialog
+                        title="Remove Provider"
+                        description={`Remove custom provider "${provider.name}"? This cannot be undone.`}
+                        confirmText="Remove"
+                        onConfirm={() => handleDelete(provider)}
+                        trigger={
+                          <Button
+                            variant="destructive"
+                            size="sm"
+                            className="gap-1.5 text-xs shrink-0"
+                            disabled={deleteMutation.isPending}
+                          >
+                            <Trash2 className="h-3.5 w-3.5" /> Remove
+                          </Button>
+                        }
+                      />
+                    </>
                   )}
                 </CardFooter>
               </Card>
@@ -142,7 +187,14 @@ export default function ProvidersPage() {
         </div>
       )}
 
-      <ProviderFormDialog open={drawerOpen} onOpenChange={setDrawerOpen} />
+      <ProviderFormDialog
+        open={drawerOpen}
+        onOpenChange={(open) => {
+          setDrawerOpen(open);
+          if (!open) setEditingProvider(null);
+        }}
+        editingProvider={editingProvider}
+      />
     </AppLayout>
   );
 }

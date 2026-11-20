@@ -8,6 +8,7 @@ export interface ApiRoutingPolicy {
   weightThroughput?: number;
   weightErrorRate?: number;
   weights?: {
+    task_match?: number;
     quality?: number;
     cost?: number;
     speed?: number;

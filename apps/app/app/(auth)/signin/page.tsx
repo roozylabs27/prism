@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { useForm } from 'react-hook-form';
 import { useTheme } from 'next-themes';
 import { Turnstile } from '@marsidev/react-turnstile';
-import { AppRoutes } from '@/constants/routes';
+import { AppRoutes, ApiEndpoints } from '@/constants/routes';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { AuthLayout } from '@/components/layouts/AuthLayout';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/molecules/Card';
@@ -117,11 +117,8 @@ function SignInForm() {
     try {
       setOauthLoading(provider);
       toast.info(`Connecting to ${provider === 'google' ? 'Google' : 'GitHub'} OAuth...`);
-      if (provider === 'google') {
-        window.location.href = '/api/auth/oauth/google';
-      } else {
-        window.location.href = '/api/auth/oauth/github';
-      }
+      const base = provider === 'google' ? ApiEndpoints.OAUTH_GOOGLE : ApiEndpoints.OAUTH_GITHUB;
+      window.location.href = inviteToken ? `${base}?invite=${encodeURIComponent(inviteToken)}` : base;
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'OAuth redirection failed.';
       toast.error(message);
@@ -261,7 +258,7 @@ function SignInForm() {
           <div className="mt-6 text-center text-xs text-muted-foreground">
             Don&apos;t have an account?{' '}
             <Link
-              href={AppRoutes.SIGNUP}
+              href={inviteToken ? `${AppRoutes.SIGNUP}?invite=${encodeURIComponent(inviteToken)}` : AppRoutes.SIGNUP}
               className="font-medium text-foreground hover:text-foreground underline underline-offset-4 transition-colors"
             >
               Sign up

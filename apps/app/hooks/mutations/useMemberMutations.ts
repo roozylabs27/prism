@@ -47,7 +47,8 @@ export function useAcceptInviteMutation() {
       // The user now belongs to another organization and may have been onboarded.
       queryClient.invalidateQueries({ queryKey: ['auth', 'me'] });
       queryClient.invalidateQueries({ queryKey: ['organizations'] });
-      queryClient.invalidateQueries({ queryKey: ['user', 'organizations'] });
+      queryClient.invalidateQueries({ queryKey: ['user-organizations'] });
+      queryClient.invalidateQueries({ queryKey: ['user-permissions'] });
     },
   });
 }

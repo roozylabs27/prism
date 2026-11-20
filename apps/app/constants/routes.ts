@@ -31,6 +31,8 @@ export enum ApiEndpoints {
   LOGIN = '/api/auth/login',
   SIGNUP = '/api/auth/signup',
   LOGOUT = '/api/auth/logout',
+  OAUTH_GOOGLE = '/api/auth/oauth/google',
+  OAUTH_GITHUB = '/api/auth/oauth/github',
 }
 
 export enum CookieKeys {

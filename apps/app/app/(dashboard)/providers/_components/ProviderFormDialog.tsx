@@ -3,9 +3,11 @@
 import { useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
+import { toast } from "sonner";
 
 import { Button } from "@/components/atoms/Button";
 import { Input } from "@/components/atoms/Input";
+import { Switch } from "@/components/atoms/Switch";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/molecules/Select";
 import {
   Dialog,
@@ -23,22 +25,29 @@ import {
   FormControl,
   FormMessage,
 } from "@/components/molecules/Form";
-import { useCreateProvider } from "@/hooks/mutations/useProviderMutations";
+import { useCreateProvider, useUpdateProvider } from "@/hooks/mutations/useProviderMutations";
+import { ApiProvider } from "@/lib/api";
+import { parseApiError } from "@/lib/http/errors";
 import { providerSchema, ProviderFormValues } from "@/features/providers/schemas/create-provider.schema";
 
 const defaultValues: ProviderFormValues = {
   name: "",
-  type: "openai",
+  type: "custom",
   baseUrl: "",
+  enabled: true,
 };
 
 interface ProviderFormDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  editingProvider?: ApiProvider | null;
 }
 
-export function ProviderFormDialog({ open, onOpenChange }: ProviderFormDialogProps) {
+export function ProviderFormDialog({ open, onOpenChange, editingProvider }: ProviderFormDialogProps) {
   const createMutation = useCreateProvider();
+  const updateMutation = useUpdateProvider();
+  const isEditing = Boolean(editingProvider);
+  const isPending = createMutation.isPending || updateMutation.isPending;
 
   const form = useForm<ProviderFormValues>({
     resolver: zodResolver(providerSchema),
@@ -48,20 +57,43 @@ export function ProviderFormDialog({ open, onOpenChange }: ProviderFormDialogPro
   const { reset } = form;
 
   useEffect(() => {
-    if (open) reset(defaultValues);
-  }, [open, reset]);
+    if (!open) return;
+    if (editingProvider) {
+      reset({
+        name: editingProvider.name || "",
+        type: editingProvider.type || "custom",
+        baseUrl: editingProvider.baseUrl || "",
+        enabled: editingProvider.enabled ?? true,
+      });
+    } else {
+      reset(defaultValues);
+    }
+  }, [open, editingProvider, reset]);
 
-  const onSubmit = (values: ProviderFormValues) => {
-    createMutation.mutate(values);
+  const onSubmit = async (values: ProviderFormValues) => {
+    try {
+      if (editingProvider) {
+        await updateMutation.mutateAsync({ id: editingProvider.id, data: values });
+        toast.success(`Provider "${values.name}" updated`);
+      } else {
+        await createMutation.mutateAsync(values);
+        toast.success(`Provider "${values.name}" connected`);
+      }
+      onOpenChange(false);
+    } catch (err: unknown) {
+      toast.error(parseApiError(err, isEditing ? "Failed to update provider" : "Failed to create provider").message);
+    }
   };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Connect New Provider</DialogTitle>
+          <DialogTitle>{isEditing ? "Edit Custom Provider" : "Connect New Provider"}</DialogTitle>
           <DialogDescription>
-            Add a new AI provider adapter to your workspace.
+            {isEditing
+              ? "Update endpoint URL, adapter type, or status for this custom provider."
+              : "Add a new AI provider adapter to your workspace."}
           </DialogDescription>
         </DialogHeader>
         <Form {...form}>
@@ -79,7 +111,7 @@ export function ProviderFormDialog({ open, onOpenChange }: ProviderFormDialogPro
                     <Input
                       {...field}
                       placeholder="e.g., OpenAI Production"
-                      disabled={createMutation.isPending}
+                      disabled={isPending}
                     />
                   </FormControl>
                   <FormMessage />
@@ -96,12 +128,13 @@ export function ProviderFormDialog({ open, onOpenChange }: ProviderFormDialogPro
                     <Select
                       value={field.value}
                       onValueChange={field.onChange}
-                      disabled={createMutation.isPending}
+                      disabled={isPending}
                     >
                       <SelectTrigger>
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
+                        <SelectItem value="custom">Custom (OpenAI-Compatible)</SelectItem>
                         <SelectItem value="openai">OpenAI</SelectItem>
                         <SelectItem value="anthropic">Anthropic</SelectItem>
                         <SelectItem value="google">Google Gemini</SelectItem>
@@ -123,10 +156,29 @@ export function ProviderFormDialog({ open, onOpenChange }: ProviderFormDialogPro
                     <Input
                       {...field}
                       placeholder="https://api.openai.com/v1"
-                      disabled={createMutation.isPending}
+                      disabled={isPending}
                     />
                   </FormControl>
                   <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="enabled"
+              render={({ field }) => (
+                <FormItem className="flex items-center justify-between rounded-lg border border-border p-3">
+                  <div>
+                    <FormLabel className="text-sm font-medium">Enabled</FormLabel>
+                    <p className="text-xs text-muted-foreground">Allow routing requests to this provider.</p>
+                  </div>
+                  <FormControl>
+                    <Switch
+                      checked={field.value}
+                      onCheckedChange={field.onChange}
+                      disabled={isPending}
+                    />
+                  </FormControl>
                 </FormItem>
               )}
             />
@@ -135,16 +187,18 @@ export function ProviderFormDialog({ open, onOpenChange }: ProviderFormDialogPro
                 type="button"
                 variant="outline"
                 onClick={() => onOpenChange(false)}
-                disabled={createMutation.isPending}
+                disabled={isPending}
               >
                 Cancel
               </Button>
               <Button
                 type="submit"
                 variant="prismViolet"
-                disabled={createMutation.isPending}
+                disabled={isPending}
               >
-                {createMutation.isPending ? "Creating..." : "Create Provider"}
+                {isPending
+                  ? isEditing ? "Saving..." : "Creating..."
+                  : isEditing ? "Save Changes" : "Create Provider"}
               </Button>
             </DialogFooter>
           </form>
