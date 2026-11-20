@@ -8,11 +8,13 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	"github.com/roozylabs/prism/internal/database"
 	"github.com/roozylabs/prism/internal/middleware"
 	"github.com/roozylabs/prism/internal/models"
 	"github.com/roozylabs/prism/internal/proxy"
@@ -20,13 +22,24 @@ import (
 	goredis "github.com/roozylabs/prism/internal/redis"
 	"github.com/roozylabs/prism/internal/repository"
 	"github.com/roozylabs/prism/internal/service"
+	"github.com/roozylabs/prism/internal/telemetry"
 	"github.com/roozylabs/prism/internal/utils"
 )
+
+type requestLogCreator interface {
+	Create(ctx context.Context, log *models.RequestLog) error
+}
+
+type outboxEnqueuer interface {
+	Enqueue(ctx context.Context, item *models.DeliveryOutboxItem) error
+}
 
 type GatewayHandler struct {
 	engine          *proxy.Engine
 	gatewayKeys     *repository.GatewayKeyRepository
 	requestLogs     *repository.RequestLogRepository
+	requestLogStore requestLogCreator
+	outbox          outboxEnqueuer
 	eventPublisher  *goredis.EventPublisher
 	pricingRepo     *repository.ModelPricingRepository
 	idemStore       *proxy.IdempotencyStore
@@ -157,7 +170,18 @@ func NewGatewayHandler(
 	if gatewayKeys != nil {
 		h.sandboxKeys = gatewayKeys
 	}
+	if requestLogs != nil {
+		h.requestLogStore = requestLogs
+	}
 	return h
+}
+
+// SetOutbox attaches a durable delivery outbox so failed request log inserts
+// from gateway errors are queued for retry instead of being silently dropped.
+func (h *GatewayHandler) SetOutbox(o outboxEnqueuer) {
+	if h != nil {
+		h.outbox = o
+	}
 }
 
 // asyncJobStore is the subset of *queue.JobQueue used by the async job handlers.
@@ -195,6 +219,7 @@ func (h *GatewayHandler) SetJobQueue(q *queue.JobQueue) {
 // @Failure      429 {object} map[string]interface{}
 // @Router       /v1/chat/completions [post]
 func (h *GatewayHandler) ChatCompletions(c *gin.Context) {
+	start := time.Now()
 	gatewayKey := c.MustGet("gatewayKey").(*models.GatewayAPIKey)
 	// The correlation middleware echoed a sanitised id (the client's
 	// X-Request-ID or a UUID); the access log and error payloads carry it.
@@ -287,7 +312,7 @@ func (h *GatewayHandler) ChatCompletions(c *gin.Context) {
 			clientApp,
 		)
 		if err != nil {
-			h.handleProxyError(c, err, gatewayKey, &req, requestID, clientIP, userAgent, clientApp, req.Stream)
+			h.handleProxyError(c, err, gatewayKey, tenantCtx, agentID, &req, requestID, clientIP, userAgent, clientApp, req.Stream, int(time.Since(start).Milliseconds()))
 			return
 		}
 
@@ -365,7 +390,7 @@ func (h *GatewayHandler) publishEvents(c *gin.Context, requestID string, log *mo
 	}
 }
 
-func (h *GatewayHandler) handleProxyError(c *gin.Context, err error, key *models.GatewayAPIKey, req *proxy.ProxyRequest, requestID, clientIP, userAgent, clientApp string, isStream bool) {
+func (h *GatewayHandler) handleProxyError(c *gin.Context, err error, key *models.GatewayAPIKey, tenantCtx models.TenantContext, agentID string, req *proxy.ProxyRequest, requestID, clientIP, userAgent, clientApp string, isStream bool, latencyMs int) {
 	status, errType, errCode, cleanMsg := utils.CleanUpstreamError(err)
 	// A stream that already sent keepalives or chunks has reported the
 	// failure as an event; a JSON body would only corrupt it.
@@ -380,17 +405,40 @@ func (h *GatewayHandler) handleProxyError(c *gin.Context, err error, key *models
 		})
 	}
 
-	if key != nil && h.requestLogs != nil {
-		modelName := ""
-		if req != nil {
-			modelName = req.Model
+	if latencyMs < 0 {
+		latencyMs = 0
+	}
+
+	modelName := ""
+	if req != nil {
+		modelName = req.Model
+	}
+	orgIDMetric := tenantCtx.OrgID
+	if orgIDMetric == "" {
+		orgIDMetric = "unknown"
+	}
+
+	logStore := h.requestLogStore
+	if logStore == nil && h.requestLogs != nil {
+		logStore = h.requestLogs
+	}
+
+	if key != nil && (logStore != nil || h.outbox != nil) {
+		var agentIDPtr *string
+		if agentID != "" {
+			aID := agentID
+			agentIDPtr = &aID
 		}
 		errLog := &models.RequestLog{
 			RequestID:       requestID,
+			OrgID:           tenantCtx.OrgID,
+			WorkspaceID:     tenantCtx.WorkspaceID,
+			ProjectID:       tenantCtx.ProjectID,
+			AgentID:         agentIDPtr,
 			GatewayAPIKeyID: &key.ID,
 			Model:           modelName,
 			StatusCode:      status,
-			LatencyMs:       0,
+			LatencyMs:       latencyMs,
 			InputTokens:     0,
 			OutputTokens:    0,
 			TotalTokens:     0,
@@ -400,7 +448,7 @@ func (h *GatewayHandler) handleProxyError(c *gin.Context, err error, key *models
 			UserAgent:       userAgent,
 			ClientApp:       clientApp,
 			IsStream:        isStream,
-			CreatedAt:       time.Now(),
+			CreatedAt:       time.Now().UTC(),
 		}
 		if v, ok := c.Get(proxy.CtxFailoverInfo); ok {
 			if fi, fiOK := v.(*proxy.FailoverInfo); fiOK && fi != nil {
@@ -415,7 +463,34 @@ func (h *GatewayHandler) handleProxyError(c *gin.Context, err error, key *models
 				}
 			}
 		}
-		_ = h.requestLogs.Create(c.Request.Context(), errLog)
+
+		logCtx := database.WithTenantContext(middleware.ContextWithTenant(c), database.TenantDBContext{
+			UserID:      key.UserID,
+			OrgID:       tenantCtx.OrgID,
+			WorkspaceID: tenantCtx.WorkspaceID,
+			ProjectID:   tenantCtx.ProjectID,
+		})
+		telemetry.RecordRequestMetrics(logCtx, errLog.Model, "unknown", strconv.Itoa(errLog.StatusCode), orgIDMetric, float64(latencyMs)/1000.0, 0, 0, 0)
+
+		if logStore != nil {
+			if createErr := logStore.Create(logCtx, errLog); createErr != nil && h.outbox != nil {
+				if raw, encErr := models.EncodeOutboxRequestLog(errLog); encErr == nil {
+					outboxCtx, cancel := context.WithTimeout(context.WithoutCancel(logCtx), 5*time.Second)
+					if enqErr := h.outbox.Enqueue(outboxCtx, &models.DeliveryOutboxItem{
+						EventType: models.OutboxEventRequestLog,
+						OrgID:     tenantCtx.OrgID,
+						UserID:    key.UserID,
+						Payload:   raw,
+						LastError: createErr.Error(),
+					}); enqErr != nil {
+						telemetry.RecordOutboxEvent(outboxCtx, models.OutboxEventRequestLog, "enqueue_failed")
+					} else {
+						telemetry.RecordOutboxEvent(outboxCtx, models.OutboxEventRequestLog, "enqueued")
+					}
+					cancel()
+				}
+			}
+		}
 		h.publishEvents(c, requestID, errLog, key)
 	}
 }

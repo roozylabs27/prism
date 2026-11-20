@@ -133,6 +133,7 @@ func main() {
 	billingRepo := repository.NewBillingRepository(sqlDB)
 	workspaceRepo := repository.NewWorkspaceRepository(sqlDB)
 	pilotOutcomesRepo := repository.NewPilotOutcomesRepository(sqlDB)
+	outboxRepo := repository.NewOutboxRepository(sqlDB)
 
 	// Services
 	authService := service.NewAuthService(userRepo, sessionRepo, accountRepo)
@@ -155,7 +156,7 @@ func main() {
 	mcpGateway.SetLocalStdioEnabled(cfg.MCPLocalStdioEnabled)
 	agentGovernance := proxy.NewAgentGovernanceEngine(agentRepo)
 	rbacEngine := proxy.NewRBACEngine(governancePolicyRepo)
-	auditRecorder := proxy.NewAuditRecorder(auditTrailRepo)
+	auditRecorder := proxy.NewAuditRecorderWithKey(auditTrailRepo, proxy.DeriveAuditHMACKey(cfg.AuditHMACKey, cfg.EncryptionKey))
 	paperclipAdapter := proxy.NewPaperclipAdapter(agentRepo)
 
 	// Handlers
@@ -179,13 +180,15 @@ func main() {
 	admissionCtrl.SetAgentSpendFinder(requestLogRepo)
 	orchestrator := service.NewExecutionOrchestrator(engine, admissionCtrl, gatewayKeyRepo, requestLogRepo, eventPublisher, pricingRepo, auditRecorder)
 	orchestrator.SetBudgetManager(budgetMgr)
+	orchestrator.SetOutbox(outboxRepo)
 	gatewayHandler := handlers.NewGatewayHandler(engine, gatewayKeyRepo, requestLogRepo, eventPublisher, pricingRepo, idemStore, agentGovernance, rbacEngine, auditRecorder, modelRepo, agentRepo, orchestrator)
 	gatewayHandler.SetMCPRepositories(mcpServerRepo, mcpToolRepo)
 	gatewayHandler.SetMemberRoleResolver(rbacRepo)
-	engine.SetMCPRepositories(mcpInvocationRepo, mcpServerRepo)
+	gatewayHandler.SetOutbox(outboxRepo)
 
 	// Async Side-Effect Post Processor
 	postProcessor := service.NewAsyncPostProcessor(requestLogRepo, gatewayKeyRepo, eventPublisher, auditRecorder, 2000, 10)
+	postProcessor.SetOutbox(outboxRepo)
 	defer postProcessor.Stop()
 	orchestrator.SetPostProcessor(postProcessor)
 
@@ -305,6 +308,8 @@ func main() {
 	workerMgr.Register("retention-cleanup", 1*time.Hour, workers.NewRetentionWorker(
 		repository.NewRetentionRepository(sqlDB), workers.RetentionPolicies(cfg.Retention)).Run)
 	workerMgr.Register("credential-recovery", 1*time.Minute, workers.NewCredentialRecoveryWorker(credentialRepo, cooldown).Run)
+	outboxWorker := workers.NewOutboxWorker(outboxRepo, requestLogRepo, auditRecorder, gatewayKeyRepo)
+	workerMgr.Register("delivery-outbox", 10*time.Second, outboxWorker.Run)
 	workerMgr.Start(workerCtx)
 
 	if !cfg.IsDevelopment() {

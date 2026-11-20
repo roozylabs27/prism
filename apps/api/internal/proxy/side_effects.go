@@ -6,6 +6,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/roozylabs/prism/internal/telemetry"
 )
 
 const (
@@ -97,6 +99,7 @@ func (s *SideEffects) Go(name string, fn func(ctx context.Context)) bool {
 		return true
 	default:
 		s.dropped.Add(1)
+		telemetry.RecordSideEffectDropped(context.Background(), name)
 		s.logDrop(name)
 		return false
 	}

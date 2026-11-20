@@ -134,6 +134,8 @@ type RequestLog struct {
 	ResponseHash    string         `json:"responseHash" db:"response_hash"`
 	ResponseBytes   int            `json:"responseBytes" db:"response_bytes"`
 	Attempts        []byte         `json:"attempts,omitempty" db:"attempts"`
+	ToolsInvoked    []string       `json:"toolsInvoked,omitempty" db:"-"`
+	MCPServersCalled []string      `json:"mcpServersCalled,omitempty" db:"-"`
 	CreatedAt       time.Time      `json:"createdAt" db:"created_at"`
 }
 

@@ -20,6 +20,10 @@ type Config struct {
 	DatabaseURL     string
 	RedisURL        string
 	EncryptionKey   string
+	// AuditHMACKey signs ai_audit_trails records using keyed HMAC-SHA256.
+	// When unset, DeriveAuditHMACKey derives a domain-separated key from
+	// EncryptionKey so production tamper verification remains keyed.
+	AuditHMACKey    string
 	MaxRetries      int
 	CooldownSeconds int
 	RateLimitPerKey int
@@ -135,6 +139,7 @@ func Load() (*Config, error) {
 		DatabaseURL:     getEnv("DATABASE_URL", "postgres://postgres:postgres@localhost:5432/ai_gateway?sslmode=disable"),
 		RedisURL:        getEnv("REDIS_URL", "redis://localhost:6379"),
 		EncryptionKey:   getEnv("ENCRYPTION_KEY", ""),
+		AuditHMACKey:    strings.TrimSpace(getEnv("AUDIT_HMAC_KEY", "")),
 		MaxRetries:      p.int("MAX_RETRIES", 2),
 		CooldownSeconds: p.int("COOLDOWN_SECONDS", 60),
 		RateLimitPerKey: p.int("RATE_LIMIT_PER_KEY", 100),

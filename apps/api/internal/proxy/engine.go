@@ -47,8 +47,6 @@ type Engine struct {
 	decisionRepo   *repository.RoutingDecisionRepository
 	payloads       *repository.PayloadRepository
 	toolCalls      *repository.ToolInvocationRepository
-	mcpInvocations *repository.MCPInvocationRepository
-	mcpServers     *repository.MCPServerRepository
 	telemetry      *goredis.ModelTelemetryStore
 	encKey         string
 	maxRetries     int
@@ -65,34 +63,46 @@ type Engine struct {
 	effects *SideEffects
 }
 
-func (e *Engine) SetMCPRepositories(invocations *repository.MCPInvocationRepository, servers *repository.MCPServerRepository) {
-	e.mcpInvocations = invocations
-	e.mcpServers = servers
+// SetMCPRepositories is kept as a deprecated no-op. Real MCP executions are
+// recorded by MCPGateway.ExecuteTool rather than synthetically inferred from
+// LLM tool call deltas.
+func (e *Engine) SetMCPRepositories(_ *repository.MCPInvocationRepository, _ *repository.MCPServerRepository) {
 }
 
-func (e *Engine) recordMCPInvocationsIfAny(ctx context.Context, userID string, recs []ToolCallRecord) {
-	if e.mcpInvocations == nil || e.mcpServers == nil || len(recs) == 0 {
-		return
+func resolveEngineOrgID(ctx context.Context, gatewayKey *models.GatewayAPIKey) string {
+	if tc := database.TenantContextFrom(ctx); tc.OrgID != "" {
+		return tc.OrgID
 	}
+	if gatewayKey != nil && gatewayKey.OrgID != nil && *gatewayKey.OrgID != "" {
+		return *gatewayKey.OrgID
+	}
+	return ""
+}
+
+func summarizeToolCalls(recs []ToolCallRecord) ([]string, []string) {
+	if len(recs) == 0 {
+		return nil, nil
+	}
+	seenTools := make(map[string]struct{}, len(recs))
+	seenServers := make(map[string]struct{})
+	var tools, servers []string
 	for _, rec := range recs {
-		if strings.Contains(rec.Name, "__") {
-			parts := strings.SplitN(rec.Name, "__", 2)
-			serverName := parts[0]
-			toolName := parts[1]
-			srv, _ := e.mcpServers.FindByUserAndName(ctx, userID, serverName)
-			if srv != nil {
-				inv := &models.MCPInvocation{
-					UserID:      userID,
-					MCPServerID: srv.ID,
-					ToolName:    toolName,
-					StatusCode:  200,
-					IsError:     false,
-					LatencyMs:   0,
-				}
-				_ = e.mcpInvocations.SaveInvocation(ctx, inv)
+		if rec.Name == "" {
+			continue
+		}
+		if _, ok := seenTools[rec.Name]; !ok {
+			seenTools[rec.Name] = struct{}{}
+			tools = append(tools, rec.Name)
+		}
+		if idx := strings.Index(rec.Name, "__"); idx > 0 {
+			srv := rec.Name[:idx]
+			if _, ok := seenServers[srv]; !ok {
+				seenServers[srv] = struct{}{}
+				servers = append(servers, srv)
 			}
 		}
 	}
+	return tools, servers
 }
 
 func NewEngine(router *Router, creds *repository.CredentialRepository, cooldown *goredis.CooldownStore, telemetry *goredis.ModelTelemetryStore, publisher *goredis.EventPublisher, encKey string, maxRetries, cooldownSecs int, budgetMgr *BudgetManager, policyRepo *repository.RoutingPolicyRepository, decisionRepo *repository.RoutingDecisionRepository, payloads *repository.PayloadRepository, toolCalls *repository.ToolInvocationRepository) *Engine {
@@ -724,22 +734,28 @@ func (e *Engine) Proxy(c *gin.Context, req *ProxyRequest, gatewayKey *models.Gat
 			gwKeyIDPtr = &kID
 		}
 
+		recs := ExtractToolCallsFromResponse(resp)
+		toolsInvoked, mcpServersCalled := summarizeToolCalls(recs)
+
 		log := &models.RequestLog{
-			GatewayAPIKeyID: gwKeyIDPtr,
-			ProviderID:      &route.Provider.ID,
-			ProviderType:    route.Provider.Type,
-			CredentialID:    &route.Credential.ID,
-			Model:           modelName,
-			StatusCode:      httpResp.StatusCode,
-			LatencyMs:       latency,
-			InputTokens:     resp.Usage.PromptTokens,
-			OutputTokens:    resp.Usage.CompletionTokens,
-			TotalTokens:     resp.Usage.TotalTokens,
-			CostUSD:         costUSD,
-			RetryCount:      retryCount,
-			ResponseHash:    respHash,
-			ResponseBytes:   respBytes,
-			Attempts:        MarshalAttempts(attempts),
+			OrgID:            resolveEngineOrgID(ctx, gatewayKey),
+			GatewayAPIKeyID:  gwKeyIDPtr,
+			ProviderID:       &route.Provider.ID,
+			ProviderType:     route.Provider.Type,
+			CredentialID:     &route.Credential.ID,
+			Model:            modelName,
+			StatusCode:       httpResp.StatusCode,
+			LatencyMs:        latency,
+			InputTokens:      resp.Usage.PromptTokens,
+			OutputTokens:     resp.Usage.CompletionTokens,
+			TotalTokens:      resp.Usage.TotalTokens,
+			CostUSD:          costUSD,
+			RetryCount:       retryCount,
+			ResponseHash:     respHash,
+			ResponseBytes:    respBytes,
+			Attempts:         MarshalAttempts(attempts),
+			ToolsInvoked:     toolsInvoked,
+			MCPServersCalled: mcpServersCalled,
 		}
 
 		if resp.Error != nil {
@@ -752,10 +768,8 @@ func (e *Engine) Proxy(c *gin.Context, req *ProxyRequest, gatewayKey *models.Gat
 		}
 		telemetry.RecordRequestMetrics(ctx, log.Model, log.ProviderType, strconv.Itoa(log.StatusCode), orgIDMetric, float64(log.LatencyMs)/1000.0, log.InputTokens, log.OutputTokens, log.CostUSD)
 
-		if e.toolCalls != nil || e.mcpInvocations != nil {
-			if recs := ExtractToolCallsFromResponse(resp); len(recs) > 0 {
-				e.persistToolCalls(reqID, userID, recs)
-			}
+		if len(recs) > 0 && e.toolCalls != nil {
+			e.persistToolCalls(reqID, userID, recs)
 		}
 
 		return resp, log, nil
@@ -1122,13 +1136,11 @@ func (e *Engine) ProxyStream(c *gin.Context, req *ProxyRequest, gatewayKey *mode
 						if content, ok := ch.Delta["content"].(string); ok && content != "" {
 							ttftMs = int(time.Since(attemptStart).Milliseconds())
 							ttftCaptured = true
-							telemetry.RecordTTFT(c.Request.Context(), route.Model.Slug, route.Provider.Type, float64(ttftMs)/1000.0)
 							break
 						}
 						if _, ok := ch.Delta["reasoning_content"].(string); ok {
 							ttftMs = int(time.Since(attemptStart).Milliseconds())
 							ttftCaptured = true
-							telemetry.RecordTTFT(c.Request.Context(), route.Model.Slug, route.Provider.Type, float64(ttftMs)/1000.0)
 							break
 						}
 					}
@@ -1238,10 +1250,10 @@ func (e *Engine) ProxyStream(c *gin.Context, req *ProxyRequest, gatewayKey *mode
 			c.Writer.Flush()
 		}
 
-		if e.toolCalls != nil || e.mcpInvocations != nil {
-			if recs := streamToolAcc.Finish(); len(recs) > 0 {
-				e.persistToolCalls(reqID, userID, recs)
-			}
+		recs := streamToolAcc.Finish()
+		toolsInvoked, mcpServersCalled := summarizeToolCalls(recs)
+		if len(recs) > 0 && e.toolCalls != nil {
+			e.persistToolCalls(reqID, userID, recs)
 		}
 
 		respHash := hex.EncodeToString(hasher.Sum(nil))
@@ -1285,21 +1297,25 @@ func (e *Engine) ProxyStream(c *gin.Context, req *ProxyRequest, gatewayKey *mode
 		}
 
 		log := &models.RequestLog{
-			GatewayAPIKeyID: gwKeyIDPtr,
-			ProviderID:      &route.Provider.ID,
-			ProviderType:    route.Provider.Type,
-			CredentialID:    &route.Credential.ID,
-			Model:           modelName,
-			StatusCode:      httpResp.StatusCode,
-			LatencyMs:       latency,
-			InputTokens:     totalTokens.PromptTokens,
-			OutputTokens:    totalTokens.CompletionTokens,
-			TotalTokens:     totalTokens.TotalTokens,
-			CostUSD:         costUSD,
-			ResponseHash:    respHash,
-			ResponseBytes:   respBytes,
-			RetryCount:      retryCount,
-			Attempts:        MarshalAttempts(attempts),
+			OrgID:            resolveEngineOrgID(ctx, gatewayKey),
+			GatewayAPIKeyID:  gwKeyIDPtr,
+			ProviderID:       &route.Provider.ID,
+			ProviderType:     route.Provider.Type,
+			CredentialID:     &route.Credential.ID,
+			Model:            modelName,
+			StatusCode:       httpResp.StatusCode,
+			LatencyMs:        latency,
+			TTFTMs:           ttftMs,
+			InputTokens:      totalTokens.PromptTokens,
+			OutputTokens:     totalTokens.CompletionTokens,
+			TotalTokens:      totalTokens.TotalTokens,
+			CostUSD:          costUSD,
+			ResponseHash:     respHash,
+			ResponseBytes:    respBytes,
+			RetryCount:       retryCount,
+			Attempts:         MarshalAttempts(attempts),
+			ToolsInvoked:     toolsInvoked,
+			MCPServersCalled: mcpServersCalled,
 		}
 
 		orgIDMetric := log.OrgID
@@ -1307,6 +1323,9 @@ func (e *Engine) ProxyStream(c *gin.Context, req *ProxyRequest, gatewayKey *mode
 			orgIDMetric = "unknown"
 		}
 		telemetry.RecordRequestMetrics(ctx, log.Model, log.ProviderType, strconv.Itoa(log.StatusCode), orgIDMetric, float64(latency)/1000.0, log.InputTokens, log.OutputTokens, log.CostUSD)
+		if ttftMs > 0 {
+			telemetry.RecordTTFT(ctx, log.Model, log.ProviderType, float64(ttftMs)/1000.0)
+		}
 
 		return log, nil
 	}
@@ -1381,15 +1400,15 @@ func (e *Engine) syncCredentialHealthLater(cred *models.Credential, isCoolingDow
 	})
 }
 
-// persistToolCalls stores the tool and MCP calls a response made.
-func (e *Engine) persistToolCalls(requestID, userID string, recs []ToolCallRecord) {
+// persistToolCalls stores the structured tool invocations observed in the model response.
+func (e *Engine) persistToolCalls(requestID, _ string, recs []ToolCallRecord) {
+	if e.toolCalls == nil || len(recs) == 0 {
+		return
+	}
 	e.effects.Go("tool invocations", func(ctx context.Context) {
-		if e.toolCalls != nil {
-			if err := e.toolCalls.CreateBatch(ctx, requestID, recs); err != nil {
-				log.Printf("persist tool invocations: %v", err)
-			}
+		if err := e.toolCalls.CreateBatch(ctx, requestID, recs); err != nil {
+			log.Printf("persist tool invocations: %v", err)
 		}
-		e.recordMCPInvocationsIfAny(ctx, userID, recs)
 	})
 }
 

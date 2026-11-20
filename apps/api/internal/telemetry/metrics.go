@@ -46,6 +46,13 @@ var (
 	costCounter           metric.Float64Counter
 	ttftDurationHist      metric.Float64Histogram
 	activeRequestsCounter metric.Int64UpDownCounter
+
+	// Durable Delivery & Side Effects
+	sideEffectsDroppedCounter metric.Int64Counter
+	outboxEnqueuedCounter     metric.Int64Counter
+	outboxDeliveredCounter    metric.Int64Counter
+	outboxFailedCounter       metric.Int64Counter
+	outboxDeadLetterCounter   metric.Int64Counter
 )
 
 func init() {
@@ -101,6 +108,13 @@ func init() {
 	tokenCounter, _ = meter.Int64Counter("prism_token_usage_total")
 	costCounter, _ = meter.Float64Counter("prism_cost_usd_total", metric.WithUnit("USD"))
 	activeRequestsCounter, _ = meter.Int64UpDownCounter("prism_active_requests")
+
+	// Durable Delivery & Side Effects
+	sideEffectsDroppedCounter, _ = meter.Int64Counter("prism_side_effects_dropped_total")
+	outboxEnqueuedCounter, _ = meter.Int64Counter("prism_outbox_enqueued_total")
+	outboxDeliveredCounter, _ = meter.Int64Counter("prism_outbox_delivered_total")
+	outboxFailedCounter, _ = meter.Int64Counter("prism_outbox_failed_total")
+	outboxDeadLetterCounter, _ = meter.Int64Counter("prism_outbox_dead_letter_total")
 }
 
 // Low-Cardinality helper to sanitize metric attributes
@@ -254,5 +268,42 @@ func RecordCredentialEvent(ctx context.Context, eventType, credentialID, provide
 			attribute.String("credential_id", credentialID),
 			attribute.String("provider", provider),
 		))
+	}
+}
+
+// RecordSideEffectDropped records non-critical background side-effect drops
+// when the bounded SideEffects pool overflows.
+func RecordSideEffectDropped(ctx context.Context, name string) {
+	if sideEffectsDroppedCounter != nil {
+		sideEffectsDroppedCounter.Add(ctx, 1, metric.WithAttributes(
+			attribute.String("name", name),
+		))
+	}
+}
+
+// RecordOutboxEvent records durable outbox lifecycle transitions
+// (enqueued, delivered, failed, dead_letter, enqueue_failed).
+func RecordOutboxEvent(ctx context.Context, eventType, outcome string) {
+	attrs := metric.WithAttributes(
+		attribute.String("event_type", eventType),
+		attribute.String("outcome", outcome),
+	)
+	switch outcome {
+	case "enqueued":
+		if outboxEnqueuedCounter != nil {
+			outboxEnqueuedCounter.Add(ctx, 1, attrs)
+		}
+	case "delivered":
+		if outboxDeliveredCounter != nil {
+			outboxDeliveredCounter.Add(ctx, 1, attrs)
+		}
+	case "failed", "enqueue_failed":
+		if outboxFailedCounter != nil {
+			outboxFailedCounter.Add(ctx, 1, attrs)
+		}
+	case "dead_letter":
+		if outboxDeadLetterCounter != nil {
+			outboxDeadLetterCounter.Add(ctx, 1, attrs)
+		}
 	}
 }

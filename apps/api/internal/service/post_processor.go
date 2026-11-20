@@ -2,7 +2,6 @@ package service
 
 import (
 	"context"
-	"fmt"
 	"log"
 	"sync"
 	"time"
@@ -12,29 +11,44 @@ import (
 	"github.com/roozylabs/prism/internal/proxy"
 	goredis "github.com/roozylabs/prism/internal/redis"
 	"github.com/roozylabs/prism/internal/repository"
-	"github.com/roozylabs/prism/internal/utils"
 )
 
+type postProcessLogStore interface {
+	Create(ctx context.Context, log *models.RequestLog) error
+}
+
+type postProcessKeyStore interface {
+	IncrementUsage(ctx context.Context, keyID string) error
+}
+
+type postProcessAuditStore interface {
+	Record(ctx context.Context, trail *models.AIAuditTrail) error
+}
+
 type PostProcessTask struct {
-	Ctx        context.Context
-	RequestID  string
-	Log        *models.RequestLog
-	GatewayKey *models.GatewayAPIKey
-	AgentID    string
-	AgentName  string
-	UserRole   string
-	ClientIP   string
-	UserAgent  string
-	ClientApp  string
+	Ctx              context.Context
+	RequestID        string
+	Log              *models.RequestLog
+	GatewayKey       *models.GatewayAPIKey
+	AgentID          string
+	AgentName        string
+	UserRole         string
+	ClientIP         string
+	UserAgent        string
+	ClientApp        string
+	PromptHash       string
+	ToolsInvoked     []string
+	MCPServersCalled []string
 }
 
 type AsyncPostProcessor struct {
 	taskChan       chan *PostProcessTask
 	wg             sync.WaitGroup
-	requestLogs    *repository.RequestLogRepository
-	gatewayKeys    *repository.GatewayKeyRepository
+	requestLogs    postProcessLogStore
+	gatewayKeys    postProcessKeyStore
 	eventPublisher *goredis.EventPublisher
-	auditRecorder  *proxy.AuditRecorder
+	auditRecorder  postProcessAuditStore
+	outbox         OutboxEnqueuer
 	workersCount   int
 
 	// overflow bounds the extra goroutines used when the buffer is full.
@@ -61,16 +75,40 @@ func NewAsyncPostProcessor(
 
 	p := &AsyncPostProcessor{
 		taskChan:       make(chan *PostProcessTask, bufferSize),
-		requestLogs:    requestLogs,
-		gatewayKeys:    gatewayKeys,
 		eventPublisher: eventPublisher,
-		auditRecorder:  auditRecorder,
 		workersCount:   workersCount,
 		overflow:       make(chan struct{}, workersCount*4),
+	}
+	if requestLogs != nil {
+		p.requestLogs = requestLogs
+	}
+	if gatewayKeys != nil {
+		p.gatewayKeys = gatewayKeys
+	}
+	if auditRecorder != nil {
+		p.auditRecorder = auditRecorder
 	}
 
 	p.start()
 	return p
+}
+
+// SetOutbox attaches a durable delivery outbox used to queue request logs,
+// key usage increments, and audit trails when synchronous DB delivery fails.
+func (p *AsyncPostProcessor) SetOutbox(outbox OutboxEnqueuer) {
+	if p == nil || isNilInterface(outbox) {
+		return
+	}
+	p.mu.Lock()
+	p.outbox = outbox
+	p.mu.Unlock()
+}
+
+func (p *AsyncPostProcessor) getOutbox() OutboxEnqueuer {
+	p.mu.RLock()
+	o := p.outbox
+	p.mu.RUnlock()
+	return o
 }
 
 func (p *AsyncPostProcessor) start() {
@@ -137,6 +175,10 @@ func (p *AsyncPostProcessor) processTask(task *PostProcessTask) {
 		}
 	}()
 
+	if task.Log.CreatedAt.IsZero() {
+		task.Log.CreatedAt = time.Now().UTC()
+	}
+
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	ownerID := ""
@@ -150,17 +192,25 @@ func (p *AsyncPostProcessor) processTask(task *PostProcessTask) {
 		ProjectID:   task.Log.ProjectID,
 	})
 
-	// 1. Save Request Log to PostgreSQL
-	if p.requestLogs != nil {
+	outbox := p.getOutbox()
+
+	// 1. Save Request Log to PostgreSQL (fallback to durable outbox on error)
+	if !isNilInterface(p.requestLogs) {
 		if err := p.requestLogs.Create(ctx, task.Log); err != nil {
-			log.Printf("[AsyncPostProcessor] Error persisting request log (%s): %v", task.RequestID, err)
+			log.Printf("[AsyncPostProcessor] Error persisting request log (%s), falling back to outbox: %v", task.RequestID, err)
+			enqueueOutboxFallback(ctx, outbox, models.OutboxEventRequestLog, task.Log.OrgID, ownerID, task.Log, err)
 		}
 	}
 
-	// 2. Increment Gateway Key usage counter
-	if p.gatewayKeys != nil && task.GatewayKey != nil && task.GatewayKey.ID != "" {
+	// 2. Increment Gateway Key usage counter (fallback to durable outbox on error)
+	if !isNilInterface(p.gatewayKeys) && task.GatewayKey != nil && task.GatewayKey.ID != "" {
 		if err := p.gatewayKeys.IncrementUsage(ctx, task.GatewayKey.ID); err != nil {
-			log.Printf("[AsyncPostProcessor] Error incrementing key usage (%s): %v", task.GatewayKey.ID, err)
+			log.Printf("[AsyncPostProcessor] Error incrementing key usage (%s), falling back to outbox: %v", task.GatewayKey.ID, err)
+			enqueueOutboxFallback(ctx, outbox, models.OutboxEventGatewayKeyUsage, task.Log.OrgID, ownerID, models.OutboxGatewayKeyUsagePayload{
+				GatewayKeyID: task.GatewayKey.ID,
+				OrgID:        task.Log.OrgID,
+				UserID:       ownerID,
+			}, err)
 		}
 	}
 
@@ -168,11 +218,9 @@ func (p *AsyncPostProcessor) processTask(task *PostProcessTask) {
 	if p.eventPublisher != nil {
 		keyPrefix := ""
 		gatewayKeyName := ""
-		ownerID := ""
 		if task.GatewayKey != nil {
 			keyPrefix = task.GatewayKey.KeyPrefix
 			gatewayKeyName = task.GatewayKey.Name
-			ownerID = task.GatewayKey.UserID
 		}
 
 		eventData := map[string]interface{}{
@@ -196,49 +244,24 @@ func (p *AsyncPostProcessor) processTask(task *PostProcessTask) {
 		_ = p.eventPublisher.Publish(ctx, ownerID, "request_log_created", eventData)
 	}
 
-	// 4. Record Cryptographic Audit Trail
-	if p.auditRecorder != nil {
-		userID := ""
-		if task.GatewayKey != nil {
-			userID = task.GatewayKey.UserID
+	// 4. Record Cryptographic Audit Trail (fallback to durable outbox on error)
+	if !isNilInterface(p.auditRecorder) {
+		trail := buildSuccessAuditTrail(
+			task.Log,
+			task.GatewayKey,
+			task.AgentID,
+			task.AgentName,
+			task.UserRole,
+			task.PromptHash,
+			task.ToolsInvoked,
+			task.MCPServersCalled,
+		)
+		if trail != nil {
+			if err := p.auditRecorder.Record(ctx, trail); err != nil {
+				log.Printf("[AsyncPostProcessor] Error persisting audit trail (%s), falling back to outbox: %v", task.RequestID, err)
+				enqueueOutboxFallback(ctx, outbox, models.OutboxEventAIAuditTrail, trail.OrgID, trail.UserID, trail, err)
+			}
 		}
-
-		promptHash := utils.HashSHA256(task.Log.Model + ":" + task.Log.RequestID)
-		responseHash := utils.HashSHA256(task.Log.Model + ":" + task.Log.ProviderType + ":" + fmt.Sprintf("%d", task.Log.TotalTokens))
-
-		trail := &models.AIAuditTrail{
-			RequestID:         task.Log.RequestID,
-			UserID:            userID,
-			OrgID:             task.Log.OrgID,
-			UserRole:          task.UserRole,
-			ModelSlug:         task.Log.Model,
-			FailoverChain:     []string{},
-			ToolsInvoked:      []string{},
-			ResourcesAccessed: []string{},
-			MCPServersCalled:  []string{},
-			PromptTokens:      task.Log.InputTokens,
-			CompletionTokens:  task.Log.OutputTokens,
-			TotalTokens:       task.Log.TotalTokens,
-			TotalCostUSD:      task.Log.CostUSD,
-			StatusCode:        task.Log.StatusCode,
-			LatencyMS:         task.Log.LatencyMs,
-			TTFTMS:            task.Log.TTFTMs,
-			PromptHash:        promptHash,
-			ResponseHash:      responseHash,
-			ComplianceStatus:  "compliant",
-		}
-
-		if task.GatewayKey != nil && task.GatewayKey.ID != "" {
-			trail.GatewayKeyID = &task.GatewayKey.ID
-		}
-		if task.AgentID != "" {
-			agentID := task.AgentID
-			agentName := task.AgentName
-			trail.AgentID = &agentID
-			trail.AgentName = &agentName
-		}
-
-		_ = p.auditRecorder.Record(ctx, trail)
 	}
 }
 
