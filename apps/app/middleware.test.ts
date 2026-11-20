@@ -93,4 +93,15 @@ describe('middleware', () => {
     expect(redirectTarget(res)).toBe('/accept-invite');
     expect(new URL(res.headers.get('location') ?? '').searchParams.get('token')).toBe('tok-1');
   });
+
+  it('clears stale auth_token cookie and redirects on 401 from backend', async () => {
+    globalThis.fetch = vi.fn(async () => ({ status: 401, ok: false }) as unknown as Response);
+    const protectedRes = await middleware(request('/logs', 'expired_tok'));
+    expect(redirectTarget(protectedRes)).toBe('/signin');
+    expect(protectedRes.headers.get('set-cookie')).toContain('auth_token=;');
+
+    const authPageRes = await middleware(request('/signin', 'expired_tok'));
+    expect(redirectTarget(authPageRes)).toBeNull();
+    expect(authPageRes.headers.get('set-cookie')).toContain('auth_token=;');
+  });
 });

@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"io"
@@ -16,10 +17,19 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/roozylabs/prism/internal/httputil"
-	_ "github.com/roozylabs/prism/internal/models"
+	"github.com/roozylabs/prism/internal/models"
 	"github.com/roozylabs/prism/internal/service"
 	"github.com/roozylabs/prism/internal/utils"
 )
+
+type authServiceBackend interface {
+	Login(ctx context.Context, email, password, ip, ua string) (*service.LoginResponse, error)
+	Signup(ctx context.Context, name, email, password, ip, ua string) (*service.LoginResponse, error)
+	Logout(ctx context.Context, token string) error
+	Me(ctx context.Context, token string) (*models.User, error)
+}
+
+var _ authServiceBackend = (*service.AuthService)(nil)
 
 // AuthAttemptLimiter throttles sign-in and sign-up attempts per key.
 type AuthAttemptLimiter interface {
@@ -29,7 +39,7 @@ type AuthAttemptLimiter interface {
 }
 
 type AuthHandler struct {
-	auth      *service.AuthService
+	auth      authServiceBackend
 	turnstile *Turnstile
 	// perIP limits sign-in and sign-up requests from one client address;
 	// perEmail limits failed sign-ins to one account from anywhere.
@@ -38,7 +48,11 @@ type AuthHandler struct {
 }
 
 func NewAuthHandler(auth *service.AuthService, turnstile *Turnstile, perIP, perEmail AuthAttemptLimiter) *AuthHandler {
-	return &AuthHandler{auth: auth, turnstile: turnstile, perIP: perIP, perEmail: perEmail}
+	var svc authServiceBackend
+	if auth != nil {
+		svc = auth
+	}
+	return &AuthHandler{auth: svc, turnstile: turnstile, perIP: perIP, perEmail: perEmail}
 }
 
 // SetFailClosed configures whether a Redis outage on the IP/account attempt
@@ -312,30 +326,34 @@ func (h *AuthHandler) Signup(c *gin.Context) {
 
 // Logout godoc
 // @Summary      Logout
-// @Description  Invalidate session token
+// @Description  Invalidate session token if present and clear the HttpOnly session cookie
 // @Tags         auth
 // @Security     BearerAuth
 // @Success      200 {object} map[string]string
-// @Failure      401 {object} map[string]string
 // @Router       /api/auth/logout [post]
 func (h *AuthHandler) Logout(c *gin.Context) {
 	token := c.GetString("token")
+	if token == "" {
+		if authHeader := c.GetHeader("Authorization"); authHeader != "" {
+			parts := strings.SplitN(authHeader, " ", 2)
+			if len(parts) == 2 && strings.EqualFold(parts[0], "bearer") {
+				token = strings.TrimSpace(parts[1])
+			}
+		}
+	}
 	if token == "" {
 		if cookie, err := c.Cookie("auth_token"); err == nil && cookie != "" {
 			token = cookie
 		}
 	}
-	if token == "" {
-		httputil.RespondUnauthorized(c, "Unauthorized", nil, "AUTH_REQUIRED")
-		return
+
+	if token != "" && h.auth != nil {
+		if err := h.auth.Logout(c.Request.Context(), token); err != nil && !errors.Is(err, sql.ErrNoRows) {
+			log.Printf("[Auth] session delete error during logout (clearing cookie anyway): %v", err)
+		}
 	}
 
-	if err := h.auth.Logout(c.Request.Context(), token); err != nil {
-		httputil.RespondInternalError(c, "Internal server error during logout", err, "AUTH_LOGOUT_FAILED")
-		return
-	}
-
-	// Clear HttpOnly cookie
+	// Always clear HttpOnly cookie even when session is expired or already gone
 	c.SetSameSite(http.SameSiteLaxMode)
 	isSecure := c.Request.TLS != nil || strings.EqualFold(c.GetHeader("X-Forwarded-Proto"), "https")
 	c.SetCookie("auth_token", "", -1, "/", "", isSecure, true)

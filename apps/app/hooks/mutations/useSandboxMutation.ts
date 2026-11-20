@@ -1,4 +1,6 @@
 import { useMutation } from '@tanstack/react-query';
+import { ApiEndpoints } from '@/constants/routes';
+import { getTenantHeaders } from '@/stores/useTenantStore';
 
 export interface SandboxExecutionPayload {
   keyPrefix: string;
@@ -15,6 +17,7 @@ export function useSandboxExecutionMutation() {
     mutationFn: async (payload: SandboxExecutionPayload) => {
       const headers: Record<string, string> = {
         'Content-Type': 'application/json',
+        ...getTenantHeaders(),
       };
       if (payload.keyPrefix) {
         headers['X-Sandbox-Key-Prefix'] = payload.keyPrefix;
@@ -37,8 +40,9 @@ export function useSandboxExecutionMutation() {
         stream: payload.stream,
       };
 
-      const res = await fetch('/api/sandbox/chat/completions', {
+      const res = await fetch(ApiEndpoints.SANDBOX_CHAT_COMPLETIONS, {
         method: 'POST',
+        credentials: 'include',
         headers,
         body: JSON.stringify(body),
       });

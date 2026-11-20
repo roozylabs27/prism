@@ -2,8 +2,8 @@
 
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import Cookies from 'js-cookie';
-import { ApiEndpoints, CookieKeys } from '@/constants/routes';
+import { ApiEndpoints } from '@/constants/routes';
+import { useAuth } from '@/context/AuthContext';
 
 export interface SSEMessageEvent {
   type: string;
@@ -25,8 +25,12 @@ const SSEContext = createContext<SSEContextType>({
   subscribeToSSE: () => () => {},
 });
 
+const INITIAL_RECONNECT_MS = 5000;
+const MAX_RECONNECT_MS = 30000;
+
 export const SSEProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const queryClient = useQueryClient();
+  const { isAuthenticated } = useAuth();
   const [isConnected, setIsConnected] = useState(false);
   const [lastEvent, setLastEvent] = useState<SSEMessageEvent | null>(null);
   const listenersRef = React.useRef<Set<SSEListener>>(new Set());
@@ -39,22 +43,30 @@ export const SSEProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, []);
 
   useEffect(() => {
+    if (!isAuthenticated) {
+      return;
+    }
+
     let eventSource: EventSource | null = null;
     let reconnectTimeout: ReturnType<typeof setTimeout> | null = null;
+    let reconnectDelayMs = INITIAL_RECONNECT_MS;
     let cancelled = false;
+
+    const scheduleReconnect = () => {
+      if (cancelled) return;
+      const delay = reconnectDelayMs;
+      reconnectDelayMs = Math.min(reconnectDelayMs * 2, MAX_RECONNECT_MS);
+      reconnectTimeout = setTimeout(connect, delay);
+    };
 
     const connect = () => {
       if (cancelled) return;
-      const currentToken = Cookies.get(CookieKeys.AUTH_TOKEN);
-      if (!currentToken) {
-        setIsConnected(false);
-        return;
-      }
 
       try {
         eventSource = new EventSource(ApiEndpoints.SSE, { withCredentials: true });
 
         eventSource.onopen = () => {
+          reconnectDelayMs = INITIAL_RECONNECT_MS;
           setIsConnected(true);
         };
 
@@ -106,10 +118,12 @@ export const SSEProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         };
 
         eventSource.addEventListener('ping', () => {
+          reconnectDelayMs = INITIAL_RECONNECT_MS;
           setIsConnected(true);
         });
 
         eventSource.addEventListener('connected', () => {
+          reconnectDelayMs = INITIAL_RECONNECT_MS;
           setIsConnected(true);
         });
 
@@ -118,19 +132,14 @@ export const SSEProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           setIsConnected(false);
           if (eventSource) {
             eventSource.close();
+            eventSource = null;
           }
-          const activeToken = Cookies.get(CookieKeys.AUTH_TOKEN);
-          if (activeToken) {
-            reconnectTimeout = setTimeout(connect, 5000);
-          }
+          scheduleReconnect();
         };
       } catch (err) {
         console.error('[SSE Initialization Error]', err);
         setIsConnected(false);
-        const activeToken = Cookies.get(CookieKeys.AUTH_TOKEN);
-        if (activeToken) {
-          reconnectTimeout = setTimeout(connect, 5000);
-        }
+        scheduleReconnect();
       }
     };
 
@@ -143,10 +152,12 @@ export const SSEProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         eventSource.close();
       }
     };
-  }, [queryClient]);
+  }, [queryClient, isAuthenticated]);
+
+  const effectiveConnected = isAuthenticated && isConnected;
 
   return (
-    <SSEContext.Provider value={{ isConnected, lastEvent, subscribeToSSE }}>
+    <SSEContext.Provider value={{ isConnected: effectiveConnected, lastEvent, subscribeToSSE }}>
       {children}
     </SSEContext.Provider>
   );

@@ -3,7 +3,9 @@
 import React, { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import Cookies from "js-cookie";
+import { ApiEndpoints } from "@/constants/routes";
+import { api } from "@/lib/api/client";
+import { getTenantHeaders } from "@/stores/useTenantStore";
 
 import { AppLayout } from "@/components/AppLayout";
 import { PageHeader } from "@/components/molecules/PageHeader";
@@ -305,6 +307,7 @@ export default function SandboxPage() {
 
   const typewriterRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   const completedJobRef = React.useRef<string | null>(null);
+  const jobStartTimeRef = React.useRef<number>(0);
 
   const typewrite = React.useCallback((text: string, onComplete?: () => void) => {
     if (typewriterRef.current) clearTimeout(typewriterRef.current);
@@ -381,8 +384,25 @@ export default function SandboxPage() {
     [typewrite, form],
   );
 
+  const handleJobFailed = React.useCallback(
+    (jobId: string, errorMessage: string) => {
+      if (completedJobRef.current === jobId) return;
+      completedJobRef.current = jobId;
+      setExecutionOutput(`Execution Failed:\n${errorMessage}`);
+      toast.error(`Async Job ${jobId} failed: ${errorMessage}`);
+      setActiveJobId(null);
+      setIsAsyncExecuting(false);
+    },
+    [],
+  );
+
   React.useEffect(() => {
     if (!activeJobId) return;
+
+    let cancelled = false;
+    let pollTimer: ReturnType<typeof setTimeout> | null = null;
+    let attempts = 0;
+    const maxAttempts = 60;
 
     const unsubscribe = subscribeToSSE((event) => {
       if (!event || !event.payload) return;
@@ -400,20 +420,61 @@ export default function SandboxPage() {
             handleJobCompleted(
               activeJobId,
               (data.result || payload.result) as Record<string, unknown> | null | undefined,
-              (data.model || payload.model) as string | undefined
+              (data.model || payload.model) as string | undefined,
+              jobStartTimeRef.current
             );
           } else if (status === "failed") {
-            setExecutionOutput(`Execution Failed:\n${data.error || payload.error}`);
-            toast.error(`Async Job ${activeJobId} failed: ${data.error || payload.error}`);
-            setActiveJobId(null);
-            setIsAsyncExecuting(false);
+            handleJobFailed(activeJobId, String(data.error || payload.error || "Unknown error"));
           }
         }
       }
     });
 
-    return () => unsubscribe();
-  }, [activeJobId, subscribeToSSE, handleJobCompleted]);
+    const pollJobStatus = async () => {
+      if (cancelled || completedJobRef.current === activeJobId) return;
+      attempts += 1;
+      try {
+        const res = await api.get<Record<string, unknown>>(`${ApiEndpoints.JOBS}/${activeJobId}`);
+        if (cancelled || completedJobRef.current === activeJobId) return;
+        const job = res.data;
+        const status = job?.status;
+        if (status === "completed") {
+          handleJobCompleted(
+            activeJobId,
+            job.result as Record<string, unknown> | null | undefined,
+            job.model as string | undefined,
+            jobStartTimeRef.current
+          );
+          return;
+        }
+        if (status === "failed") {
+          handleJobFailed(activeJobId, String(job.error || "Unknown error"));
+          return;
+        }
+      } catch (pollErr: unknown) {
+        if (cancelled || completedJobRef.current === activeJobId) return;
+        const status = (pollErr as { status?: number })?.status;
+        if (status === 404) {
+          handleJobFailed(activeJobId, "Job expired or not found");
+          return;
+        }
+      }
+
+      if (attempts >= maxAttempts) {
+        handleJobFailed(activeJobId, "Timed out waiting for async job completion");
+        return;
+      }
+      pollTimer = setTimeout(pollJobStatus, 2000);
+    };
+
+    pollTimer = setTimeout(pollJobStatus, 1500);
+
+    return () => {
+      cancelled = true;
+      if (pollTimer) clearTimeout(pollTimer);
+      unsubscribe();
+    };
+  }, [activeJobId, subscribeToSSE, handleJobCompleted, handleJobFailed]);
 
   React.useEffect(() => {
     if (keysList.length > 0) {
@@ -449,11 +510,14 @@ export default function SandboxPage() {
 
     try {
       if (values.enableAsync) {
-        const token = Cookies.get('auth_token');
-        const asyncRes = await fetch("/api/sandbox/chat/completions/async", {
+        jobStartTimeRef.current = startTime;
+        setIsAsyncExecuting(true);
+        const asyncRes = await fetch(ApiEndpoints.SANDBOX_CHAT_COMPLETIONS_ASYNC, {
           method: "POST",
+          credentials: "include",
           headers: {
             "Content-Type": "application/json",
+            ...getTenantHeaders(),
             "X-Sandbox-Key-Prefix": values.keyPrefix,
             ...(values.agentId !== "default" && {
               "X-Prism-Agent-ID": values.agentId,
@@ -461,7 +525,6 @@ export default function SandboxPage() {
             ...(values.model === "prism-auto" && values.routingPolicy && {
               "X-Routing-Policy": values.routingPolicy,
             }),
-            ...(token && { Authorization: `Bearer ${token}` }),
           },
           body: JSON.stringify({
             model: values.model,
@@ -486,7 +549,7 @@ export default function SandboxPage() {
         setActiveJobId(jobId);
         toast.info(`Async Job ${jobId} queued successfully`);
 
-        // Pure 100% SSE push handles completion via subscribeToSSE() listener
+        // SSE push handles completion with automatic /api/jobs/:jobId polling fallback
         return;
       }
 
@@ -648,6 +711,7 @@ export default function SandboxPage() {
         typewrite(choice);
       }
     } catch (err: unknown) {
+      setIsAsyncExecuting(false);
       setExecutionOutput(`[System Exception]\n${getErrorMessage(err)}`);
       form.setValue("userPrompt", savedPrompt);
       toast.error("Execution failed");

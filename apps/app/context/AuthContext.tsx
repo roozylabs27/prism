@@ -44,9 +44,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const loginMutation = useMutation({
     mutationFn: apiLogin,
     onSuccess: (data) => {
-      if (data.token) {
-        Cookies.set('auth_token', data.token, { expires: 7, path: '/', sameSite: 'lax' });
-      }
       queryClient.setQueryData(['auth', 'me'], data.user);
       queryClient.invalidateQueries({ queryKey: ['auth', 'me'] });
     },
@@ -55,9 +52,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const signupMutation = useMutation({
     mutationFn: apiSignup,
     onSuccess: (data) => {
-      if (data.token) {
-        Cookies.set('auth_token', data.token, { expires: 7, path: '/', sameSite: 'lax' });
-      }
       queryClient.setQueryData(['auth', 'me'], data.user);
       queryClient.invalidateQueries({ queryKey: ['auth', 'me'] });
     },
