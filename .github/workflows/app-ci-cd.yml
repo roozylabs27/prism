@@ -59,6 +59,10 @@ jobs:
       - name: Run unit and component tests
         working-directory: apps/app
         run: pnpm test
+
+      - name: Lint
+        working-directory: apps/app
+        run: pnpm lint
       # Typecheck on its own so a type error is reported as such, not as a
       # build failure.
       - name: Typecheck

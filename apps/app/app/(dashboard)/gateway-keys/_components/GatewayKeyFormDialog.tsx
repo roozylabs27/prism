@@ -63,11 +63,18 @@ export function GatewayKeyFormDialog({
   useEffect(() => {
     if (open) {
       reset(defaultValues);
-      setCreatedKey(null);
     }
   }, [open, reset]);
 
+  const handleOpenChange = (nextOpen: boolean) => {
+    if (!nextOpen) {
+      setCreatedKey(null);
+    }
+    onOpenChange(nextOpen);
+  };
+
   const onSubmit = (values: GatewayKeyFormValues) => {
+    setCreatedKey(null);
     createMutation.mutate(
       {
         name: values.name.trim(),
@@ -87,7 +94,7 @@ export function GatewayKeyFormDialog({
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>{createdKey ? "Gateway Key Created" : "Create Gateway Key"}</DialogTitle>

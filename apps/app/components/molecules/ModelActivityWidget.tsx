@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import { Layers, Cpu, KeyRound, ArrowRight } from 'lucide-react';
 import { useLogsQuery } from '@/hooks/queries/useLogsQuery';
@@ -33,83 +33,82 @@ interface SSEEventPayload {
 }
 
 export function ModelActivityWidget({ collapsed }: { collapsed?: boolean }) {
-  const { lastEvent } = useSSE();
+  const { subscribeToSSE } = useSSE();
   const { data: logsData } = useLogsQuery({ limit: 1 });
 
   const latestLog: ApiRequestLog | undefined = logsData?.data?.[0];
 
-  const [activeModel, setActiveModel] = useState<string>('prism-auto');
-  const [activeCred, setActiveCred] = useState<string>('Gateway Key');
-  const [latencyMs, setLatencyMs] = useState<number | null>(null);
-  const [lastActiveTime, setLastActiveTime] = useState<number>(0);
+  const [liveOverride, setLiveOverride] = useState<{
+    model?: string;
+    cred?: string;
+    latencyMs?: number | null;
+    lastActiveTime: number;
+  } | null>(null);
   const [isRecentlyActive, setIsRecentlyActive] = useState<boolean>(false);
 
-  useEffect(() => {
-    if (latestLog) {
-      const logTime = latestLog.createdAt ? new Date(latestLog.createdAt).getTime() : Date.now();
-      setActiveModel(latestLog.model || 'prism-auto');
-      setActiveCred(
+  const logActivity = useMemo(() => {
+    if (!latestLog) return null;
+    const parsedTime = latestLog.createdAt ? new Date(latestLog.createdAt).getTime() : 0;
+    return {
+      model: latestLog.model || 'prism-auto',
+      cred:
         latestLog.credentialName ||
-          (latestLog.gatewayKeyId ? `Key ${latestLog.gatewayKeyId.slice(0, 6)}` : 'Gateway Key')
-      );
-      setLatencyMs(latestLog.latencyMs ?? null);
-      setLastActiveTime(logTime);
-    }
+        (latestLog.gatewayKeyId ? `Key ${latestLog.gatewayKeyId.slice(0, 6)}` : 'Gateway Key'),
+      latencyMs: latestLog.latencyMs ?? null,
+      lastActiveTime: Number.isFinite(parsedTime) ? parsedTime : 0,
+    };
   }, [latestLog]);
 
-  // Consume global SSE stream
+  // Consume global SSE stream via callback subscription
   useEffect(() => {
-    if (!lastEvent || !lastEvent.payload) return;
-    const payload = lastEvent.payload as SSEEventPayload;
+    return subscribeToSSE((event) => {
+      if (!event?.payload || typeof event.payload !== 'object') return;
+      const payload = event.payload as SSEEventPayload;
+      const now = Date.now();
 
-    if (payload.type === 'active_streams_update' && payload.data) {
-      const { byCredential, byModel } = payload.data;
-      if (byCredential) {
-        const credKeys = Object.keys(byCredential);
-        if (credKeys.length > 0) {
-          setActiveCred(credKeys[0]);
-          setLastActiveTime(Date.now());
-        }
+      let nextModel: string | undefined;
+      let nextCred: string | undefined;
+      let nextLatency: number | null | undefined;
+
+      if (payload.type === 'active_streams_update' && payload.data) {
+        const credKeys = payload.data.byCredential ? Object.keys(payload.data.byCredential) : [];
+        const modelKeys = payload.data.byModel ? Object.keys(payload.data.byModel) : [];
+        if (credKeys.length > 0) nextCred = credKeys[0];
+        if (modelKeys.length > 0) nextModel = modelKeys[0];
       }
-      if (byModel) {
-        const modelKeys = Object.keys(byModel);
-        if (modelKeys.length > 0) {
-          setActiveModel(modelKeys[0]);
-          setLastActiveTime(Date.now());
-        }
+      if (payload.type === 'ROUTING_DECISION' && payload.data?.selectedModel) {
+        nextModel = payload.data.selectedModel;
       }
-    }
-
-    if (payload.type === 'ROUTING_DECISION' && payload.data) {
-      if (payload.data.selectedModel) {
-        setActiveModel(payload.data.selectedModel);
-        setLastActiveTime(Date.now());
+      if (payload.type === 'request_log_created' && payload.data) {
+        const d = payload.data;
+        if (d.model) nextModel = d.model;
+        nextCred = d.gatewayKeyName || d.credentialName || d.keyPrefix || nextCred;
+        if (typeof d.latencyMs === 'number') nextLatency = d.latencyMs;
       }
-    }
+      if (payload.model) nextModel = payload.model;
+      const topCred = payload.gatewayKeyName || payload.credentialName || payload.keyPrefix;
+      if (topCred) nextCred = topCred;
+      if (typeof payload.latencyMs === 'number') nextLatency = payload.latencyMs;
 
-    if (payload.type === 'request_log_created' && payload.data) {
-      const d = payload.data;
-      if (d.model) setActiveModel(d.model);
-      const cred = d.gatewayKeyName || d.credentialName || d.keyPrefix;
-      if (cred) setActiveCred(cred);
-      if (typeof d.latencyMs === 'number') setLatencyMs(d.latencyMs);
-      setLastActiveTime(Date.now());
-    }
+      if (nextModel !== undefined || nextCred !== undefined || nextLatency !== undefined) {
+        setLiveOverride((prev) => ({
+          model: nextModel ?? prev?.model,
+          cred: nextCred ?? prev?.cred,
+          latencyMs: nextLatency !== undefined ? nextLatency : prev?.latencyMs,
+          lastActiveTime: now,
+        }));
+      }
+    });
+  }, [subscribeToSSE]);
 
-    if (payload.model) {
-      setActiveModel(payload.model);
-      setLastActiveTime(Date.now());
-    }
-    const credName = payload.gatewayKeyName || payload.credentialName || payload.keyPrefix;
-    if (credName) {
-      setActiveCred(credName);
-      setLastActiveTime(Date.now());
-    }
-    if (typeof payload.latencyMs === 'number') {
-      setLatencyMs(payload.latencyMs);
-      setLastActiveTime(Date.now());
-    }
-  }, [lastEvent]);
+  const lastActiveTime = Math.max(liveOverride?.lastActiveTime ?? 0, logActivity?.lastActiveTime ?? 0);
+  const useLive = liveOverride !== null && liveOverride.lastActiveTime >= (logActivity?.lastActiveTime ?? 0);
+  const activeModel = (useLive ? liveOverride?.model : undefined) ?? logActivity?.model ?? 'prism-auto';
+  const activeCred = (useLive ? liveOverride?.cred : undefined) ?? logActivity?.cred ?? 'Gateway Key';
+  const latencyMs =
+    (useLive && liveOverride?.latencyMs !== undefined ? liveOverride.latencyMs : undefined) ??
+    logActivity?.latencyMs ??
+    null;
 
   useEffect(() => {
     const timer = setInterval(() => {

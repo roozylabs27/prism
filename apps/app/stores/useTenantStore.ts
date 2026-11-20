@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
+import { createJSONStorage, persist, type StateStorage } from 'zustand/middleware';
 
 interface TenantState {
   selectedOrgId: string | null;
@@ -10,18 +10,43 @@ interface TenantState {
   resetTenant: () => void;
 }
 
-const getInitialOrgId = () => {
-  if (typeof window !== 'undefined') {
-    return localStorage.getItem('org_id');
-  }
-  return null;
+type SyncStorage = Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>;
+
+const memoryBacking = new Map<string, string>();
+const memoryStorage: StateStorage = {
+  getItem: (name) => memoryBacking.get(name) ?? null,
+  setItem: (name, value) => {
+    memoryBacking.set(name, value);
+  },
+  removeItem: (name) => {
+    memoryBacking.delete(name);
+  },
 };
 
-const getInitialWsId = () => {
-  if (typeof window !== 'undefined') {
-    return localStorage.getItem('workspace_id');
+function getSafeStorage(): SyncStorage | null {
+  if (typeof window === 'undefined') {
+    return null;
+  }
+  const ls = window.localStorage;
+  if (
+    ls &&
+    typeof ls.getItem === 'function' &&
+    typeof ls.setItem === 'function' &&
+    typeof ls.removeItem === 'function'
+  ) {
+    return ls;
   }
   return null;
+}
+
+const getInitialOrgId = (): string | null => {
+  const storage = getSafeStorage();
+  return storage ? storage.getItem('org_id') : null;
+};
+
+const getInitialWsId = (): string | null => {
+  const storage = getSafeStorage();
+  return storage ? storage.getItem('workspace_id') : null;
 };
 
 export const useTenantStore = create<TenantState>()(
@@ -31,11 +56,12 @@ export const useTenantStore = create<TenantState>()(
       selectedOrgName: null,
       selectedWorkspaceId: getInitialWsId(),
       setSelectedOrg: (orgId: string | null, orgName: string | null = null) => {
-        if (typeof window !== 'undefined') {
+        const storage = getSafeStorage();
+        if (storage) {
           if (orgId) {
-            localStorage.setItem('org_id', orgId);
+            storage.setItem('org_id', orgId);
           } else {
-            localStorage.removeItem('org_id');
+            storage.removeItem('org_id');
           }
         }
         set({
@@ -44,19 +70,21 @@ export const useTenantStore = create<TenantState>()(
         });
       },
       setSelectedWorkspaceId: (workspaceId: string | null) => {
-        if (typeof window !== 'undefined') {
+        const storage = getSafeStorage();
+        if (storage) {
           if (workspaceId) {
-            localStorage.setItem('workspace_id', workspaceId);
+            storage.setItem('workspace_id', workspaceId);
           } else {
-            localStorage.removeItem('workspace_id');
+            storage.removeItem('workspace_id');
           }
         }
         set({ selectedWorkspaceId: workspaceId });
       },
       resetTenant: () => {
-        if (typeof window !== 'undefined') {
-          localStorage.removeItem('org_id');
-          localStorage.removeItem('workspace_id');
+        const storage = getSafeStorage();
+        if (storage) {
+          storage.removeItem('org_id');
+          storage.removeItem('workspace_id');
         }
         set({
           selectedOrgId: null,
@@ -67,6 +95,7 @@ export const useTenantStore = create<TenantState>()(
     }),
     {
       name: 'prism-tenant-storage',
+      storage: createJSONStorage(() => getSafeStorage() ?? memoryStorage),
     }
   )
 );

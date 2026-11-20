@@ -90,14 +90,20 @@ function SearchableSelect({
 
   React.useEffect(() => {
     if (open) {
-      setTimeout(() => inputRef.current?.focus(), 0);
-    } else {
-      setSearch('');
+      const id = setTimeout(() => inputRef.current?.focus(), 0);
+      return () => clearTimeout(id);
     }
   }, [open]);
 
+  const handleOpenChange = (nextOpen: boolean) => {
+    setOpen(nextOpen);
+    if (!nextOpen) {
+      setSearch('');
+    }
+  };
+
   return (
-    <PopoverPrimitive.Root open={open} onOpenChange={setOpen}>
+    <PopoverPrimitive.Root open={open} onOpenChange={handleOpenChange}>
       <PopoverPrimitive.Trigger asChild disabled={disabled}>
         <button
           type="button"

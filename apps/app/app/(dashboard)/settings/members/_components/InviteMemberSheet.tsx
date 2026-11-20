@@ -56,12 +56,19 @@ export function InviteMemberSheet({ open, onOpenChange, onInviteSuccess }: Invit
   useEffect(() => {
     if (open) {
       reset(defaultValues);
-      setInviteLink(null);
     }
   }, [open, reset]);
 
+  const handleSheetOpenChange = (nextOpen: boolean) => {
+    if (!nextOpen) {
+      setInviteLink(null);
+    }
+    onOpenChange(nextOpen);
+  };
+
   const onSubmit = async (values: InviteFormValues) => {
     try {
+      setInviteLink(null);
       const result = await inviteMember({ email: values.email, role: values.role });
       if (onInviteSuccess) onInviteSuccess();
       if (!result.emailSent && result.inviteUrl) {
@@ -76,7 +83,7 @@ export function InviteMemberSheet({ open, onOpenChange, onInviteSuccess }: Invit
   };
 
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
+    <Sheet open={open} onOpenChange={handleSheetOpenChange}>
       <SheetContent>
         <SheetHeader>
           <SheetTitle>Invite Organization Member</SheetTitle>
