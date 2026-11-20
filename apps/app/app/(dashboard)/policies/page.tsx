@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { AppLayout } from '@/components/AppLayout';
 import { PageHeader } from '@/components/molecules/PageHeader';
 import { Card, CardContent } from '@/components/molecules/Card';
@@ -15,6 +15,7 @@ import { toast } from 'sonner';
 
 import { ConfirmDialog } from '@/components/molecules/ConfirmDialog';
 import { getErrorMessage } from '@/types/ui';
+import { toUiWeightPercents, type PolicyUiWeights } from '@/features/routing/utils/weights';
 import { PolicyFormDialog } from './_components/PolicyFormDialog';
 import { PolicyTuner } from './_components/PolicyTuner';
 
@@ -27,19 +28,17 @@ export default function PoliciesPage() {
   const [selectedPolicyId, setSelectedPolicyId] = useState<string>('');
   const [drawerOpen, setDrawerOpen] = useState(false);
 
-  const selectedPolicy = policies?.find((p) => p.id === selectedPolicyId);
+  const activePolicyId =
+    (selectedPolicyId && policies?.some((p) => p.id === selectedPolicyId) ? selectedPolicyId : '') ||
+    policies?.[0]?.id ||
+    '';
+  const selectedPolicy = policies?.find((p) => p.id === activePolicyId);
 
-  useEffect(() => {
-    if (policies && policies.length > 0 && !selectedPolicyId) {
-      setSelectedPolicyId(policies[0].id);
-    }
-  }, [policies, selectedPolicyId]);
-
-  const handleSaveWeights = (weights: { quality: number; cost: number; speed: number }) => {
-    if (!selectedPolicyId) return;
+  const handleSaveWeights = (weights: PolicyUiWeights) => {
+    if (!activePolicyId) return;
     updateMutation.mutate(
       {
-        id: selectedPolicyId,
+        id: activePolicyId,
         data: { weights },
       },
       {
@@ -53,7 +52,7 @@ export default function PoliciesPage() {
     deleteMutation.mutate(policy.id, {
       onSuccess: () => {
         toast.success(`Policy "${policy.name}" deleted`);
-        if (selectedPolicyId === policy.id) {
+        if (activePolicyId === policy.id) {
           setSelectedPolicyId(policies?.find((p) => p.id !== policy.id)?.id ?? '');
         }
       },
@@ -108,7 +107,7 @@ export default function PoliciesPage() {
           <TabsContent value="tuner">
             <PolicyTuner
               policies={policies}
-              selectedPolicyId={selectedPolicyId}
+              selectedPolicyId={activePolicyId}
               selectedPolicy={selectedPolicy}
               onSelectedPolicyChange={setSelectedPolicyId}
               saving={updateMutation.isPending}
@@ -164,10 +163,18 @@ export default function PoliciesPage() {
                         />
                       </div>
                     </div>
-                    <div className="flex gap-4 text-xs text-muted-foreground font-mono">
-                      {policy.weights?.quality != null && <span>Quality: {policy.weights.quality}%</span>}
-                      {policy.weights?.cost != null && <span>Cost: {policy.weights.cost}%</span>}
-                      {policy.weights?.speed != null && <span>Speed: {policy.weights.speed}%</span>}
+                    <div className="flex flex-wrap gap-4 text-xs text-muted-foreground font-mono">
+                      {(() => {
+                        const pcts = toUiWeightPercents(policy.weights);
+                        return (
+                          <>
+                            <span>Task Match: {pcts.task_match}%</span>
+                            <span>Quality: {pcts.quality}%</span>
+                            <span>Cost: {pcts.cost}%</span>
+                            <span>Speed: {pcts.speed}%</span>
+                          </>
+                        );
+                      })()}
                     </div>
                   </CardContent>
                 </Card>

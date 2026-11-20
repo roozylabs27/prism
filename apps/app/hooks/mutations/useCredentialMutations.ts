@@ -18,7 +18,7 @@ export function useResetCooldownMutation() {
 
   return useMutation({
     mutationFn: (d: { providerId: string; credId: string }) =>
-      apiResetCredentialCooldown(d.providerId, d.credId),
+      apiResetCredentialCooldown(d.credId, d.providerId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['credentials'] });
     },
@@ -42,7 +42,7 @@ export function useDeleteCredentialMutation() {
 
   return useMutation({
     mutationFn: (d: { providerId: string; credId: string }) =>
-      apiDeleteCredential(d.providerId, d.credId),
+      apiDeleteCredential(d.credId, d.providerId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['credentials'] });
     },

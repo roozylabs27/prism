@@ -6,6 +6,8 @@ import { zodResolver } from "@hookform/resolvers/zod";
 
 import { Button } from "@/components/atoms/Button";
 import { Input } from "@/components/atoms/Input";
+import { Switch } from "@/components/atoms/Switch";
+import { Textarea } from "@/components/atoms/Textarea";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/molecules/Select";
 import { Dialog, DialogContent, DialogHeader, DialogFooter, DialogTitle, DialogDescription } from "@/components/molecules/Dialog";
 import {
@@ -42,6 +44,7 @@ interface AgentFormDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   editingAgent: ApiAgent | null;
+  modelOptions?: MultiSelectOption[];
   toolOptions: MultiSelectOption[];
   resourceOptions: MultiSelectOption[];
   mcpServerOptions: MultiSelectOption[];
@@ -52,16 +55,20 @@ const defaultValues: AgentFormValues = {
   displayName: "",
   description: "",
   agentType: "general",
+  systemPromptOverride: "",
   maxBudgetCents: 0,
+  allowedModels: [],
   allowedTools: [],
   allowedResources: [],
   allowedMcpServers: [],
+  enabled: true,
 };
 
 export function AgentFormDialog({
   open,
   onOpenChange,
   editingAgent,
+  modelOptions = [],
   toolOptions,
   resourceOptions,
   mcpServerOptions,
@@ -92,10 +99,13 @@ export function AgentFormDialog({
       displayName: editingAgent.displayName,
       description: editingAgent.description,
       agentType: editingAgent.agentType,
+      systemPromptOverride: editingAgent.systemPromptOverride ?? "",
       maxBudgetCents: editingAgent.maxBudgetCents,
+      allowedModels: editingAgent.allowedModels ?? [],
       allowedTools: editingAgent.allowedTools ?? [],
       allowedResources: editingAgent.allowedResources ?? [],
       allowedMcpServers: editingAgent.allowedMcpServers ?? [],
+      enabled: editingAgent.enabled ?? true,
     });
   }, [open, editingAgent, reset]);
 
@@ -121,10 +131,13 @@ export function AgentFormDialog({
       displayName: values.displayName || undefined,
       description: values.description || undefined,
       agentType: values.agentType,
+      systemPromptOverride: values.systemPromptOverride,
       maxBudgetCents: values.maxBudgetCents,
+      allowedModels: values.allowedModels,
       allowedTools: values.allowedTools,
       allowedResources: values.allowedResources,
       allowedMcpServers: values.allowedMcpServers,
+      enabled: values.enabled,
     };
 
     if (editingAgent) {
@@ -253,6 +266,24 @@ export function AgentFormDialog({
             />
             <FormField
               control={form.control}
+              name="systemPromptOverride"
+              render={({ field }) => (
+                <FormItem className="space-y-2">
+                  <FormLabel>System Prompt Override</FormLabel>
+                  <FormControl>
+                    <Textarea
+                      {...field}
+                      rows={3}
+                      placeholder="Optional system prompt injected ahead of conversation messages..."
+                      disabled={isPending}
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
               name="agentType"
               render={({ field }) => (
                 <FormItem className="space-y-2">
@@ -292,6 +323,27 @@ export function AgentFormDialog({
                       min={0}
                       step={100}
                       placeholder="0"
+                      disabled={isPending}
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="allowedModels"
+              render={({ field }) => (
+                <FormItem className="space-y-2">
+                  <FormLabel>Allowed Models</FormLabel>
+                  <FormControl>
+                    <MultiSelect
+                      value={field.value}
+                      onValueChange={field.onChange}
+                      options={modelOptions}
+                      placeholder="All workspace models allowed..."
+                      searchPlaceholder="Search models..."
+                      emptyMessage="No models available."
                       disabled={isPending}
                     />
                   </FormControl>
@@ -359,6 +411,25 @@ export function AgentFormDialog({
                     />
                   </FormControl>
                   <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="enabled"
+              render={({ field }) => (
+                <FormItem className="flex items-center justify-between rounded-lg border border-border p-3">
+                  <div>
+                    <FormLabel className="text-sm font-medium">Agent Enabled</FormLabel>
+                    <p className="text-xs text-muted-foreground">Allow gateway requests under this agent identity.</p>
+                  </div>
+                  <FormControl>
+                    <Switch
+                      checked={field.value}
+                      onCheckedChange={field.onChange}
+                      disabled={isPending}
+                    />
+                  </FormControl>
                 </FormItem>
               )}
             />

@@ -100,6 +100,7 @@ export function ToolFormDialog({
         enabled: detail.tool?.enabled ?? detail.enabled ?? editingTool.enabled,
         inputSchema: formatSchemaJSON(detail.tool?.inputSchema ?? detail.inputSchema ?? editingTool.inputSchema),
         backends: (detail.backends || []).map((b) => ({
+          id: b.id,
           name: b.name,
           endpointUrl: b.endpointUrl,
           authToken: "",
@@ -133,6 +134,7 @@ export function ToolFormDialog({
     const backends: ApiCreateToolBackend[] = values.backends
       .filter((b) => b.name && b.endpointUrl)
       .map((b) => ({
+        id: b.id,
         name: b.name.trim(),
         endpointUrl: b.endpointUrl.trim(),
         authToken: b.authToken?.trim() || undefined,
@@ -298,7 +300,7 @@ export function ToolFormDialog({
 
                 {fields.length === 0 ? (
                   <div className="rounded border border-dashed border-border p-4 text-center text-xs text-muted-foreground">
-                    No backends configured yet. Click "Add Backend" to enable
+                    No backends configured yet. Click &ldquo;Add Backend&rdquo; to enable
                     tool execution.
                   </div>
                 ) : (
@@ -356,7 +358,7 @@ export function ToolFormDialog({
                               type="password"
                               placeholder={
                                 detail
-                                  ? "Re-enter to update (never shown)"
+                                  ? "Leave blank to keep existing token"
                                   : "Bearer token / API key"
                               }
                               {...form.register(`backends.${index}.authToken`)}

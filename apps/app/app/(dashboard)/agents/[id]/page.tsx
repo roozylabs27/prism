@@ -24,6 +24,7 @@ import {
   useDeleteAgent,
 } from "@/hooks/queries/useAgentsQuery";
 import { useToolsQuery } from "@/hooks/queries/useToolsQuery";
+import { useModelsListQuery } from "@/hooks/queries/useModelsListQuery";
 import { useResourcesQuery } from "@/hooks/queries/useResourcesQuery";
 import { useMCPServersQuery } from "@/hooks/queries/useMCPServersQuery";
 import { useLogsQuery } from "@/hooks/queries/useLogsQuery";
@@ -180,15 +181,24 @@ export default function AgentDetailPage() {
   const { data: stats, isLoading: statsLoading } = useAgentStatsQuery(agentId);
   const deleteMutation = useDeleteAgent();
 
+  const modelsQuery = useModelsListQuery();
   const toolsQuery = useToolsQuery();
   const resourcesQuery = useResourcesQuery();
   const mcpServersQuery = useMCPServersQuery();
 
   const logsQuery = useLogsQuery({ agentId, limit: 8 });
 
+  const allModels = (modelsQuery.data && Array.isArray(modelsQuery.data) ? modelsQuery.data : []) as Array<{ slug?: string; name?: string; displayName?: string }>;
   const allTools = (toolsQuery.data && Array.isArray(toolsQuery.data) ? toolsQuery.data : []) as Array<{ id: string; name: string; displayName?: string; description?: string }>;
   const allResources = (resourcesQuery.data && Array.isArray(resourcesQuery.data) ? resourcesQuery.data : []) as Array<{ id: string; name: string; displayName?: string; description?: string }>;
   const allMCPServers = (mcpServersQuery.data && Array.isArray(mcpServersQuery.data) ? mcpServersQuery.data : []) as Array<{ id: string; name: string; displayName?: string; transportType?: string; status?: string; enabled?: boolean }>;
+
+  const modelOptions: MultiSelectOption[] = allModels
+    .filter((m) => m.slug || m.name)
+    .map((m) => ({
+      value: m.slug || m.name || "",
+      label: m.displayName || m.name || m.slug || "",
+    }));
 
   const toolOptions: MultiSelectOption[] = allTools
     .filter((t) => t.name)
@@ -648,6 +658,7 @@ export default function AgentDetailPage() {
         open={modalOpen}
         onOpenChange={setModalOpen}
         editingAgent={agent}
+        modelOptions={modelOptions}
         toolOptions={toolOptions}
         resourceOptions={resourceOptions}
         mcpServerOptions={mcpServerOptions}

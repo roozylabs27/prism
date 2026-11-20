@@ -122,18 +122,11 @@ export function MCPServerFormDialog({
     if (!editingId || !editQuery.data) return;
     const s = editQuery.data;
 
-    let extractedAuthToken = "";
     const filteredHeaderRows: KeyValueRow[] = [];
     const headersMap: Record<string, string> = (s.headers || {}) as Record<string, string>;
 
     Object.entries(headersMap).forEach(([k, v]) => {
-      if (k.toLowerCase() === "authorization") {
-        let val = String(v ?? "").trim();
-        while (/^bearer\s+/i.test(val)) {
-          val = val.replace(/^bearer\s+/i, "").trim();
-        }
-        extractedAuthToken = val;
-      } else {
+      if (k.toLowerCase() !== "authorization") {
         filteredHeaderRows.push({ key: k, value: String(v ?? "") });
       }
     });
@@ -148,7 +141,7 @@ export function MCPServerFormDialog({
       type: s.type === "local" ? "local" : "remote",
       transportType: s.transportType,
       endpointUrl: s.endpointUrl || s.serverUrl || "",
-      authToken: extractedAuthToken,
+      authToken: "",
       command: s.command || "",
       argsCsv: (s.args || []).join("\n"),
       headerRows: filteredHeaderRows,
@@ -167,6 +160,9 @@ export function MCPServerFormDialog({
     let cleanAuthToken = values.authToken.trim();
     while (/^bearer\s+/i.test(cleanAuthToken)) {
       cleanAuthToken = cleanAuthToken.replace(/^bearer\s+/i, "").trim();
+    }
+    if (cleanAuthToken.includes("••••") || cleanAuthToken.includes("\u2022\u2022\u2022\u2022")) {
+      cleanAuthToken = "";
     }
 
     const cleanedHeaderRows = values.headerRows.map((row) => {

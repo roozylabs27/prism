@@ -48,6 +48,7 @@ export interface ApiCreateAgentRequest {
   slug?: string;
   description?: string;
   systemPrompt?: string;
+  systemPromptOverride?: string;
   model?: string;
   agentType?: string;
   temperature?: number;
