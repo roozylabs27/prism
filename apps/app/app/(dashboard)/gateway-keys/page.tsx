@@ -10,6 +10,7 @@ import { Badge } from '@/components/atoms/Badge';
 import { ErrorState, EmptyState } from '@/components/molecules/StateAlerts';
 import { useGatewayKeysQuery, useDeleteGatewayKey } from '@/hooks/queries/useGatewayKeysQuery';
 import { useProvidersQuery } from '@/hooks/queries/useProvidersQuery';
+import { useAgentsQuery } from '@/hooks/queries/useAgentsQuery';
 import type { ApiGatewayKey } from '@/lib/api';
 import { ConfirmDialog } from '@/components/molecules/ConfirmDialog';
 import { KeyRound, Plus, Trash2 } from 'lucide-react';
@@ -32,11 +33,13 @@ export default function GatewayKeysPage() {
   }, []);
   const deleteMutation = useDeleteGatewayKey();
   const { data: providers } = useProvidersQuery();
+  const { data: agents } = useAgentsQuery();
 
   const [modalOpen, setModalOpen] = useState(false);
 
   const list = data?.data ?? [];
   const total = data?.total ?? 0;
+  const agentNameMap = new Map((agents ?? []).map((a) => [a.id, a.displayName || a.name]));
 
   const handleDelete = (key: ApiGatewayKey) => {
     deleteMutation.mutate(key.id, {
@@ -57,6 +60,18 @@ export default function GatewayKeysPage() {
       dataIndex: 'keyPrefix',
       key: 'keyPrefix',
       render: (val) => <span className="font-mono text-muted-foreground">{String(val)}</span>,
+    },
+    {
+      title: 'Bound Agent',
+      key: 'agentId',
+      render: (_, record) =>
+        record.agentId ? (
+          <Badge variant="outline" className="text-[10px] font-mono">
+            {agentNameMap.get(record.agentId) || record.agentId}
+          </Badge>
+        ) : (
+          <span className="text-xs text-muted-foreground">Any</span>
+        ),
     },
     {
       title: 'Allowed Models',
@@ -174,6 +189,7 @@ export default function GatewayKeysPage() {
         open={modalOpen}
         onOpenChange={setModalOpen}
         providers={providers}
+        agents={agents}
       />
     </AppLayout>
   );

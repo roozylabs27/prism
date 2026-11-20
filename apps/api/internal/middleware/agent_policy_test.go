@@ -97,7 +97,7 @@ func TestAgentPolicyMiddleware_ValidAgentSetsContext(t *testing.T) {
 
 func TestAgentPolicyMiddleware_EveryAgentHeaderIsResolved(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	for _, header := range []string{"X-Prism-Agent-ID", "X-Prism-Agent-Name", "X-Agent-Name"} {
+	for _, header := range []string{"X-Prism-Agent-ID", "X-Paperclip-Agent-ID", "X-Prism-Agent-Name", "X-Agent-Name"} {
 		r := gin.New()
 		// The agent does not exist, so naming it in any header must stop the
 		// request rather than reach the handler unchecked.
@@ -111,4 +111,106 @@ func TestAgentPolicyMiddleware_EveryAgentHeaderIsResolved(t *testing.T) {
 
 		assert.Equal(t, http.StatusForbidden, w.Code, header)
 	}
+}
+
+func TestAgentPolicyMiddleware_PaperclipHeaderResolvesValidAgent(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	agent := &models.Agent{ID: "ag_pc", Name: "paperclip-coder", Enabled: true}
+	r := gin.New()
+	r.Use(AgentPolicyMiddleware(&mockAgentFinder{agent: agent}))
+	var gotID string
+	r.GET("/test", func(c *gin.Context) {
+		gotID = c.GetString("agentID")
+		c.String(http.StatusOK, "ok")
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	req.Header.Set("X-Paperclip-Agent-ID", "ag_pc")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+	assert.Equal(t, "ag_pc", gotID)
+}
+
+func TestAgentPolicyMiddleware_KeyBoundAgentEnforced(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	boundID := "ag_pinned"
+	pinnedAgent := &models.Agent{ID: boundID, Name: "pinned-agent", Enabled: true}
+
+	t.Run("missing header still binds key-pinned agent", func(t *testing.T) {
+		r := gin.New()
+		r.Use(func(c *gin.Context) {
+			c.Set("gatewayKey", &models.GatewayAPIKey{ID: "gk_1", UserID: "u1", AgentID: &boundID})
+			c.Next()
+		})
+		r.Use(AgentPolicyMiddleware(&mockAgentFinder{agent: pinnedAgent}))
+		var got *models.Agent
+		r.GET("/test", func(c *gin.Context) {
+			got = AgentFromContext(c)
+			c.String(http.StatusOK, "ok")
+		})
+
+		req := httptest.NewRequest(http.MethodGet, "/test", nil)
+		w := httptest.NewRecorder()
+		r.ServeHTTP(w, req)
+
+		assert.Equal(t, http.StatusOK, w.Code)
+		if assert.NotNil(t, got) {
+			assert.Equal(t, boundID, got.ID)
+		}
+	})
+
+	t.Run("matching ID or name header is allowed", func(t *testing.T) {
+		for _, val := range []string{boundID, "PINNED-AGENT"} {
+			r := gin.New()
+			r.Use(func(c *gin.Context) {
+				c.Set("gatewayKey", &models.GatewayAPIKey{ID: "gk_1", UserID: "u1", AgentID: &boundID})
+				c.Next()
+			})
+			r.Use(AgentPolicyMiddleware(&mockAgentFinder{agent: pinnedAgent}))
+			r.GET("/test", func(c *gin.Context) { c.String(http.StatusOK, "ok") })
+
+			req := httptest.NewRequest(http.MethodGet, "/test", nil)
+			req.Header.Set("X-Prism-Agent-ID", val)
+			w := httptest.NewRecorder()
+			r.ServeHTTP(w, req)
+			assert.Equal(t, http.StatusOK, w.Code)
+		}
+	})
+
+	t.Run("conflicting header override is rejected with 403", func(t *testing.T) {
+		r := gin.New()
+		r.Use(func(c *gin.Context) {
+			c.Set("gatewayKey", &models.GatewayAPIKey{ID: "gk_1", UserID: "u1", AgentID: &boundID})
+			c.Next()
+		})
+		r.Use(AgentPolicyMiddleware(&mockAgentFinder{agent: pinnedAgent}))
+		r.GET("/test", func(c *gin.Context) { c.String(http.StatusOK, "ok") })
+
+		req := httptest.NewRequest(http.MethodGet, "/test", nil)
+		req.Header.Set("X-Paperclip-Agent-ID", "other-agent")
+		w := httptest.NewRecorder()
+		r.ServeHTTP(w, req)
+
+		assert.Equal(t, http.StatusForbidden, w.Code)
+		assert.Contains(t, w.Body.String(), "AGENT_BINDING_MISMATCH")
+	})
+
+	t.Run("disabled pinned agent is rejected with 403", func(t *testing.T) {
+		r := gin.New()
+		r.Use(func(c *gin.Context) {
+			c.Set("gatewayKey", &models.GatewayAPIKey{ID: "gk_1", UserID: "u1", AgentID: &boundID})
+			c.Next()
+		})
+		r.Use(AgentPolicyMiddleware(&mockAgentFinder{agent: &models.Agent{ID: boundID, Name: "pinned-agent", Enabled: false}}))
+		r.GET("/test", func(c *gin.Context) { c.String(http.StatusOK, "ok") })
+
+		req := httptest.NewRequest(http.MethodGet, "/test", nil)
+		w := httptest.NewRecorder()
+		r.ServeHTTP(w, req)
+
+		assert.Equal(t, http.StatusForbidden, w.Code)
+		assert.Contains(t, w.Body.String(), "disabled")
+	})
 }

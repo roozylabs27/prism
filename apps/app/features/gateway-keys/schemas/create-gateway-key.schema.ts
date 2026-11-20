@@ -3,6 +3,7 @@ import { z } from 'zod';
 export const gatewayKeySchema = z.object({
   name: z.string().min(1, 'Key name is required'),
   providerId: z.string().min(1, 'Please select a provider'),
+  agentId: z.string().optional(),
   rateLimit: z.string().default('100'),
 });
 

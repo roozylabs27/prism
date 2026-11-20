@@ -3,7 +3,6 @@ package proxy
 import (
 	"context"
 	"fmt"
-	"path/filepath"
 	"strings"
 
 	"github.com/roozylabs/prism/internal/models"
@@ -28,13 +27,37 @@ func matchPattern(pattern, target string) bool {
 	if target == "" {
 		return false
 	}
-	pattern = strings.ToLower(pattern)
-	target = strings.ToLower(target)
-	matched, err := filepath.Match(pattern, target)
-	if err == nil && matched {
-		return true
+	return globMatch([]rune(strings.ToLower(pattern)), []rune(strings.ToLower(target)))
+}
+
+// globMatch evaluates target against an OS-independent wildcard pattern where
+// '*' matches zero or more runes (including slashes) and '?' matches any single
+// rune. Substring matching is intentionally avoided so "gpt-4" never matches "gpt-4o-mini".
+func globMatch(pattern, target []rune) bool {
+	pIdx, tIdx := 0, 0
+	starIdx, matchIdx := -1, 0
+
+	for tIdx < len(target) {
+		if pIdx < len(pattern) && (pattern[pIdx] == '?' || pattern[pIdx] == target[tIdx]) {
+			pIdx++
+			tIdx++
+		} else if pIdx < len(pattern) && pattern[pIdx] == '*' {
+			starIdx = pIdx
+			matchIdx = tIdx
+			pIdx++
+		} else if starIdx != -1 {
+			pIdx = starIdx + 1
+			matchIdx++
+			tIdx = matchIdx
+		} else {
+			return false
+		}
 	}
-	return strings.Contains(target, strings.Trim(pattern, "*"))
+
+	for pIdx < len(pattern) && pattern[pIdx] == '*' {
+		pIdx++
+	}
+	return pIdx == len(pattern)
 }
 
 func (e *RBACEngine) Evaluate(ctx context.Context, userID string, req models.RBACEvaluationRequest) (*models.RBACEvaluationResult, error) {
