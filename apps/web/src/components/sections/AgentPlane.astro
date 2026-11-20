@@ -1,0 +1,26 @@
+---
+import Section from '../ui/Section.astro';
+import { agentControls, agentPolicyExample } from '../../data/content';
+---
+
+<Section
+	id="agents"
+	label="04 · Agent calls"
+	title="Each agent gets a name, a scope and a spending cap."
+	intro="Register an agent once, then every model, tool and MCP call it makes through Prism is checked against its policy."
+>
+	<div class="grid gap-10 xl:grid-cols-[minmax(0,1fr)_minmax(0,22rem)]">
+		<dl class="divide-y divide-rule border-y border-rule">
+			{agentControls.map((c) => (
+				<div class="py-4 grid gap-1 sm:grid-cols-[9rem_minmax(0,1fr)] sm:gap-6">
+					<dt class="font-medium">{c.term}</dt>
+					<dd class="text-muted">{c.def}</dd>
+				</div>
+			))}
+		</dl>
+		<figure class="self-start min-w-0 w-full border border-rule rounded-sm bg-raised">
+			<figcaption class="px-4 pt-4 eyebrow">POST /api/agents</figcaption>
+			<pre class="p-4 overflow-x-auto text-sm leading-relaxed"><code>{agentPolicyExample}</code></pre>
+		</figure>
+	</div>
+</Section>
