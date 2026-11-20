@@ -7,6 +7,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/roozylabs/prism/internal/httputil"
+	"github.com/roozylabs/prism/internal/middleware"
 	"github.com/roozylabs/prism/internal/models"
 	goredis "github.com/roozylabs/prism/internal/redis"
 	"github.com/roozylabs/prism/internal/repository"
@@ -74,23 +75,23 @@ func (h *ModelHandler) authorizeProvider(c *gin.Context, providerID string, writ
 		httputil.RespondUnauthorized(c, "Authentication required", nil, "AUTH_REQUIRED")
 		return false
 	}
-	prov, err := h.providers.FindByID(c.Request.Context(), providerID)
+	prov, err := h.providers.FindByID(middleware.ContextWithTenant(c), providerID)
 	if err != nil || prov == nil {
 		httputil.RespondNotFound(c, "Provider not found", err, "PROVIDER_NOT_FOUND")
 		return false
 	}
 	if !write {
-		if prov.UserID == "" || prov.UserID == userID {
+		if callerCanAccessProvider(c, prov, userID) {
 			return true
 		}
 		httputil.RespondNotFound(c, "Provider not found", nil, "PROVIDER_NOT_FOUND")
 		return false
 	}
-	if prov.UserID == "" {
+	if isSystemProvider(prov) {
 		httputil.RespondForbidden(c, "System providers cannot be modified by tenants", nil, "SYSTEM_PROVIDER_READONLY")
 		return false
 	}
-	if prov.UserID != userID {
+	if !callerOwnsProvider(c, prov, userID) {
 		httputil.RespondNotFound(c, "Provider not found", nil, "PROVIDER_NOT_FOUND")
 		return false
 	}
@@ -122,7 +123,7 @@ func (h *ModelHandler) List(c *gin.Context) {
 
 	pg := httputil.ParsePage(c)
 
-	modelList, total, err := h.models.ListWithFilter(c.Request.Context(), providerID, search, pg.Limit, pg.Offset, userID)
+	modelList, total, err := h.models.ListWithFilter(middleware.ContextWithTenant(c), providerID, search, pg.Limit, pg.Offset, userID)
 	if err != nil {
 		httputil.RespondInternalError(c, "Failed to list models", err, "MODELS_LIST_FAILED")
 		return
@@ -257,13 +258,14 @@ func (h *ModelHandler) Delete(c *gin.Context) {
 
 	// 2. Guard against deleting model referenced in active Gateway API Keys
 	if h.gatewayKeys != nil {
-		keyCount, err := h.gatewayKeys.CountByAllowedModel(c.Request.Context(), m.Slug)
+		ctx := middleware.ContextWithTenant(c)
+		keyCount, err := h.gatewayKeys.CountByAllowedModel(ctx, m.Slug)
 		if err == nil && keyCount > 0 {
 			httputil.RespondError(c, http.StatusConflict, fmt.Sprintf("Cannot delete model: in use by %d active Gateway API Key(s)", keyCount), nil, "MODEL_IN_USE_BY_KEYS")
 			return
 		}
 		if m.Name != m.Slug {
-			keyCount2, err := h.gatewayKeys.CountByAllowedModel(c.Request.Context(), m.Name)
+			keyCount2, err := h.gatewayKeys.CountByAllowedModel(ctx, m.Name)
 			if err == nil && keyCount2 > 0 {
 				httputil.RespondError(c, http.StatusConflict, fmt.Sprintf("Cannot delete model: in use by %d active Gateway API Key(s)", keyCount2), nil, "MODEL_IN_USE_BY_KEYS")
 				return

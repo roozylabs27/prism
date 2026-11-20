@@ -123,6 +123,12 @@ func ResolveCanonicalTenantContext(c *gin.Context, gatewayKey *models.GatewayAPI
 		canonicalProjID = headerProjID
 	}
 
+	var err error
+	canonicalWsID, canonicalProjID, err = validateSessionHierarchy(c, checker, canonicalOrgID, canonicalWsID, canonicalProjID, gatewayKey)
+	if err != nil {
+		return models.TenantContext{}, err
+	}
+
 	tc := models.TenantContext{
 		OrgID:       canonicalOrgID,
 		WorkspaceID: canonicalWsID,
@@ -135,6 +141,7 @@ func ResolveCanonicalTenantContext(c *gin.Context, gatewayKey *models.GatewayAPI
 		c.Set("organizationId", tc.OrgID)
 		c.Set("workspace_id", tc.WorkspaceID)
 		c.Set("project_id", tc.ProjectID)
+		attachTenantDBContext(c, gatewayKey, tc)
 	}
 
 	return tc, nil

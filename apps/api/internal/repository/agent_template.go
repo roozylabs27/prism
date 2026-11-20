@@ -22,20 +22,23 @@ func (r *AgentTemplateRepository) Create(ctx context.Context, tmpl *models.Agent
 	if tmpl.ID == "" {
 		tmpl.ID = uuid.New().String()
 	}
+	if tmpl.OrgID == "" && !tmpl.IsPreset {
+		tmpl.OrgID = tenantOrgID(ctx)
+	}
 	now := time.Now()
 	tmpl.CreatedAt = now
 	tmpl.UpdatedAt = now
 
 	query := `
 		INSERT INTO agent_templates (
-			id, user_id, name, slug, role, description, icon,
+			id, user_id, org_id, name, slug, role, description, icon,
 			allowed_models, allowed_tools, allowed_resources,
 			max_budget_cents, is_preset, created_at, updated_at
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+		) VALUES ($1, $2, NULLIF($3, ''), $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
 	`
 	_, err := r.db.ExecContext(
 		ctx, query,
-		tmpl.ID, tmpl.UserID, tmpl.Name, tmpl.Slug, tmpl.Role, tmpl.Description, tmpl.Icon,
+		tmpl.ID, tmpl.UserID, tmpl.OrgID, tmpl.Name, tmpl.Slug, tmpl.Role, tmpl.Description, tmpl.Icon,
 		tmpl.AllowedModels, tmpl.AllowedTools, tmpl.AllowedResources,
 		tmpl.MaxBudgetCents, tmpl.IsPreset, tmpl.CreatedAt, tmpl.UpdatedAt,
 	)
@@ -45,20 +48,21 @@ func (r *AgentTemplateRepository) Create(ctx context.Context, tmpl *models.Agent
 	return nil
 }
 
-// FindByID returns a template, by id or slug, that the user may use: a
-// preset or their own.
+// FindByID returns a template, by id or slug, that the caller's org or user may use: a
+// preset or their tenant's own.
 func (r *AgentTemplateRepository) FindByID(ctx context.Context, id, userID string) (*models.AgentTemplate, error) {
+	ownerClause, args := tenantOwnerClause(ctx, "", userID, []any{id})
 	query := `
-		SELECT id, user_id, name, slug, role, description, icon,
+		SELECT id, user_id, COALESCE(org_id, ''), name, slug, role, description, icon,
 		       allowed_models, allowed_tools, allowed_resources,
 		       max_budget_cents, is_preset, created_at, updated_at
 		FROM agent_templates
-		WHERE (id::text = $1 OR slug = $1) AND (is_preset OR user_id = $2)
+		WHERE (id::text = $1 OR slug = $1) AND (is_preset OR (` + ownerClause + `))
 	`
-	row := r.db.QueryRowContext(ctx, query, id, userID)
+	row := r.db.QueryRowContext(ctx, query, args...)
 	var t models.AgentTemplate
 	err := row.Scan(
-		&t.ID, &t.UserID, &t.Name, &t.Slug, &t.Role, &t.Description, &t.Icon,
+		&t.ID, &t.UserID, &t.OrgID, &t.Name, &t.Slug, &t.Role, &t.Description, &t.Icon,
 		&t.AllowedModels, &t.AllowedTools, &t.AllowedResources,
 		&t.MaxBudgetCents, &t.IsPreset, &t.CreatedAt, &t.UpdatedAt,
 	)
@@ -69,15 +73,16 @@ func (r *AgentTemplateRepository) FindByID(ctx context.Context, id, userID strin
 }
 
 func (r *AgentTemplateRepository) ListAll(ctx context.Context, userID string) ([]models.AgentTemplate, error) {
+	ownerClause, args := tenantOwnerClause(ctx, "", userID, nil)
 	query := `
-		SELECT id, user_id, name, slug, role, description, icon,
+		SELECT id, user_id, COALESCE(org_id, ''), name, slug, role, description, icon,
 		       allowed_models, allowed_tools, allowed_resources,
 		       max_budget_cents, is_preset, created_at, updated_at
 		FROM agent_templates
-		WHERE is_preset = true OR user_id = $1
+		WHERE is_preset = true OR (` + ownerClause + `)
 		ORDER BY is_preset DESC, name ASC
 	`
-	rows, err := r.db.QueryContext(ctx, query, userID)
+	rows, err := r.db.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("list agent templates: %w", err)
 	}
@@ -87,7 +92,7 @@ func (r *AgentTemplateRepository) ListAll(ctx context.Context, userID string) ([
 	for rows.Next() {
 		var t models.AgentTemplate
 		if err := rows.Scan(
-			&t.ID, &t.UserID, &t.Name, &t.Slug, &t.Role, &t.Description, &t.Icon,
+			&t.ID, &t.UserID, &t.OrgID, &t.Name, &t.Slug, &t.Role, &t.Description, &t.Icon,
 			&t.AllowedModels, &t.AllowedTools, &t.AllowedResources,
 			&t.MaxBudgetCents, &t.IsPreset, &t.CreatedAt, &t.UpdatedAt,
 		); err != nil {

@@ -6,6 +6,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/roozylabs/prism/internal/database"
 	"github.com/roozylabs/prism/internal/models"
 	"github.com/roozylabs/prism/internal/repository"
 )
@@ -27,16 +28,25 @@ type budgetStore interface {
 // Callers must pass it to Release once the request finishes or fails.
 type BudgetReservation struct {
 	UserID      string
+	ScopeKey    string
 	ReservedUSD float64
 	released    bool
 }
 
 type BudgetManager struct {
-	budgetRepo budgetStore
-	spendCache sync.Map // userID -> budgetSpendCacheEntry
+	budgetRepo  budgetStore
+	spendCache  sync.Map // scopeKey -> budgetSpendCacheEntry
+	userToScope sync.Map // userID -> latest scopeKey (supports InvalidateSpendCache(userID))
 
 	mu       sync.Mutex
-	inFlight map[string]float64 // userID -> reserved in-flight USD
+	inFlight map[string]float64 // scopeKey -> reserved in-flight USD
+}
+
+func budgetScopeKey(ctx context.Context, userID string) string {
+	if orgID := database.TenantContextFrom(ctx).OrgID; orgID != "" {
+		return "org:" + orgID
+	}
+	return "user:" + userID
 }
 
 func NewBudgetManager(budgetRepo *repository.BudgetRepository) *BudgetManager {
@@ -58,6 +68,8 @@ func (bm *BudgetManager) GetStatus(ctx context.Context, userID string) (*models.
 	if bm == nil || bm.budgetRepo == nil || userID == "" {
 		return nil, nil
 	}
+	scopeKey := budgetScopeKey(ctx, userID)
+	bm.userToScope.Store(userID, scopeKey)
 	budgets, err := bm.budgetRepo.ListByUserID(ctx, userID)
 	if err != nil {
 		return nil, err
@@ -73,11 +85,11 @@ func (bm *BudgetManager) GetStatus(ctx context.Context, userID string) (*models.
 		}
 		if !spendLoaded {
 			// Spend is only needed once there is a budget to measure.
-			m, d, err := bm.getSpendCached(ctx, userID)
+			m, d, err := bm.getSpendCached(ctx, scopeKey, userID)
 			if err != nil {
 				return nil, err
 			}
-			inFlight := bm.inFlightSpend(userID)
+			inFlight := bm.inFlightSpend(scopeKey)
 			monthly = m + inFlight
 			daily = d + inFlight
 			spendLoaded = true
@@ -102,6 +114,9 @@ func (bm *BudgetManager) Reserve(ctx context.Context, userID string, estimatedCo
 		estimatedCostUSD = 0
 	}
 
+	scopeKey := budgetScopeKey(ctx, userID)
+	bm.userToScope.Store(userID, scopeKey)
+
 	budgets, err := bm.budgetRepo.ListByUserID(ctx, userID)
 	if err != nil {
 		return nil, nil, err
@@ -117,7 +132,7 @@ func (bm *BudgetManager) Reserve(ctx context.Context, userID string, estimatedCo
 		return nil, nil, nil
 	}
 
-	monthlyDB, dailyDB, err := bm.getSpendCached(ctx, userID)
+	monthlyDB, dailyDB, err := bm.getSpendCached(ctx, scopeKey, userID)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -128,7 +143,7 @@ func (bm *BudgetManager) Reserve(ctx context.Context, userID string, estimatedCo
 	if bm.inFlight == nil {
 		bm.inFlight = make(map[string]float64)
 	}
-	if v, ok := bm.spendCache.Load(userID); ok {
+	if v, ok := bm.spendCache.Load(scopeKey); ok {
 		entry := v.(budgetSpendCacheEntry)
 		if time.Since(entry.fetchedAt) < budgetSpendCacheTTL {
 			monthlyDB = entry.monthly
@@ -136,7 +151,7 @@ func (bm *BudgetManager) Reserve(ctx context.Context, userID string, estimatedCo
 		}
 	}
 
-	inFlight := bm.inFlight[userID]
+	inFlight := bm.inFlight[scopeKey]
 	projectedMonthly := monthlyDB + inFlight + estimatedCostUSD
 	projectedDaily := dailyDB + inFlight + estimatedCostUSD
 
@@ -165,9 +180,10 @@ func (bm *BudgetManager) Reserve(ctx context.Context, userID string, estimatedCo
 		}
 	}
 
-	bm.inFlight[userID] = inFlight + estimatedCostUSD
+	bm.inFlight[scopeKey] = inFlight + estimatedCostUSD
 	return &BudgetReservation{
 		UserID:      userID,
+		ScopeKey:    scopeKey,
 		ReservedUSD: estimatedCostUSD,
 	}, worst, nil
 }
@@ -187,40 +203,59 @@ func (bm *BudgetManager) Release(res *BudgetReservation, actualCostUSD float64) 
 	}
 	res.released = true
 
+	scopeKey := res.ScopeKey
+	if scopeKey == "" {
+		scopeKey = "user:" + res.UserID
+	}
+
 	if bm.inFlight != nil {
-		next := bm.inFlight[res.UserID] - res.ReservedUSD
+		next := bm.inFlight[scopeKey] - res.ReservedUSD
 		if next <= 1e-12 {
-			delete(bm.inFlight, res.UserID)
+			delete(bm.inFlight, scopeKey)
 		} else {
-			bm.inFlight[res.UserID] = next
+			bm.inFlight[scopeKey] = next
 		}
 	}
 
 	if actualCostUSD > 0 {
-		if v, ok := bm.spendCache.Load(res.UserID); ok {
+		if v, ok := bm.spendCache.Load(scopeKey); ok {
 			entry := v.(budgetSpendCacheEntry)
 			entry.monthly += actualCostUSD
 			entry.daily += actualCostUSD
-			bm.spendCache.Store(res.UserID, entry)
+			bm.spendCache.Store(scopeKey, entry)
 		}
 	}
 }
 
-// InvalidateSpendCache clears the cached DB spend entry for userID.
+// InvalidateSpendCache clears cached DB spend entries associated with userID.
 func (bm *BudgetManager) InvalidateSpendCache(userID string) {
 	if bm == nil || userID == "" {
 		return
 	}
 	bm.spendCache.Delete(userID)
+	bm.spendCache.Delete("user:" + userID)
+	if v, ok := bm.userToScope.Load(userID); ok {
+		if scopeKey, ok := v.(string); ok && scopeKey != "" {
+			bm.spendCache.Delete(scopeKey)
+		}
+	}
 }
 
-func (bm *BudgetManager) inFlightSpend(userID string) float64 {
+// InvalidateSpendCacheForOrg clears cached DB spend for orgID.
+func (bm *BudgetManager) InvalidateSpendCacheForOrg(orgID string) {
+	if bm == nil || orgID == "" {
+		return
+	}
+	bm.spendCache.Delete("org:" + orgID)
+}
+
+func (bm *BudgetManager) inFlightSpend(scopeKey string) float64 {
 	bm.mu.Lock()
 	defer bm.mu.Unlock()
 	if bm.inFlight == nil {
 		return 0
 	}
-	return bm.inFlight[userID]
+	return bm.inFlight[scopeKey]
 }
 
 func evaluateBudget(budget *models.Budget, monthlySpent, dailySpent float64) *models.BudgetStatus {
@@ -273,19 +308,19 @@ func computeBudgetStatus(usagePercent, warningThreshold, criticalThreshold float
 	return "healthy"
 }
 
-func (bm *BudgetManager) getSpendCached(ctx context.Context, userID string) (float64, float64, error) {
-	if v, ok := bm.spendCache.Load(userID); ok {
+func (bm *BudgetManager) getSpendCached(ctx context.Context, scopeKey, userID string) (float64, float64, error) {
+	if v, ok := bm.spendCache.Load(scopeKey); ok {
 		entry := v.(budgetSpendCacheEntry)
 		if time.Since(entry.fetchedAt) < budgetSpendCacheTTL {
 			return entry.monthly, entry.daily, nil
 		}
-		bm.spendCache.Delete(userID)
+		bm.spendCache.Delete(scopeKey)
 	}
 	monthly, daily, err := bm.budgetRepo.GetCombinedSpend(ctx, userID)
 	if err != nil {
 		return 0, 0, err
 	}
-	bm.spendCache.Store(userID, budgetSpendCacheEntry{
+	bm.spendCache.Store(scopeKey, budgetSpendCacheEntry{
 		monthly:   monthly,
 		daily:     daily,
 		fetchedAt: time.Now(),

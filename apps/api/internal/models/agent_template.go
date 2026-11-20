@@ -8,6 +8,7 @@ import (
 type AgentTemplate struct {
 	ID               string          `json:"id" db:"id"`
 	UserID           *string         `json:"userId,omitempty" db:"user_id"`
+	OrgID            string          `json:"orgId,omitempty" db:"org_id"`
 	Name             string          `json:"name" db:"name"`
 	Slug             string          `json:"slug" db:"slug"`
 	Role             string          `json:"role" db:"role"`

@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
@@ -19,12 +20,12 @@ func NewAgentRepository(db *sql.DB) *AgentRepository {
 	return &AgentRepository{db: db}
 }
 
-const agentColumns = `id, COALESCE(user_id, ''), name, display_name, description, agent_type, system_prompt_override, allowed_models, allowed_tools, allowed_resources, allowed_mcp_servers, max_budget_cents, status, enabled, created_at, updated_at`
+const agentColumns = `id, COALESCE(user_id, ''), COALESCE(org_id, ''), COALESCE(workspace_id, ''), COALESCE(project_id, ''), name, display_name, description, agent_type, system_prompt_override, allowed_models, allowed_tools, allowed_resources, allowed_mcp_servers, max_budget_cents, status, enabled, created_at, updated_at`
 
 func scanAgent(row interface{ Scan(...interface{}) error }, a *models.Agent) error {
 	var allowedModels, allowedTools, allowedResources, allowedMCPServers pq.StringArray
 	err := row.Scan(
-		&a.ID, &a.UserID, &a.Name, &a.DisplayName, &a.Description, &a.AgentType,
+		&a.ID, &a.UserID, &a.OrgID, &a.WorkspaceID, &a.ProjectID, &a.Name, &a.DisplayName, &a.Description, &a.AgentType,
 		&a.SystemPromptOverride, &allowedModels, &allowedTools, &allowedResources, &allowedMCPServers,
 		&a.MaxBudgetCents, &a.Status, &a.Enabled, &a.CreatedAt, &a.UpdatedAt,
 	)
@@ -51,8 +52,14 @@ func scanAgent(row interface{ Scan(...interface{}) error }, a *models.Agent) err
 }
 
 func (r *AgentRepository) ListByUserID(ctx context.Context, userID string) ([]models.Agent, error) {
+	ownerClause, args := tenantOwnerClause(ctx, "", userID, nil)
+	where := ownerClause
+	if wsClause, wsArgs := appendOptionalWorkspaceClause(ctx, "", args); wsClause != "" {
+		where = fmt.Sprintf("(%s) AND %s", ownerClause, wsClause)
+		args = wsArgs
+	}
 	rows, err := r.db.QueryContext(ctx,
-		`SELECT `+agentColumns+` FROM agents WHERE user_id = $1 ORDER BY created_at DESC`, userID)
+		`SELECT `+agentColumns+` FROM agents WHERE `+where+` ORDER BY created_at DESC`, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -71,8 +78,9 @@ func (r *AgentRepository) ListByUserID(ctx context.Context, userID string) ([]mo
 
 func (r *AgentRepository) FindByID(ctx context.Context, id, userID string) (*models.Agent, error) {
 	var a models.Agent
+	ownerClause, args := tenantOwnerClause(ctx, "", userID, []any{id})
 	err := scanAgent(r.db.QueryRowContext(ctx,
-		`SELECT `+agentColumns+` FROM agents WHERE id = $1 AND user_id = $2`, id, userID), &a)
+		`SELECT `+agentColumns+` FROM agents WHERE id = $1 AND (`+ownerClause+`)`, args...), &a)
 	if err != nil {
 		return nil, err
 	}
@@ -80,9 +88,10 @@ func (r *AgentRepository) FindByID(ctx context.Context, id, userID string) (*mod
 }
 
 func (r *AgentRepository) FindByMCPServerName(ctx context.Context, userID, serverName string) ([]models.Agent, error) {
+	ownerClause, args := tenantOwnerClause(ctx, "", userID, []any{serverName})
 	rows, err := r.db.QueryContext(ctx,
-		`SELECT `+agentColumns+` FROM agents WHERE $1 = ANY(allowed_mcp_servers) AND user_id = $2 ORDER BY created_at DESC`,
-		serverName, userID)
+		`SELECT `+agentColumns+` FROM agents WHERE $1 = ANY(allowed_mcp_servers) AND (`+ownerClause+`) ORDER BY created_at DESC`,
+		args...)
 	if err != nil {
 		return nil, err
 	}
@@ -100,15 +109,16 @@ func (r *AgentRepository) FindByMCPServerName(ctx context.Context, userID, serve
 }
 
 // FindByUserAndName returns the agent a gateway caller means by name: their
-// own, or else a system agent (one without an owner). Other users' agents are
-// never returned.
+// org's/own agent, or else a system agent (one without an owner). Other tenants'
+// agents are never returned.
 func (r *AgentRepository) FindByUserAndName(ctx context.Context, userID, name string) (*models.Agent, error) {
 	var a models.Agent
+	ownerClause, args := tenantOwnerClause(ctx, "", userID, []any{name})
 	err := scanAgent(r.db.QueryRowContext(ctx,
 		`SELECT `+agentColumns+` FROM agents
-		 WHERE name = $1 AND (user_id = $2 OR user_id IS NULL)
-		 ORDER BY user_id IS NULL
-		 LIMIT 1`, name, userID), &a)
+		 WHERE name = $1 AND ((`+ownerClause+`) OR (user_id IS NULL AND (org_id IS NULL OR org_id = '')))
+		 ORDER BY user_id IS NULL, created_at DESC
+		 LIMIT 1`, args...), &a)
 	if err != nil {
 		return nil, err
 	}
@@ -116,12 +126,13 @@ func (r *AgentRepository) FindByUserAndName(ctx context.Context, userID, name st
 }
 
 // FindForUser resolves an agent reference from a gateway request, an id or a
-// name, to the caller's own agent or a system agent.
+// name, to the caller's org/own agent or a system agent.
 func (r *AgentRepository) FindForUser(ctx context.Context, userID, ref string) (*models.Agent, error) {
 	if _, err := uuid.Parse(ref); err == nil {
 		var a models.Agent
+		ownerClause, args := tenantOwnerClause(ctx, "", userID, []any{ref})
 		err := scanAgent(r.db.QueryRowContext(ctx,
-			`SELECT `+agentColumns+` FROM agents WHERE id = $1 AND (user_id = $2 OR user_id IS NULL)`, ref, userID), &a)
+			`SELECT `+agentColumns+` FROM agents WHERE id = $1 AND ((`+ownerClause+`) OR (user_id IS NULL AND (org_id IS NULL OR org_id = '')))`, args...), &a)
 		if err == nil {
 			return &a, nil
 		}
@@ -134,6 +145,15 @@ func (r *AgentRepository) FindForUser(ctx context.Context, userID, ref string) (
 
 func (r *AgentRepository) Create(ctx context.Context, a *models.Agent) error {
 	now := time.Now()
+	if a.OrgID == "" {
+		a.OrgID = tenantOrgID(ctx)
+	}
+	if a.WorkspaceID == "" {
+		a.WorkspaceID = tenantWorkspaceID(ctx)
+	}
+	if a.ProjectID == "" {
+		a.ProjectID = tenantProjectID(ctx)
+	}
 	if a.AgentType == "" {
 		a.AgentType = "general"
 	}
@@ -147,29 +167,34 @@ func (r *AgentRepository) Create(ctx context.Context, a *models.Agent) error {
 		}
 	}
 	return r.db.QueryRowContext(ctx,
-		`INSERT INTO agents (user_id, name, display_name, description, agent_type, system_prompt_override, allowed_models, allowed_tools, allowed_resources, allowed_mcp_servers, max_budget_cents, status, enabled, created_at, updated_at)
-		 VALUES (NULLIF($1, ''), $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+		`INSERT INTO agents (user_id, org_id, workspace_id, project_id, name, display_name, description, agent_type, system_prompt_override, allowed_models, allowed_tools, allowed_resources, allowed_mcp_servers, max_budget_cents, status, enabled, created_at, updated_at)
+		 VALUES (NULLIF($1, ''), NULLIF($2, ''), NULLIF($3, ''), NULLIF($4, ''), $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
 		 RETURNING id, created_at, updated_at`,
-		a.UserID, a.Name, a.DisplayName, a.Description, a.AgentType, a.SystemPromptOverride,
+		a.UserID, a.OrgID, a.WorkspaceID, a.ProjectID, a.Name, a.DisplayName, a.Description, a.AgentType, a.SystemPromptOverride,
 		pq.Array(a.AllowedModels), pq.Array(a.AllowedTools), pq.Array(a.AllowedResources), pq.Array(a.AllowedMCPServers),
 		a.MaxBudgetCents, a.Status, a.Enabled, now, now,
 	).Scan(&a.ID, &a.CreatedAt, &a.UpdatedAt)
 }
 
-// Update changes an agent its owner holds; system agents cannot be changed.
+// Update changes an agent its org/owner holds; system agents cannot be changed.
 func (r *AgentRepository) Update(ctx context.Context, a *models.Agent) error {
 	a.UpdatedAt = time.Now()
-	_, err := r.db.ExecContext(ctx,
-		`UPDATE agents SET display_name=$1, description=$2, agent_type=$3, system_prompt_override=$4, allowed_models=$5, allowed_tools=$6, allowed_resources=$7, allowed_mcp_servers=$8, max_budget_cents=$9, status=$10, enabled=$11, updated_at=$12
-		 WHERE id = $13 AND user_id = $14`,
+	args := []any{
 		a.DisplayName, a.Description, a.AgentType, a.SystemPromptOverride,
 		pq.Array(a.AllowedModels), pq.Array(a.AllowedTools), pq.Array(a.AllowedResources), pq.Array(a.AllowedMCPServers),
-		a.MaxBudgetCents, a.Status, a.Enabled, a.UpdatedAt, a.ID, a.UserID,
+		a.MaxBudgetCents, a.Status, a.Enabled, a.UpdatedAt, a.ID,
+	}
+	ownerClause, args := tenantOwnerClause(ctx, "", a.UserID, args)
+	_, err := r.db.ExecContext(ctx,
+		`UPDATE agents SET display_name=$1, description=$2, agent_type=$3, system_prompt_override=$4, allowed_models=$5, allowed_tools=$6, allowed_resources=$7, allowed_mcp_servers=$8, max_budget_cents=$9, status=$10, enabled=$11, updated_at=$12
+		 WHERE id = $13 AND (`+ownerClause+`)`,
+		args...,
 	)
 	return err
 }
 
 func (r *AgentRepository) Delete(ctx context.Context, id, userID string) error {
-	res, err := r.db.ExecContext(ctx, `DELETE FROM agents WHERE id = $1 AND user_id = $2`, id, userID)
+	ownerClause, args := tenantOwnerClause(ctx, "", userID, []any{id})
+	res, err := r.db.ExecContext(ctx, `DELETE FROM agents WHERE id = $1 AND (`+ownerClause+`)`, args...)
 	return requireOneRow(res, err)
 }

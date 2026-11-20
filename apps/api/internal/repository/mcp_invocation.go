@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"database/sql"
+	"fmt"
 
 	"github.com/roozylabs/prism/internal/models"
 )
@@ -16,14 +17,17 @@ func NewMCPInvocationRepository(db *sql.DB) *MCPInvocationRepository {
 }
 
 func (r *MCPInvocationRepository) SaveInvocation(ctx context.Context, inv *models.MCPInvocation) error {
+	if inv.OrgID == "" {
+		inv.OrgID = tenantOrgID(ctx)
+	}
 	var errMsg *string
 	if inv.ErrorMessage != nil && *inv.ErrorMessage != "" {
 		errMsg = inv.ErrorMessage
 	}
 	_, err := r.db.ExecContext(ctx,
-		`INSERT INTO mcp_server_invocations (user_id, mcp_server_id, tool_name, status_code, is_error, error_message, latency_ms, created_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())`,
-		inv.UserID, inv.MCPServerID, inv.ToolName, inv.StatusCode, inv.IsError, errMsg, inv.LatencyMs,
+		`INSERT INTO mcp_server_invocations (user_id, org_id, mcp_server_id, tool_name, status_code, is_error, error_message, latency_ms, created_at)
+		 VALUES ($1, NULLIF($2, ''), $3, $4, $5, $6, $7, $8, NOW())`,
+		inv.UserID, inv.OrgID, inv.MCPServerID, inv.ToolName, inv.StatusCode, inv.IsError, errMsg, inv.LatencyMs,
 	)
 	return err
 }
@@ -38,16 +42,18 @@ func (r *MCPInvocationRepository) GetStats(ctx context.Context, userID, mcpServe
 		Agents: []models.MCPAgentBinding{},
 	}
 
+	ownerClause, args := tenantOwnerClause(ctx, "", userID, []any{mcpServerID, days})
+
 	// 1. Overall totals & success rate
 	err := r.db.QueryRowContext(ctx,
-		`SELECT COUNT(*),
+		fmt.Sprintf(`SELECT COUNT(*),
 		        COALESCE(SUM(CASE WHEN is_error = FALSE THEN 1 ELSE 0 END), 0),
 		        COALESCE(SUM(CASE WHEN is_error = TRUE THEN 1 ELSE 0 END), 0),
 		        COALESCE(AVG(latency_ms), 0)
 		 FROM mcp_server_invocations
-		 WHERE user_id = $1 AND mcp_server_id = $2
-		   AND created_at >= NOW() - ($3 || ' days')::INTERVAL`,
-		userID, mcpServerID, days,
+		 WHERE mcp_server_id = $1 AND (%s)
+		   AND created_at >= NOW() - ($2 || ' days')::INTERVAL`, ownerClause),
+		args...,
 	).Scan(&stats.TotalRequests, &stats.SuccessCount, &stats.ErrorCount, &stats.AvgLatencyMs)
 	if err != nil {
 		return nil, err
@@ -59,16 +65,16 @@ func (r *MCPInvocationRepository) GetStats(ctx context.Context, userID, mcpServe
 
 	// 2. Per-tool breakdown
 	rowsTools, err := r.db.QueryContext(ctx,
-		`SELECT tool_name,
+		fmt.Sprintf(`SELECT tool_name,
 		        COUNT(*) as requests,
 		        COALESCE(SUM(CASE WHEN is_error = TRUE THEN 1 ELSE 0 END), 0) as errors,
 		        COALESCE(AVG(latency_ms), 0) as avg_latency
 		 FROM mcp_server_invocations
-		 WHERE user_id = $1 AND mcp_server_id = $2
-		   AND created_at >= NOW() - ($3 || ' days')::INTERVAL
+		 WHERE mcp_server_id = $1 AND (%s)
+		   AND created_at >= NOW() - ($2 || ' days')::INTERVAL
 		 GROUP BY tool_name
-		 ORDER BY requests DESC, avg_latency DESC`,
-		userID, mcpServerID, days,
+		 ORDER BY requests DESC, avg_latency DESC`, ownerClause),
+		args...,
 	)
 	if err == nil {
 		defer func() { _ = rowsTools.Close() }()

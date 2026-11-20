@@ -76,6 +76,7 @@ func (h *AuditTrailHandler) List(c *gin.Context) {
 
 	filter := models.AuditTrailFilter{
 		UserID:           userID,
+		OrgID:            h.orgID(c),
 		AgentName:        agentName,
 		ModelSlug:        modelSlug,
 		ComplianceStatus: complianceStatus,
@@ -85,7 +86,7 @@ func (h *AuditTrailHandler) List(c *gin.Context) {
 		Offset:           offset,
 	}
 
-	trails, total, err := h.repo.ListWithFilter(c.Request.Context(), filter)
+	trails, total, err := h.repo.ListWithFilter(middleware.ContextWithTenant(c), filter)
 	if err != nil {
 		httputil.RespondInternalError(c, "Failed to list audit trails", err, "AUDIT_TRAILS_LIST_FAILED")
 		return
@@ -105,7 +106,7 @@ func (h *AuditTrailHandler) List(c *gin.Context) {
 func (h *AuditTrailHandler) Get(c *gin.Context) {
 	userID := c.GetString("userId")
 	id := c.Param("id")
-	trail, err := h.repo.FindByID(c.Request.Context(), id, userID)
+	trail, err := h.repo.FindByID(middleware.ContextWithTenant(c), id, userID)
 	if err != nil {
 		httputil.RespondNotFound(c, "Audit trail record not found", err, "AUDIT_RECORD_NOT_FOUND")
 		return
@@ -116,7 +117,7 @@ func (h *AuditTrailHandler) Get(c *gin.Context) {
 func (h *AuditTrailHandler) Verify(c *gin.Context) {
 	userID := c.GetString("userId")
 	id := c.Param("id")
-	result, err := h.auditRecorder.VerifyIntegrity(c.Request.Context(), id, userID)
+	result, err := h.auditRecorder.VerifyIntegrity(middleware.ContextWithTenant(c), id, userID)
 	if err != nil {
 		httputil.RespondNotFound(c, "Audit record verification failed: "+err.Error(), err, "AUDIT_VERIFICATION_FAILED")
 		return

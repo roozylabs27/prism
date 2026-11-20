@@ -19,7 +19,7 @@ func NewMCPServerRepository(db *sql.DB) *MCPServerRepository {
 	return &MCPServerRepository{db: db}
 }
 
-const mcpServerColumns = `id, COALESCE(user_id, ''), name, display_name, description, transport_type, endpoint_url, auth_token_encrypted, status, enabled, config_type, headers_encrypted, command, args, env, created_at, updated_at`
+const mcpServerColumns = `id, COALESCE(user_id, ''), COALESCE(org_id, ''), COALESCE(workspace_id, ''), name, display_name, description, transport_type, endpoint_url, auth_token_encrypted, status, enabled, config_type, headers_encrypted, command, args, env, created_at, updated_at`
 
 func scanMCPServer(row interface{ Scan(...interface{}) error }, s *models.MCPServer) error {
 	var authToken *string
@@ -28,7 +28,7 @@ func scanMCPServer(row interface{ Scan(...interface{}) error }, s *models.MCPSer
 	var command sql.NullString
 	var args pq.StringArray
 	var env sql.NullString
-	err := row.Scan(&s.ID, &s.UserID, &s.Name, &s.DisplayName, &s.Description, &s.TransportType, &endpointURL, &authToken, &s.Status, &s.Enabled, &s.Type, &headersEnc, &command, &args, &env, &s.CreatedAt, &s.UpdatedAt)
+	err := row.Scan(&s.ID, &s.UserID, &s.OrgID, &s.WorkspaceID, &s.Name, &s.DisplayName, &s.Description, &s.TransportType, &endpointURL, &authToken, &s.Status, &s.Enabled, &s.Type, &headersEnc, &command, &args, &env, &s.CreatedAt, &s.UpdatedAt)
 	if err != nil {
 		return err
 	}
@@ -58,8 +58,14 @@ func scanMCPServer(row interface{ Scan(...interface{}) error }, s *models.MCPSer
 }
 
 func (r *MCPServerRepository) ListByUserID(ctx context.Context, userID string) ([]models.MCPServer, error) {
+	ownerClause, args := tenantOwnerClause(ctx, "", userID, nil)
+	where := ownerClause
+	if wsClause, wsArgs := appendOptionalWorkspaceClause(ctx, "", args); wsClause != "" {
+		where = fmt.Sprintf("(%s) AND %s", ownerClause, wsClause)
+		args = wsArgs
+	}
 	rows, err := r.db.QueryContext(ctx,
-		`SELECT `+mcpServerColumns+` FROM mcp_servers WHERE user_id = $1 ORDER BY created_at DESC`, userID)
+		`SELECT `+mcpServerColumns+` FROM mcp_servers WHERE `+where+` ORDER BY created_at DESC`, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -78,8 +84,9 @@ func (r *MCPServerRepository) ListByUserID(ctx context.Context, userID string) (
 
 func (r *MCPServerRepository) FindByID(ctx context.Context, id, userID string) (*models.MCPServer, error) {
 	var s models.MCPServer
+	ownerClause, args := tenantOwnerClause(ctx, "", userID, []any{id})
 	err := scanMCPServer(r.db.QueryRowContext(ctx,
-		`SELECT `+mcpServerColumns+` FROM mcp_servers WHERE id = $1 AND user_id = $2`, id, userID), &s)
+		`SELECT `+mcpServerColumns+` FROM mcp_servers WHERE id = $1 AND (`+ownerClause+`)`, args...), &s)
 	if err != nil {
 		return nil, err
 	}
@@ -87,15 +94,16 @@ func (r *MCPServerRepository) FindByID(ctx context.Context, id, userID string) (
 }
 
 // FindByUserAndName returns the MCP server a gateway caller means by name:
-// their own, or else a system server (one without an owner). Other users'
-// servers are never returned.
+// their org's/own server, or else a system server (one without an owner). Other
+// tenants' servers are never returned.
 func (r *MCPServerRepository) FindByUserAndName(ctx context.Context, userID, name string) (*models.MCPServer, error) {
 	var s models.MCPServer
+	ownerClause, args := tenantOwnerClause(ctx, "", userID, []any{name})
 	err := scanMCPServer(r.db.QueryRowContext(ctx,
 		`SELECT `+mcpServerColumns+` FROM mcp_servers
-		 WHERE name = $1 AND (user_id = $2 OR user_id IS NULL)
-		 ORDER BY user_id IS NULL
-		 LIMIT 1`, name, userID), &s)
+		 WHERE name = $1 AND ((`+ownerClause+`) OR (user_id IS NULL AND (org_id IS NULL OR org_id = '')))
+		 ORDER BY user_id IS NULL, created_at DESC
+		 LIMIT 1`, args...), &s)
 	if err != nil {
 		return nil, err
 	}
@@ -104,6 +112,12 @@ func (r *MCPServerRepository) FindByUserAndName(ctx context.Context, userID, nam
 
 func (r *MCPServerRepository) Create(ctx context.Context, s *models.MCPServer) error {
 	now := time.Now()
+	if s.OrgID == "" {
+		s.OrgID = tenantOrgID(ctx)
+	}
+	if s.WorkspaceID == "" {
+		s.WorkspaceID = tenantWorkspaceID(ctx)
+	}
 	if s.Status == "" {
 		s.Status = "connected"
 	}
@@ -114,14 +128,14 @@ func (r *MCPServerRepository) Create(ctx context.Context, s *models.MCPServer) e
 		s.Args = []string{}
 	}
 	return r.db.QueryRowContext(ctx,
-		`INSERT INTO mcp_servers (user_id, name, display_name, description, transport_type, endpoint_url, auth_token_encrypted, status, enabled, config_type, headers_encrypted, command, args, env, created_at, updated_at)
-		 VALUES (NULLIF($1, ''), $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+		`INSERT INTO mcp_servers (user_id, org_id, workspace_id, name, display_name, description, transport_type, endpoint_url, auth_token_encrypted, status, enabled, config_type, headers_encrypted, command, args, env, created_at, updated_at)
+		 VALUES (NULLIF($1, ''), NULLIF($2, ''), NULLIF($3, ''), $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
 		 RETURNING id, created_at, updated_at`,
-		s.UserID, s.Name, s.DisplayName, s.Description, s.TransportType, s.EndpointURL, s.AuthTokenEncrypted, s.Status, s.Enabled, s.Type, s.HeadersEncrypted, s.Command, pq.Array(s.Args), encodeEnvJSON(s.Env), now, now,
+		s.UserID, s.OrgID, s.WorkspaceID, s.Name, s.DisplayName, s.Description, s.TransportType, s.EndpointURL, s.AuthTokenEncrypted, s.Status, s.Enabled, s.Type, s.HeadersEncrypted, s.Command, pq.Array(s.Args), encodeEnvJSON(s.Env), now, now,
 	).Scan(&s.ID, &s.CreatedAt, &s.UpdatedAt)
 }
 
-// Update changes a server its owner holds; system servers cannot be changed.
+// Update changes a server its org/owner holds; system servers cannot be changed.
 func (r *MCPServerRepository) Update(ctx context.Context, s *models.MCPServer) error {
 	s.UpdatedAt = time.Now()
 	if s.Type == "" {
@@ -130,10 +144,12 @@ func (r *MCPServerRepository) Update(ctx context.Context, s *models.MCPServer) e
 	if s.Args == nil {
 		s.Args = []string{}
 	}
+	args := []any{s.DisplayName, s.Description, s.TransportType, s.EndpointURL, s.AuthTokenEncrypted, s.Status, s.Enabled, s.Type, s.HeadersEncrypted, s.Command, pq.Array(s.Args), encodeEnvJSON(s.Env), s.UpdatedAt, s.ID}
+	ownerClause, args := tenantOwnerClause(ctx, "", s.UserID, args)
 	_, err := r.db.ExecContext(ctx,
 		`UPDATE mcp_servers SET display_name=$1, description=$2, transport_type=$3, endpoint_url=$4, auth_token_encrypted=$5, status=$6, enabled=$7, config_type=$8, headers_encrypted=$9, command=$10, args=$11, env=$12, updated_at=$13
-		 WHERE id = $14 AND user_id = $15`,
-		s.DisplayName, s.Description, s.TransportType, s.EndpointURL, s.AuthTokenEncrypted, s.Status, s.Enabled, s.Type, s.HeadersEncrypted, s.Command, pq.Array(s.Args), encodeEnvJSON(s.Env), s.UpdatedAt, s.ID, s.UserID,
+		 WHERE id = $14 AND (`+ownerClause+`)`,
+		args...,
 	)
 	return err
 }
@@ -155,7 +171,8 @@ func (r *MCPServerRepository) UpdateStatus(ctx context.Context, id, status strin
 }
 
 func (r *MCPServerRepository) Delete(ctx context.Context, id, userID string) error {
-	res, err := r.db.ExecContext(ctx, `DELETE FROM mcp_servers WHERE id = $1 AND user_id = $2`, id, userID)
+	ownerClause, args := tenantOwnerClause(ctx, "", userID, []any{id})
+	res, err := r.db.ExecContext(ctx, `DELETE FROM mcp_servers WHERE id = $1 AND (`+ownerClause+`)`, args...)
 	return requireOneRow(res, err)
 }
 

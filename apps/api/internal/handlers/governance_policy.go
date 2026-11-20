@@ -5,6 +5,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/roozylabs/prism/internal/httputil"
+	"github.com/roozylabs/prism/internal/middleware"
 	"github.com/roozylabs/prism/internal/models"
 	"github.com/roozylabs/prism/internal/proxy"
 	"github.com/roozylabs/prism/internal/repository"
@@ -37,7 +38,7 @@ type CreateGovernancePolicyRequest struct {
 
 func (h *GovernancePolicyHandler) List(c *gin.Context) {
 	userID := c.GetString("userId")
-	policies, err := h.repo.ListByUserID(c.Request.Context(), userID)
+	policies, err := h.repo.ListByUserID(middleware.ContextWithTenant(c), userID)
 	if err != nil {
 		httputil.RespondInternalError(c, "Failed to list governance policies", err, "GOVERNANCE_POLICIES_LIST_FAILED")
 		return
@@ -51,7 +52,7 @@ func (h *GovernancePolicyHandler) List(c *gin.Context) {
 func (h *GovernancePolicyHandler) Get(c *gin.Context) {
 	userID := c.GetString("userId")
 	id := c.Param("id")
-	policy, err := h.repo.FindByID(c.Request.Context(), id, userID)
+	policy, err := h.repo.FindByID(middleware.ContextWithTenant(c), id, userID)
 	if err != nil {
 		httputil.RespondNotFound(c, "Governance policy not found", err, "GOVERNANCE_POLICY_NOT_FOUND")
 		return
@@ -96,7 +97,7 @@ func (h *GovernancePolicyHandler) Create(c *gin.Context) {
 		Enabled:         enabled,
 	}
 
-	if err := h.repo.Create(c.Request.Context(), policy); err != nil {
+	if err := h.repo.Create(middleware.ContextWithTenant(c), policy); err != nil {
 		httputil.RespondStoreError(c, err, "Governance policy", "GOVERNANCE_POLICY_CREATE")
 		return
 	}
@@ -107,7 +108,7 @@ func (h *GovernancePolicyHandler) Create(c *gin.Context) {
 func (h *GovernancePolicyHandler) Update(c *gin.Context) {
 	userID := c.GetString("userId")
 	id := c.Param("id")
-	existing, err := h.repo.FindByID(c.Request.Context(), id, userID)
+	existing, err := h.repo.FindByID(middleware.ContextWithTenant(c), id, userID)
 	if err != nil {
 		httputil.RespondNotFound(c, "Governance policy not found", err, "GOVERNANCE_POLICY_NOT_FOUND")
 		return
@@ -143,7 +144,7 @@ func (h *GovernancePolicyHandler) Update(c *gin.Context) {
 		existing.Enabled = *req.Enabled
 	}
 
-	if err := h.repo.Update(c.Request.Context(), existing); err != nil {
+	if err := h.repo.Update(middleware.ContextWithTenant(c), existing); err != nil {
 		httputil.RespondStoreError(c, err, "Governance policy", "GOVERNANCE_POLICY_UPDATE")
 		return
 	}
@@ -154,7 +155,7 @@ func (h *GovernancePolicyHandler) Update(c *gin.Context) {
 func (h *GovernancePolicyHandler) Delete(c *gin.Context) {
 	userID := c.GetString("userId")
 	id := c.Param("id")
-	if err := h.repo.Delete(c.Request.Context(), id, userID); err != nil {
+	if err := h.repo.Delete(middleware.ContextWithTenant(c), id, userID); err != nil {
 		httputil.RespondStoreError(c, err, "Governance policy", "GOVERNANCE_POLICY_DELETE")
 		return
 	}
@@ -170,7 +171,7 @@ func (h *GovernancePolicyHandler) Evaluate(c *gin.Context) {
 		return
 	}
 
-	res, err := h.rbacEngine.Evaluate(c.Request.Context(), userID, req)
+	res, err := h.rbacEngine.Evaluate(middleware.ContextWithTenant(c), userID, req)
 	if err != nil {
 		httputil.RespondInternalError(c, "Failed to evaluate governance policy", err, "GOVERNANCE_POLICY_EVALUATE_FAILED")
 		return

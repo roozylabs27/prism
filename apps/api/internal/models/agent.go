@@ -7,6 +7,9 @@ import (
 type Agent struct {
 	ID                   string    `json:"id"`
 	UserID               string    `json:"userId"`
+	OrgID                string    `json:"orgId,omitempty"`
+	WorkspaceID          string    `json:"workspaceId,omitempty"`
+	ProjectID            string    `json:"projectId,omitempty"`
 	Name                 string    `json:"name"`
 	DisplayName          string    `json:"displayName"`
 	Description          string    `json:"description"`

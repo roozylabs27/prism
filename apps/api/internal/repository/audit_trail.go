@@ -49,12 +49,12 @@ func (r *AuditTrailRepository) CreateAuditLog(ctx context.Context, item *models.
 	return err
 }
 
-const auditColumns = `id, request_id, user_id, gateway_key_id, agent_id, agent_name, user_role, model_slug, failover_chain, tools_invoked, resources_accessed, mcp_servers_called, prompt_tokens, completion_tokens, total_tokens, total_cost_usd, status_code, latency_ms, ttft_ms, prompt_hash, response_hash, compliance_status, signature_hash, created_at`
+const auditColumns = `id, request_id, user_id, COALESCE(org_id, ''), gateway_key_id, agent_id, agent_name, user_role, model_slug, failover_chain, tools_invoked, resources_accessed, mcp_servers_called, prompt_tokens, completion_tokens, total_tokens, total_cost_usd, status_code, latency_ms, ttft_ms, prompt_hash, response_hash, compliance_status, signature_hash, created_at`
 
 func scanAudit(row interface{ Scan(...interface{}) error }, a *models.AIAuditTrail) error {
 	var gatewayKeyId, agentId, agentName sql.NullString
 	err := row.Scan(
-		&a.ID, &a.RequestID, &a.UserID, &gatewayKeyId, &agentId, &agentName,
+		&a.ID, &a.RequestID, &a.UserID, &a.OrgID, &gatewayKeyId, &agentId, &agentName,
 		&a.UserRole, &a.ModelSlug, &a.FailoverChain, &a.ToolsInvoked, &a.ResourcesAccessed, &a.MCPServersCalled,
 		&a.PromptTokens, &a.CompletionTokens, &a.TotalTokens, &a.TotalCostUSD, &a.StatusCode, &a.LatencyMS, &a.TTFTMS,
 		&a.PromptHash, &a.ResponseHash, &a.ComplianceStatus, &a.SignatureHash, &a.CreatedAt,
@@ -75,6 +75,9 @@ func scanAudit(row interface{ Scan(...interface{}) error }, a *models.AIAuditTra
 }
 
 func (r *AuditTrailRepository) Create(ctx context.Context, a *models.AIAuditTrail) error {
+	if a.OrgID == "" {
+		a.OrgID = tenantOrgID(ctx)
+	}
 	if a.FailoverChain == nil {
 		a.FailoverChain = pq.StringArray{}
 	}
@@ -96,29 +99,46 @@ func (r *AuditTrailRepository) Create(ctx context.Context, a *models.AIAuditTrai
 
 	return r.db.QueryRowContext(ctx,
 		`INSERT INTO ai_audit_trails (
-			request_id, user_id, gateway_key_id, agent_id, agent_name, user_role, model_slug,
+			request_id, user_id, org_id, gateway_key_id, agent_id, agent_name, user_role, model_slug,
 			failover_chain, tools_invoked, resources_accessed, mcp_servers_called,
 			prompt_tokens, completion_tokens, total_tokens, total_cost_usd, status_code,
 			latency_ms, ttft_ms, prompt_hash, response_hash, compliance_status, signature_hash
 		) VALUES (
-			$1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22
+			$1, $2, NULLIF($3, ''), $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23
 		) RETURNING id, created_at`,
-		a.RequestID, a.UserID, a.GatewayKeyID, a.AgentID, a.AgentName, a.UserRole, a.ModelSlug,
+		a.RequestID, a.UserID, a.OrgID, a.GatewayKeyID, a.AgentID, a.AgentName, a.UserRole, a.ModelSlug,
 		a.FailoverChain, a.ToolsInvoked, a.ResourcesAccessed, a.MCPServersCalled,
 		a.PromptTokens, a.CompletionTokens, a.TotalTokens, a.TotalCostUSD, a.StatusCode,
 		a.LatencyMS, a.TTFTMS, a.PromptHash, a.ResponseHash, a.ComplianceStatus, a.SignatureHash,
 	).Scan(&a.ID, &a.CreatedAt)
 }
 
+func auditTrailOwnerClause(orgID, userID string, args []any) (string, []any) {
+	if orgID != "" {
+		if userID != "" {
+			args = append(args, orgID, userID)
+			return fmt.Sprintf("(org_id = $%d OR ((org_id IS NULL OR org_id = '') AND user_id = $%d))", len(args)-1, len(args)), args
+		}
+		args = append(args, orgID)
+		return fmt.Sprintf("org_id = $%d", len(args)), args
+	}
+	args = append(args, userID)
+	return fmt.Sprintf("user_id = $%d", len(args)), args
+}
+
 func (r *AuditTrailRepository) ListWithFilter(ctx context.Context, filter models.AuditTrailFilter) ([]models.AIAuditTrail, int, error) {
-	if filter.UserID == "" {
+	effectiveOrgID := filter.OrgID
+	if effectiveOrgID == "" {
+		effectiveOrgID = tenantOrgID(ctx)
+	}
+	if filter.UserID == "" && effectiveOrgID == "" {
 		return nil, 0, fmt.Errorf("audit trail: user_id is required")
 	}
 
-	query := `SELECT ` + auditColumns + ` FROM ai_audit_trails WHERE user_id = $1`
-	countQuery := `SELECT COUNT(*) FROM ai_audit_trails WHERE user_id = $1`
-	args := []interface{}{filter.UserID}
-	paramIdx := 2
+	ownerClause, args := auditTrailOwnerClause(effectiveOrgID, filter.UserID, nil)
+	query := `SELECT ` + auditColumns + ` FROM ai_audit_trails WHERE ` + ownerClause
+	countQuery := `SELECT COUNT(*) FROM ai_audit_trails WHERE ` + ownerClause
+	paramIdx := len(args) + 1
 
 	if filter.AgentName != "" {
 		clause := fmt.Sprintf(" AND agent_name = $%d", paramIdx)
@@ -197,12 +217,14 @@ func (r *AuditTrailRepository) ListWithFilter(ctx context.Context, filter models
 }
 
 func (r *AuditTrailRepository) FindByID(ctx context.Context, id, userID string) (*models.AIAuditTrail, error) {
-	if userID == "" {
+	orgID := tenantOrgID(ctx)
+	if userID == "" && orgID == "" {
 		return nil, fmt.Errorf("audit trail: user_id is required")
 	}
 	var a models.AIAuditTrail
-	query := `SELECT ` + auditColumns + ` FROM ai_audit_trails WHERE id = $1 AND user_id = $2`
-	err := scanAudit(r.db.QueryRowContext(ctx, query, id, userID), &a)
+	ownerClause, args := auditTrailOwnerClause(orgID, userID, []any{id})
+	query := `SELECT ` + auditColumns + ` FROM ai_audit_trails WHERE id = $1 AND ` + ownerClause
+	err := scanAudit(r.db.QueryRowContext(ctx, query, args...), &a)
 	if err != nil {
 		return nil, err
 	}

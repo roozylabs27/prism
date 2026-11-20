@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
@@ -32,11 +33,14 @@ func scanResource(row interface{ Scan(...interface{}) error }, res *models.Resou
 // ListByUserID returns a user's resources, optionally only those of one
 // workspace plus the ones without a workspace.
 func (r *ResourceRepository) ListByUserID(ctx context.Context, userID, workspaceID string) ([]models.Resource, error) {
-	query := `SELECT ` + resourceColumns + ` FROM resources WHERE user_id = $1`
-	args := []interface{}{userID}
+	ownerClause, args := tenantOwnerClause(ctx, "", userID, nil)
+	query := `SELECT ` + resourceColumns + ` FROM resources WHERE (` + ownerClause + `)`
+	if workspaceID == "" {
+		workspaceID = tenantWorkspaceID(ctx)
+	}
 	if workspaceID != "" {
-		query += ` AND (workspace_id = $2 OR workspace_id IS NULL OR workspace_id = '')`
 		args = append(args, workspaceID)
+		query += fmt.Sprintf(` AND (workspace_id = $%d OR workspace_id IS NULL OR workspace_id = '')`, len(args))
 	}
 	query += ` ORDER BY created_at DESC`
 
@@ -59,8 +63,9 @@ func (r *ResourceRepository) ListByUserID(ctx context.Context, userID, workspace
 
 func (r *ResourceRepository) FindByID(ctx context.Context, id, userID string) (*models.Resource, error) {
 	var res models.Resource
+	ownerClause, args := tenantOwnerClause(ctx, "", userID, []any{id})
 	err := scanResource(r.db.QueryRowContext(ctx,
-		`SELECT `+resourceColumns+` FROM resources WHERE id = $1 AND user_id = $2`, id, userID), &res)
+		`SELECT `+resourceColumns+` FROM resources WHERE id = $1 AND (`+ownerClause+`)`, args...), &res)
 	if err != nil {
 		return nil, err
 	}
@@ -69,8 +74,9 @@ func (r *ResourceRepository) FindByID(ctx context.Context, id, userID string) (*
 
 func (r *ResourceRepository) FindByUserAndName(ctx context.Context, userID, name string) (*models.Resource, error) {
 	var res models.Resource
+	ownerClause, args := tenantOwnerClause(ctx, "", userID, []any{name})
 	err := scanResource(r.db.QueryRowContext(ctx,
-		`SELECT `+resourceColumns+` FROM resources WHERE user_id = $1 AND name = $2`, userID, name), &res)
+		`SELECT `+resourceColumns+` FROM resources WHERE name = $1 AND (`+ownerClause+`)`, args...), &res)
 	if err != nil {
 		return nil, err
 	}
@@ -80,6 +86,12 @@ func (r *ResourceRepository) FindByUserAndName(ctx context.Context, userID, name
 func (r *ResourceRepository) Create(ctx context.Context, res *models.Resource) error {
 	if res.ID == "" {
 		res.ID = uuid.New().String()
+	}
+	if res.OrgID == "" {
+		res.OrgID = tenantOrgID(ctx)
+	}
+	if res.WorkspaceID == "" {
+		res.WorkspaceID = tenantWorkspaceID(ctx)
 	}
 	now := time.Now()
 	res.CreatedAt = now
@@ -100,6 +112,12 @@ func (r *ResourceRepository) CreateWithBackendsTx(ctx context.Context, res *mode
 
 	if res.ID == "" {
 		res.ID = uuid.New().String()
+	}
+	if res.OrgID == "" {
+		res.OrgID = tenantOrgID(ctx)
+	}
+	if res.WorkspaceID == "" {
+		res.WorkspaceID = tenantWorkspaceID(ctx)
 	}
 	now := time.Now()
 	res.CreatedAt = now
@@ -142,14 +160,17 @@ func (r *ResourceRepository) CreateWithBackendsTx(ctx context.Context, res *mode
 
 func (r *ResourceRepository) Update(ctx context.Context, res *models.Resource) error {
 	res.UpdatedAt = time.Now()
+	args := []any{res.DisplayName, res.Description, []byte(res.ParametersSchema), res.Enabled, res.UpdatedAt, res.ID}
+	ownerClause, args := tenantOwnerClause(ctx, "", res.UserID, args)
 	_, err := r.db.ExecContext(ctx,
-		`UPDATE resources SET display_name=$1, description=$2, parameters_schema=$3, enabled=$4, updated_at=$5 WHERE id=$6 AND user_id=$7`,
-		res.DisplayName, res.Description, []byte(res.ParametersSchema), res.Enabled, res.UpdatedAt, res.ID, res.UserID)
+		`UPDATE resources SET display_name=$1, description=$2, parameters_schema=$3, enabled=$4, updated_at=$5 WHERE id=$6 AND (`+ownerClause+`)`,
+		args...)
 	return err
 }
 
 func (r *ResourceRepository) Delete(ctx context.Context, id, userID string) error {
-	res, err := r.db.ExecContext(ctx, `DELETE FROM resources WHERE id = $1 AND user_id = $2`, id, userID)
+	ownerClause, args := tenantOwnerClause(ctx, "", userID, []any{id})
+	res, err := r.db.ExecContext(ctx, `DELETE FROM resources WHERE id = $1 AND (`+ownerClause+`)`, args...)
 	return requireOneRow(res, err)
 }
 

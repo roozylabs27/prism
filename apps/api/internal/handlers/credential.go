@@ -14,6 +14,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/roozylabs/prism/internal/httputil"
+	"github.com/roozylabs/prism/internal/middleware"
 	"github.com/roozylabs/prism/internal/models"
 	"github.com/roozylabs/prism/internal/proxy"
 	goredis "github.com/roozylabs/prism/internal/redis"
@@ -82,7 +83,8 @@ func (h *CredentialHandler) List(c *gin.Context) {
 	pg := httputil.ParsePage(c)
 
 	userID := c.GetString("userId")
-	credentials, total, err := h.credentials.ListWithFilter(c.Request.Context(), providerID, search, pg.Limit, pg.Offset, userID)
+	ctx := middleware.ContextWithTenant(c)
+	credentials, total, err := h.credentials.ListWithFilter(ctx, providerID, search, pg.Limit, pg.Offset, userID)
 	if err != nil {
 		httputil.RespondError(c, http.StatusInternalServerError, "Failed to list credentials", err, "CREDENTIALS_LIST_FAILED")
 		return
@@ -93,7 +95,7 @@ func (h *CredentialHandler) List(c *gin.Context) {
 
 	for i := range credentials {
 		credentials[i].Name = maskEmailName(credentials[i].Name)
-		h.enrichCredentialQuota(c.Request.Context(), &credentials[i])
+		h.enrichCredentialQuota(ctx, &credentials[i])
 	}
 
 	httputil.RespondPage(c, pg, credentials, total)
@@ -112,12 +114,13 @@ func (h *CredentialHandler) List(c *gin.Context) {
 func (h *CredentialHandler) Get(c *gin.Context) {
 	credID := c.Param("credId")
 	userID := c.GetString("userId")
-	cred, err := h.credentials.FindByID(c.Request.Context(), credID, userID)
+	ctx := middleware.ContextWithTenant(c)
+	cred, err := h.credentials.FindByID(ctx, credID, userID)
 	if err != nil {
 		httputil.RespondNotFound(c, "Credential not found", err, "CREDENTIAL_NOT_FOUND")
 		return
 	}
-	h.enrichCredentialQuota(c.Request.Context(), cred)
+	h.enrichCredentialQuota(ctx, cred)
 
 	c.JSON(http.StatusOK, cred)
 }
@@ -132,13 +135,19 @@ func (h *CredentialHandler) Get(c *gin.Context) {
 // @Success      201 {object} models.Credential
 // @Failure      400 {object} map[string]string
 // @Router       /api/providers/{id}/credentials [post]
-// providerAcceptsCredentialsFrom reports whether userID may attach a
-// credential to prov: an enabled provider of their own or a shared system one.
-func providerAcceptsCredentialsFrom(prov *models.Provider, userID string) bool {
+// providerAcceptsCredentialsFrom reports whether userID (or caller org) may attach a
+// credential to prov: an enabled provider of their org/own or a shared system one.
+func providerAcceptsCredentialsFrom(prov *models.Provider, userID string, orgID ...string) bool {
 	if prov == nil || !prov.Enabled {
 		return false
 	}
-	return prov.UserID == userID || isSharedProvider(prov)
+	if isSystemProvider(prov) {
+		return true
+	}
+	if len(orgID) > 0 && orgID[0] != "" && prov.OrgID != "" {
+		return prov.OrgID == orgID[0]
+	}
+	return prov.UserID == userID
 }
 
 func (h *CredentialHandler) Create(c *gin.Context) {
@@ -147,10 +156,15 @@ func (h *CredentialHandler) Create(c *gin.Context) {
 	if userID == "" {
 		userID = c.GetString("user_id")
 	}
+	ctx := middleware.ContextWithTenant(c)
+	orgID := middleware.GetTenantContext(c).OrgID
+	if orgID == "" {
+		orgID = c.GetString("organization_id")
+	}
 
 	if h.providers != nil && userID != "" {
-		prov, err := h.providers.FindByID(c.Request.Context(), providerID)
-		if err != nil || !providerAcceptsCredentialsFrom(prov, userID) {
+		prov, err := h.providers.FindByID(ctx, providerID)
+		if err != nil || !providerAcceptsCredentialsFrom(prov, userID, orgID) {
 			httputil.RespondForbidden(c, "Cannot attach credentials to a provider you do not own or is disabled", err, "PROVIDER_ACCESS_DENIED")
 			return
 		}
@@ -227,7 +241,10 @@ func (h *CredentialHandler) Create(c *gin.Context) {
 	if userID != "" {
 		uidPtr = &userID
 	}
-	orgID := c.GetString("organization_id")
+	orgID = middleware.GetTenantContext(c).OrgID
+	if orgID == "" {
+		orgID = c.GetString("organization_id")
+	}
 	var orgPtr *string
 	if orgID != "" {
 		orgPtr = &orgID
@@ -248,7 +265,7 @@ func (h *CredentialHandler) Create(c *gin.Context) {
 		Status:            "active",
 	}
 
-	if err := h.credentials.Create(c.Request.Context(), cred); err != nil {
+	if err := h.credentials.Create(ctx, cred); err != nil {
 		httputil.RespondInternalError(c, "Failed to create credential", err, "CREDENTIAL_CREATE_FAILED")
 		return
 	}
@@ -293,7 +310,8 @@ type UpdateCredentialRequest struct {
 func (h *CredentialHandler) Update(c *gin.Context) {
 	credID := c.Param("credId")
 	userID := c.GetString("userId")
-	existing, err := h.credentials.FindByID(c.Request.Context(), credID, userID)
+	ctx := middleware.ContextWithTenant(c)
+	existing, err := h.credentials.FindByID(ctx, credID, userID)
 	if err != nil {
 		httputil.RespondNotFound(c, "Credential not found", err, "CREDENTIAL_NOT_FOUND")
 		return
@@ -373,7 +391,7 @@ func (h *CredentialHandler) Update(c *gin.Context) {
 		}
 	}
 
-	if err := h.credentials.Update(c.Request.Context(), existing, userID); err != nil {
+	if err := h.credentials.Update(ctx, existing, userID); err != nil {
 		httputil.RespondInternalError(c, "Failed to update credential", err, "CREDENTIAL_UPDATE_FAILED")
 		return
 	}
@@ -395,7 +413,8 @@ func (h *CredentialHandler) Update(c *gin.Context) {
 func (h *CredentialHandler) Delete(c *gin.Context) {
 	credID := c.Param("credId")
 	userID := c.GetString("userId")
-	cred, err := h.credentials.FindByID(c.Request.Context(), credID, userID)
+	ctx := middleware.ContextWithTenant(c)
+	cred, err := h.credentials.FindByID(ctx, credID, userID)
 	if err != nil {
 		httputil.RespondNotFound(c, "Credential not found", err, "CREDENTIAL_NOT_FOUND")
 		return
@@ -403,7 +422,7 @@ func (h *CredentialHandler) Delete(c *gin.Context) {
 
 	// 1. Guard against deleting credential with active in-flight streams
 	if h.cooldownStore != nil {
-		if summary, err := h.cooldownStore.GetActiveStreams(c.Request.Context(), ""); err == nil {
+		if summary, err := h.cooldownStore.GetActiveStreams(ctx, ""); err == nil {
 			maskedName := utils.MaskEmailName(cred.Name)
 			count := summary.ByCredential[maskedName]
 			if count == 0 && cred.MaskedKey != "" {
@@ -418,9 +437,9 @@ func (h *CredentialHandler) Delete(c *gin.Context) {
 
 	// 2. Guard against deleting sole active credential for provider with active Gateway Keys
 	if h.gatewayKeys != nil && h.credentials != nil {
-		activeCredsCount, err := h.credentials.CountActiveByProviderID(c.Request.Context(), cred.ProviderID)
+		activeCredsCount, err := h.credentials.CountActiveByProviderID(ctx, cred.ProviderID, userID)
 		if err == nil && activeCredsCount <= 1 {
-			gwKeyCount, err := h.gatewayKeys.CountByProviderID(c.Request.Context(), cred.ProviderID)
+			gwKeyCount, err := h.gatewayKeys.CountByProviderID(ctx, cred.ProviderID)
 			if err == nil && gwKeyCount > 0 {
 				httputil.RespondError(c, http.StatusConflict, fmt.Sprintf("Cannot delete the only active credential for provider with %d active Gateway API Key(s)", gwKeyCount), nil, "ACTIVE_KEYS_EXIST")
 				return
@@ -428,7 +447,7 @@ func (h *CredentialHandler) Delete(c *gin.Context) {
 		}
 	}
 
-	if err := h.credentials.Delete(c.Request.Context(), credID, userID); err != nil {
+	if err := h.credentials.Delete(ctx, credID, userID); err != nil {
 		httputil.RespondStoreError(c, err, "Credential", "CREDENTIAL_DELETE")
 		return
 	}
@@ -456,7 +475,8 @@ func (h *CredentialHandler) Delete(c *gin.Context) {
 func (h *CredentialHandler) ResetCooldown(c *gin.Context) {
 	credID := c.Param("credId")
 	userID := c.GetString("userId")
-	if _, err := h.credentials.FindByID(c.Request.Context(), credID, userID); err != nil {
+	ctx := middleware.ContextWithTenant(c)
+	if _, err := h.credentials.FindByID(ctx, credID, userID); err != nil {
 		httputil.RespondNotFound(c, "Credential not found", err, "CREDENTIAL_NOT_FOUND")
 		return
 	}
@@ -492,7 +512,7 @@ func (h *CredentialHandler) ResetCooldown(c *gin.Context) {
 func (h *CredentialHandler) Reveal(c *gin.Context) {
 	credID := c.Param("credId")
 	userID := c.GetString("userId")
-	cred, err := h.credentials.FindByID(c.Request.Context(), credID, userID)
+	cred, err := h.credentials.FindByID(middleware.ContextWithTenant(c), credID, userID)
 	if err != nil {
 		httputil.RespondNotFound(c, "Credential not found", err, "CREDENTIAL_NOT_FOUND")
 		return
@@ -507,13 +527,13 @@ func (h *CredentialHandler) Reveal(c *gin.Context) {
 func (h *CredentialHandler) Test(c *gin.Context) {
 	credID := c.Param("credId")
 	userID := c.GetString("userId")
-	cred, err := h.credentials.FindByID(c.Request.Context(), credID, userID)
+	cred, err := h.credentials.FindByID(middleware.ContextWithTenant(c), credID, userID)
 	if err != nil {
 		httputil.RespondNotFound(c, "Credential not found", err, "CREDENTIAL_NOT_FOUND")
 		return
 	}
 
-	provider, err := h.providers.FindByID(c.Request.Context(), cred.ProviderID)
+	provider, err := h.providers.FindByID(middleware.ContextWithTenant(c), cred.ProviderID)
 	if err != nil {
 		httputil.RespondNotFound(c, "Provider not found", err, "PROVIDER_NOT_FOUND")
 		return

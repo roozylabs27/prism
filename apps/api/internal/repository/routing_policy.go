@@ -19,11 +19,12 @@ func NewRoutingPolicyRepository(db *sql.DB) *RoutingPolicyRepository {
 }
 
 func (r *RoutingPolicyRepository) ListByUserID(ctx context.Context, userID string) ([]models.RoutingPolicy, error) {
+	ownerClause, args := tenantOwnerClause(ctx, "", userID, nil)
 	rows, err := r.db.QueryContext(ctx,
-		`SELECT id, user_id, name, weights::text, constraints::text, enabled, is_default, created_at, updated_at
+		`SELECT id, user_id, COALESCE(org_id, ''), name, weights::text, constraints::text, enabled, is_default, created_at, updated_at
 		 FROM routing_policies
-		 WHERE user_id = $1
-		 ORDER BY is_default DESC, enabled DESC, name ASC`, userID,
+		 WHERE `+ownerClause+`
+		 ORDER BY is_default DESC, enabled DESC, name ASC`, args...,
 	)
 	if err != nil {
 		return nil, err
@@ -33,7 +34,7 @@ func (r *RoutingPolicyRepository) ListByUserID(ctx context.Context, userID strin
 	var policies []models.RoutingPolicy
 	for rows.Next() {
 		var p models.RoutingPolicy
-		if err := rows.Scan(&p.ID, &p.UserID, &p.Name, &p.WeightsJSON, &p.ConstraintsJSON,
+		if err := rows.Scan(&p.ID, &p.UserID, &p.OrgID, &p.Name, &p.WeightsJSON, &p.ConstraintsJSON,
 			&p.Enabled, &p.IsDefault, &p.CreatedAt, &p.UpdatedAt); err != nil {
 			return nil, err
 		}
@@ -47,11 +48,12 @@ func (r *RoutingPolicyRepository) ListByUserID(ctx context.Context, userID strin
 
 func (r *RoutingPolicyRepository) FindByID(ctx context.Context, id, userID string) (*models.RoutingPolicy, error) {
 	var p models.RoutingPolicy
+	ownerClause, args := tenantOwnerClause(ctx, "", userID, []any{id})
 	err := r.db.QueryRowContext(ctx,
-		`SELECT id, user_id, name, weights::text, constraints::text, enabled, is_default, created_at, updated_at
+		`SELECT id, user_id, COALESCE(org_id, ''), name, weights::text, constraints::text, enabled, is_default, created_at, updated_at
 		 FROM routing_policies
-		 WHERE id = $1 AND user_id = $2`, id, userID,
-	).Scan(&p.ID, &p.UserID, &p.Name, &p.WeightsJSON, &p.ConstraintsJSON,
+		 WHERE id = $1 AND (`+ownerClause+`)`, args...,
+	).Scan(&p.ID, &p.UserID, &p.OrgID, &p.Name, &p.WeightsJSON, &p.ConstraintsJSON,
 		&p.Enabled, &p.IsDefault, &p.CreatedAt, &p.UpdatedAt)
 	if err != nil {
 		return nil, err
@@ -64,11 +66,12 @@ func (r *RoutingPolicyRepository) FindByID(ctx context.Context, id, userID strin
 
 func (r *RoutingPolicyRepository) FindByName(ctx context.Context, name, userID string) (*models.RoutingPolicy, error) {
 	var p models.RoutingPolicy
+	ownerClause, args := tenantOwnerClause(ctx, "", userID, []any{name})
 	err := r.db.QueryRowContext(ctx,
-		`SELECT id, user_id, name, weights::text, constraints::text, enabled, is_default, created_at, updated_at
+		`SELECT id, user_id, COALESCE(org_id, ''), name, weights::text, constraints::text, enabled, is_default, created_at, updated_at
 		 FROM routing_policies
-		 WHERE name = $1 AND user_id = $2`, name, userID,
-	).Scan(&p.ID, &p.UserID, &p.Name, &p.WeightsJSON, &p.ConstraintsJSON,
+		 WHERE name = $1 AND (`+ownerClause+`)`, args...,
+	).Scan(&p.ID, &p.UserID, &p.OrgID, &p.Name, &p.WeightsJSON, &p.ConstraintsJSON,
 		&p.Enabled, &p.IsDefault, &p.CreatedAt, &p.UpdatedAt)
 	if err != nil {
 		return nil, err
@@ -81,13 +84,14 @@ func (r *RoutingPolicyRepository) FindByName(ctx context.Context, name, userID s
 
 func (r *RoutingPolicyRepository) FindByDefault(ctx context.Context, userID string) (*models.RoutingPolicy, error) {
 	var p models.RoutingPolicy
+	ownerClause, args := tenantOwnerClause(ctx, "", userID, nil)
 	err := r.db.QueryRowContext(ctx,
-		`SELECT id, user_id, name, weights::text, constraints::text, enabled, is_default, created_at, updated_at
+		`SELECT id, user_id, COALESCE(org_id, ''), name, weights::text, constraints::text, enabled, is_default, created_at, updated_at
 		 FROM routing_policies
-		 WHERE user_id = $1 AND enabled = true
+		 WHERE (`+ownerClause+`) AND enabled = true
 		 ORDER BY is_default DESC, name ASC
-		 LIMIT 1`, userID,
-	).Scan(&p.ID, &p.UserID, &p.Name, &p.WeightsJSON, &p.ConstraintsJSON,
+		 LIMIT 1`, args...,
+	).Scan(&p.ID, &p.UserID, &p.OrgID, &p.Name, &p.WeightsJSON, &p.ConstraintsJSON,
 		&p.Enabled, &p.IsDefault, &p.CreatedAt, &p.UpdatedAt)
 	if err != nil {
 		return nil, err
@@ -102,6 +106,9 @@ func (r *RoutingPolicyRepository) Create(ctx context.Context, p *models.RoutingP
 	if p.ID == "" {
 		p.ID = uuid.New().String()
 	}
+	if p.OrgID == "" {
+		p.OrgID = tenantOrgID(ctx)
+	}
 	if p.CreatedAt.IsZero() {
 		p.CreatedAt = time.Now()
 	}
@@ -112,17 +119,18 @@ func (r *RoutingPolicyRepository) Create(ctx context.Context, p *models.RoutingP
 	}
 
 	if p.IsDefault {
-		if p.UserID != "" {
-			_, _ = r.db.ExecContext(ctx, `UPDATE routing_policies SET is_default = false WHERE user_id = $1`, p.UserID)
+		if p.UserID != "" || tenantOrgID(ctx) != "" {
+			clearClause, clearArgs := tenantOwnerClause(ctx, "", p.UserID, nil)
+			_, _ = r.db.ExecContext(ctx, `UPDATE routing_policies SET is_default = false WHERE `+clearClause, clearArgs...)
 		} else {
 			_, _ = r.db.ExecContext(ctx, `UPDATE routing_policies SET is_default = false WHERE user_id = $1 OR user_id IS NULL OR user_id = ''`, p.UserID)
 		}
 	}
 
 	_, err := r.db.ExecContext(ctx,
-		`INSERT INTO routing_policies (id, user_id, name, weights, constraints, enabled, is_default, created_at, updated_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
-		p.ID, p.UserID, p.Name, p.WeightsJSON, p.ConstraintsJSON,
+		`INSERT INTO routing_policies (id, user_id, org_id, name, weights, constraints, enabled, is_default, created_at, updated_at)
+		 VALUES ($1, $2, NULLIF($3, ''), $4, $5, $6, $7, $8, $9, $10)`,
+		p.ID, p.UserID, p.OrgID, p.Name, p.WeightsJSON, p.ConstraintsJSON,
 		p.Enabled, p.IsDefault, p.CreatedAt, p.UpdatedAt,
 	)
 	return err
@@ -136,28 +144,30 @@ func (r *RoutingPolicyRepository) Update(ctx context.Context, p *models.RoutingP
 	}
 
 	if p.IsDefault {
-		if p.UserID != "" {
-			_, _ = r.db.ExecContext(ctx, `UPDATE routing_policies SET is_default = false WHERE user_id = $1`, p.UserID)
+		if p.UserID != "" || tenantOrgID(ctx) != "" {
+			clearClause, clearArgs := tenantOwnerClause(ctx, "", p.UserID, nil)
+			_, _ = r.db.ExecContext(ctx, `UPDATE routing_policies SET is_default = false WHERE `+clearClause, clearArgs...)
 		} else {
 			_, _ = r.db.ExecContext(ctx, `UPDATE routing_policies SET is_default = false WHERE user_id = $1 OR user_id IS NULL OR user_id = ''`, p.UserID)
 		}
 	}
 
+	args := []any{p.Name, p.WeightsJSON, p.ConstraintsJSON, p.Enabled, p.IsDefault, p.UpdatedAt, p.ID}
+	ownerClause, args := tenantOwnerClause(ctx, "", p.UserID, args)
 	_, err := r.db.ExecContext(ctx,
 		`UPDATE routing_policies
 		 SET name = $1, weights = $2, constraints = $3, enabled = $4, is_default = $5, updated_at = $6
-		 WHERE id = $7 AND user_id = $8`,
-		p.Name, p.WeightsJSON, p.ConstraintsJSON, p.Enabled, p.IsDefault,
-		p.UpdatedAt, p.ID, p.UserID,
+		 WHERE id = $7 AND (`+ownerClause+`)`,
+		args...,
 	)
 	return err
 }
 
-// SetDefault makes one of the user's policies the default. The policy is
+// SetDefault makes one of the tenant's policies the default. The policy is
 // checked before the old default is cleared, so an unknown id leaves the
 // current default in place and returns sql.ErrNoRows.
 func (r *RoutingPolicyRepository) SetDefault(ctx context.Context, id, userID string) error {
-	if userID == "" {
+	if userID == "" && tenantOrgID(ctx) == "" {
 		return sql.ErrNoRows
 	}
 	tx, err := r.db.BeginTx(ctx, nil)
@@ -166,25 +176,28 @@ func (r *RoutingPolicyRepository) SetDefault(ctx context.Context, id, userID str
 	}
 	defer func() { _ = tx.Rollback() }()
 
+	ownerClause, checkArgs := tenantOwnerClause(ctx, "", userID, []any{id})
 	var found int
 	if err := tx.QueryRowContext(ctx,
-		`SELECT 1 FROM routing_policies WHERE id = $1 AND user_id = $2 FOR UPDATE`, id, userID).Scan(&found); err != nil {
+		`SELECT 1 FROM routing_policies WHERE id = $1 AND (`+ownerClause+`) FOR UPDATE`, checkArgs...).Scan(&found); err != nil {
+		return err
+	}
+	clearClause, clearArgs := tenantOwnerClause(ctx, "", userID, []any{id})
+	if _, err := tx.ExecContext(ctx,
+		`UPDATE routing_policies SET is_default = false WHERE (`+clearClause+`) AND is_default AND id <> $1`, clearArgs...); err != nil {
 		return err
 	}
 	if _, err := tx.ExecContext(ctx,
-		`UPDATE routing_policies SET is_default = false WHERE user_id = $1 AND is_default AND id <> $2`, userID, id); err != nil {
-		return err
-	}
-	if _, err := tx.ExecContext(ctx,
-		`UPDATE routing_policies SET is_default = true, enabled = true, updated_at = NOW() WHERE id = $1 AND user_id = $2`, id, userID); err != nil {
+		`UPDATE routing_policies SET is_default = true, enabled = true, updated_at = NOW() WHERE id = $1 AND (`+ownerClause+`)`, checkArgs...); err != nil {
 		return err
 	}
 	return tx.Commit()
 }
 
 func (r *RoutingPolicyRepository) Delete(ctx context.Context, id, userID string) error {
+	ownerClause, args := tenantOwnerClause(ctx, "", userID, []any{id})
 	res, err := r.db.ExecContext(ctx,
-		`DELETE FROM routing_policies WHERE id = $1 AND user_id = $2`, id, userID,
+		`DELETE FROM routing_policies WHERE id = $1 AND (`+ownerClause+`)`, args...,
 	)
 	return requireOneRow(res, err)
 }

@@ -7,6 +7,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/roozylabs/prism/internal/httputil"
+	"github.com/roozylabs/prism/internal/middleware"
 	"github.com/roozylabs/prism/internal/models"
 	"github.com/roozylabs/prism/internal/repository"
 )
@@ -35,7 +36,7 @@ const maxModelPatternLen = 255
 
 func (h *RoutingRuleHandler) List(c *gin.Context) {
 	userID := c.GetString("userId")
-	rules, err := h.routingRepo.ListByUserID(c.Request.Context(), userID)
+	rules, err := h.routingRepo.ListByUserID(middleware.ContextWithTenant(c), userID)
 	if err != nil {
 		httputil.RespondInternalError(c, "Failed to fetch routing rules", err, "ROUTING_RULES_FETCH_FAILED")
 		return
@@ -50,7 +51,7 @@ func (h *RoutingRuleHandler) Get(c *gin.Context) {
 	userID := c.GetString("userId")
 	id := c.Param("id")
 
-	rule, err := h.routingRepo.GetByID(c.Request.Context(), id, userID)
+	rule, err := h.routingRepo.GetByID(middleware.ContextWithTenant(c), id, userID)
 	if err != nil {
 		httputil.RespondNotFound(c, "Routing rule not found", err, "ROUTING_RULE_NOT_FOUND")
 		return
@@ -86,8 +87,8 @@ func (h *RoutingRuleHandler) checkProvider(c *gin.Context, userID string, provid
 	if providerID == nil || *providerID == "" || h.providers == nil {
 		return true
 	}
-	p, err := h.providers.FindByID(c.Request.Context(), *providerID)
-	if err != nil || p == nil || (p.UserID != "" && p.UserID != userID) {
+	p, err := h.providers.FindByID(middleware.ContextWithTenant(c), *providerID)
+	if err != nil || p == nil || !callerCanAccessProvider(c, p, userID) {
 		httputil.RespondBadRequest(c, "providerId does not name one of your providers", err, "PROVIDER_NOT_FOUND")
 		return false
 	}
@@ -131,7 +132,7 @@ func (h *RoutingRuleHandler) Create(c *gin.Context) {
 		Enabled:      enabled,
 	}
 
-	if err := h.routingRepo.Create(c.Request.Context(), rule); err != nil {
+	if err := h.routingRepo.Create(middleware.ContextWithTenant(c), rule); err != nil {
 		httputil.RespondStoreError(c, err, "Routing rule", "ROUTING_RULE_CREATE")
 		return
 	}
@@ -150,7 +151,7 @@ func (h *RoutingRuleHandler) Update(c *gin.Context) {
 	userID := c.GetString("userId")
 	id := c.Param("id")
 
-	existing, err := h.routingRepo.GetByID(c.Request.Context(), id, userID)
+	existing, err := h.routingRepo.GetByID(middleware.ContextWithTenant(c), id, userID)
 	if err != nil {
 		httputil.RespondNotFound(c, "Routing rule not found", err, "ROUTING_RULE_NOT_FOUND")
 		return
@@ -192,7 +193,7 @@ func (h *RoutingRuleHandler) Update(c *gin.Context) {
 		existing.Enabled = *req.Enabled
 	}
 
-	if err := h.routingRepo.Update(c.Request.Context(), existing); err != nil {
+	if err := h.routingRepo.Update(middleware.ContextWithTenant(c), existing); err != nil {
 		httputil.RespondStoreError(c, err, "Routing rule", "ROUTING_RULE_UPDATE")
 		return
 	}
@@ -204,7 +205,7 @@ func (h *RoutingRuleHandler) Delete(c *gin.Context) {
 	userID := c.GetString("userId")
 	id := c.Param("id")
 
-	if err := h.routingRepo.Delete(c.Request.Context(), id, userID); err != nil {
+	if err := h.routingRepo.Delete(middleware.ContextWithTenant(c), id, userID); err != nil {
 		httputil.RespondStoreError(c, err, "Routing rule", "ROUTING_RULE_DELETE")
 		return
 	}

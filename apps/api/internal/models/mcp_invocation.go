@@ -5,6 +5,7 @@ import "time"
 type MCPInvocation struct {
 	ID           int64     `json:"id"`
 	UserID       string    `json:"userId"`
+	OrgID        string    `json:"orgId,omitempty"`
 	MCPServerID  string    `json:"mcpServerId"`
 	ToolName     string    `json:"toolName"`
 	StatusCode   int       `json:"statusCode"`

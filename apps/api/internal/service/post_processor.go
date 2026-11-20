@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/roozylabs/prism/internal/database"
 	"github.com/roozylabs/prism/internal/models"
 	"github.com/roozylabs/prism/internal/proxy"
 	goredis "github.com/roozylabs/prism/internal/redis"
@@ -138,6 +139,16 @@ func (p *AsyncPostProcessor) processTask(task *PostProcessTask) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
+	ownerID := ""
+	if task.GatewayKey != nil {
+		ownerID = task.GatewayKey.UserID
+	}
+	ctx = database.WithTenantContext(ctx, database.TenantDBContext{
+		UserID:      ownerID,
+		OrgID:       task.Log.OrgID,
+		WorkspaceID: task.Log.WorkspaceID,
+		ProjectID:   task.Log.ProjectID,
+	})
 
 	// 1. Save Request Log to PostgreSQL
 	if p.requestLogs != nil {
@@ -198,6 +209,7 @@ func (p *AsyncPostProcessor) processTask(task *PostProcessTask) {
 		trail := &models.AIAuditTrail{
 			RequestID:         task.Log.RequestID,
 			UserID:            userID,
+			OrgID:             task.Log.OrgID,
 			UserRole:          task.UserRole,
 			ModelSlug:         task.Log.Model,
 			FailoverChain:     []string{},

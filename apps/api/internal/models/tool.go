@@ -8,6 +8,8 @@ import (
 type Tool struct {
 	ID          string          `json:"id" db:"id"`
 	UserID      string          `json:"userId" db:"user_id"`
+	OrgID       string          `json:"orgId,omitempty" db:"org_id"`
+	WorkspaceID string          `json:"workspaceId,omitempty" db:"workspace_id"`
 	Name        string          `json:"name" db:"name"`
 	DisplayName string          `json:"displayName" db:"display_name"`
 	Description string          `json:"description" db:"description"`

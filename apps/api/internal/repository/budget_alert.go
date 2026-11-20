@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"time"
 )
 
@@ -47,13 +48,14 @@ func (r *BudgetAlertRepository) ListUnacknowledged(ctx context.Context, limit in
 	}
 	var query string
 	var args []interface{}
-	if uid != "" {
-		query = `SELECT ba.id, ba.budget_id, ba.alert_type, ba.usage_percent, ba.monthly_spent, ba.monthly_limit, ba.acknowledged_at, ba.created_at
+	if uid != "" || tenantOrgID(ctx) != "" {
+		ownerClause, nextArgs := tenantOwnerClause(ctx, "b.", uid, nil)
+		args = append(nextArgs, limit)
+		query = fmt.Sprintf(`SELECT ba.id, ba.budget_id, ba.alert_type, ba.usage_percent, ba.monthly_spent, ba.monthly_limit, ba.acknowledged_at, ba.created_at
 		         FROM budget_alerts ba
 		         INNER JOIN budgets b ON ba.budget_id = b.id
-		         WHERE ba.acknowledged_at IS NULL AND b.user_id = $1
-		         ORDER BY ba.created_at DESC LIMIT $2`
-		args = []interface{}{uid, limit}
+		         WHERE ba.acknowledged_at IS NULL AND (%s)
+		         ORDER BY ba.created_at DESC LIMIT $%d`, ownerClause, len(args))
 	} else {
 		query = `SELECT id, budget_id, alert_type, usage_percent, monthly_spent, monthly_limit, acknowledged_at, created_at
 		         FROM budget_alerts WHERE acknowledged_at IS NULL ORDER BY created_at DESC LIMIT $1`
@@ -78,10 +80,11 @@ func (r *BudgetAlertRepository) ListUnacknowledged(ctx context.Context, limit in
 // Acknowledge marks an alert on one of userID's budgets as seen, and reports
 // whether there was such an alert.
 func (r *BudgetAlertRepository) Acknowledge(ctx context.Context, id, userID string) (bool, error) {
+	ownerClause, args := tenantOwnerClause(ctx, "b.", userID, []any{id})
 	res, err := r.db.ExecContext(ctx,
 		`UPDATE budget_alerts ba SET acknowledged_at = NOW()
 		 FROM budgets b
-		 WHERE ba.id::text = $1 AND ba.budget_id = b.id AND b.user_id = $2`, id, userID)
+		 WHERE ba.id::text = $1 AND ba.budget_id = b.id AND (`+ownerClause+`)`, args...)
 	if err != nil {
 		return false, err
 	}

@@ -7,6 +7,8 @@ import (
 type GovernancePolicy struct {
 	ID              string    `json:"id"`
 	UserID          string    `json:"userId"`
+	OrgID           string    `json:"orgId,omitempty"`
+	WorkspaceID     string    `json:"workspaceId,omitempty"`
 	Name            string    `json:"name"`
 	Description     string    `json:"description"`
 	Role            string    `json:"role"`

@@ -172,3 +172,44 @@ func TestAsyncChatCompletions_NonMemberRejected(t *testing.T) {
 	require.Equal(t, http.StatusForbidden, w.Code, w.Body.String())
 	assert.Empty(t, store.jobs, "no job may be enqueued for a key owner without a role")
 }
+
+func TestAsyncChatCompletions_HeaderSpoofRejectedAndRequestIDIsUUID(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	store := &fakeJobStore{jobs: map[string]*queue.AsyncJob{}}
+	h := &GatewayHandler{
+		jobQueue:     store,
+		roleResolver: jobRoles{"org_a/user_alice": "developer"},
+	}
+
+	t.Run("spoofed X-Prism-Org-ID rejected with 403", func(t *testing.T) {
+		r := gin.New()
+		r.POST("/chat/completions/async", gatewayAuth("user_alice", "org_a"), h.AsyncChatCompletions)
+		w := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodPost, "/chat/completions/async",
+			strings.NewReader(`{"model":"gpt-4o","messages":[{"role":"user","content":"hi"}]}`))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("X-Prism-Org-ID", "org_victim")
+		r.ServeHTTP(w, req)
+
+		require.Equal(t, http.StatusForbidden, w.Code, w.Body.String())
+		assert.Contains(t, w.Body.String(), "tenant_security_error")
+		assert.Empty(t, store.jobs)
+	})
+
+	t.Run("missing request ID generates canonical UUID instead of req_ nanosecond prefix", func(t *testing.T) {
+		r := gin.New()
+		r.POST("/chat/completions/async", gatewayAuth("user_alice", "org_a"), h.AsyncChatCompletions)
+		w := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodPost, "/chat/completions/async",
+			strings.NewReader(`{"model":"gpt-4o","messages":[{"role":"user","content":"hi"}]}`))
+		req.Header.Set("Content-Type", "application/json")
+		r.ServeHTTP(w, req)
+
+		require.Equal(t, http.StatusAccepted, w.Code, w.Body.String())
+		var resp map[string]interface{}
+		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+		jobID := resp["job_id"].(string)
+		reqID := store.jobs[jobID].RequestID
+		assert.Regexp(t, `^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`, reqID)
+	})
+}

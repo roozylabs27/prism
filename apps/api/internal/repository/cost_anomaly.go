@@ -3,12 +3,14 @@ package repository
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"time"
 )
 
 type CostAnomaly struct {
 	ID             string    `db:"id" json:"id"`
 	UserID         *string   `db:"user_id" json:"user_id,omitempty"`
+	OrgID          *string   `db:"org_id" json:"org_id,omitempty"`
 	WindowStart    time.Time `db:"window_start" json:"window_start"`
 	Metric         string    `db:"metric" json:"metric"`
 	Observed       float64   `db:"observed" json:"observed"`
@@ -31,11 +33,16 @@ func NewCostAnomalyRepository(db *sql.DB) *CostAnomalyRepository {
 // Create stores an anomaly and reports whether it is new: a user gets at
 // most one anomaly per metric and hour.
 func (r *CostAnomalyRepository) Create(ctx context.Context, a *CostAnomaly) (bool, error) {
+	if a.OrgID == nil || *a.OrgID == "" {
+		if orgID := tenantOrgID(ctx); orgID != "" {
+			a.OrgID = &orgID
+		}
+	}
 	res, err := r.db.ExecContext(ctx,
-		`INSERT INTO cost_anomalies (user_id, window_start, metric, observed, baseline_mean, baseline_stddev, z_score, severity, details)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb)
+		`INSERT INTO cost_anomalies (user_id, org_id, window_start, metric, observed, baseline_mean, baseline_stddev, z_score, severity, details)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb)
 		 ON CONFLICT (user_id, metric, window_start) WHERE user_id IS NOT NULL DO NOTHING`,
-		a.UserID, a.WindowStart, a.Metric, a.Observed, a.BaselineMean, a.BaselineStddev, a.ZScore, a.Severity, a.Details)
+		a.UserID, a.OrgID, a.WindowStart, a.Metric, a.Observed, a.BaselineMean, a.BaselineStddev, a.ZScore, a.Severity, a.Details)
 	if err != nil {
 		return false, err
 	}
@@ -43,16 +50,19 @@ func (r *CostAnomalyRepository) Create(ctx context.Context, a *CostAnomaly) (boo
 	return n > 0, err
 }
 
-// ListForUser returns userID's anomalies, newest first.
+// ListForUser returns userID's (or caller org's) anomalies, newest first.
 func (r *CostAnomalyRepository) ListForUser(ctx context.Context, userID string, limit int, severity string) ([]CostAnomaly, error) {
 	if limit <= 0 {
 		limit = 50
 	}
+	ownerClause, args := tenantOwnerClause(ctx, "", userID, nil)
+	args = append(args, severity, limit)
+	sevIdx, limitIdx := len(args)-1, len(args)
 	rows, err := r.db.QueryContext(ctx,
-		`SELECT id, user_id, window_start, metric, observed, baseline_mean, baseline_stddev, z_score, severity, details, created_at
+		fmt.Sprintf(`SELECT id, user_id, org_id, window_start, metric, observed, baseline_mean, baseline_stddev, z_score, severity, details, created_at
 		 FROM cost_anomalies
-		 WHERE user_id = $1 AND ($2 = '' OR severity = $2)
-		 ORDER BY created_at DESC LIMIT $3`, userID, severity, limit)
+		 WHERE (%s) AND ($%d = '' OR severity = $%d)
+		 ORDER BY created_at DESC LIMIT $%d`, ownerClause, sevIdx, sevIdx, limitIdx), args...)
 	if err != nil {
 		return nil, err
 	}
@@ -60,7 +70,7 @@ func (r *CostAnomalyRepository) ListForUser(ctx context.Context, userID string, 
 	anomalies := []CostAnomaly{}
 	for rows.Next() {
 		var a CostAnomaly
-		if err := rows.Scan(&a.ID, &a.UserID, &a.WindowStart, &a.Metric, &a.Observed, &a.BaselineMean, &a.BaselineStddev, &a.ZScore, &a.Severity, &a.Details, &a.CreatedAt); err != nil {
+		if err := rows.Scan(&a.ID, &a.UserID, &a.OrgID, &a.WindowStart, &a.Metric, &a.Observed, &a.BaselineMean, &a.BaselineStddev, &a.ZScore, &a.Severity, &a.Details, &a.CreatedAt); err != nil {
 			return nil, err
 		}
 		anomalies = append(anomalies, a)
@@ -141,11 +151,17 @@ func (r *CostAnomalyRepository) GetDailySpendSeries(ctx context.Context, userID 
 	if days <= 0 {
 		days = 28
 	}
+	ownerClause, args := tenantOwnerClause(ctx, "gak.", userID, nil)
+	if orgID := tenantOrgID(ctx); orgID != "" {
+		ownerClause = fmt.Sprintf("(rl.org_id = $1 OR ((rl.org_id IS NULL OR rl.org_id = '') AND (%s)))", ownerClause)
+	}
+	args = append(args, days)
+	daysIdx := len(args)
 	rows, err := r.db.QueryContext(ctx,
-		`SELECT rl.created_at::date::text AS date, SUM(rl.cost_usd)::float8 AS total_usd `+spendByOwner+`
-		   AND gak.user_id = $1
-		   AND rl.created_at >= NOW() - make_interval(days => $2)
-		 GROUP BY date ORDER BY date`, userID, days)
+		fmt.Sprintf(`SELECT rl.created_at::date::text AS date, SUM(rl.cost_usd)::float8 AS total_usd `+spendByOwner+`
+		   AND (%s)
+		   AND rl.created_at >= NOW() - make_interval(days => $%d)
+		 GROUP BY date ORDER BY date`, ownerClause, daysIdx), args...)
 	if err != nil {
 		return nil, err
 	}

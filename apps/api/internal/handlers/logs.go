@@ -6,6 +6,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/roozylabs/prism/internal/httputil"
+	"github.com/roozylabs/prism/internal/middleware"
 	"github.com/roozylabs/prism/internal/repository"
 )
 
@@ -35,7 +36,7 @@ func (h *LogsHandler) List(c *gin.Context) {
 
 	pg := httputil.ParsePage(c)
 
-	logs, total, err := h.logs.ListWithFilter(c.Request.Context(), repository.LogFilter{
+	logs, total, err := h.logs.ListWithFilter(middleware.ContextWithTenant(c), repository.LogFilter{
 		UserID:   userID,
 		Provider: provider,
 		Model:    model,
@@ -62,7 +63,7 @@ func (h *LogsHandler) GetAnalytics(c *gin.Context) {
 		}
 	}
 
-	analytics, err := h.logs.GetLogAnalytics(c.Request.Context(), userID, days)
+	analytics, err := h.logs.GetLogAnalytics(middleware.ContextWithTenant(c), userID, days)
 	if err != nil {
 		httputil.RespondInternalError(c, "Failed to retrieve log analytics", err, "LOGS_ANALYTICS_FAILED")
 		return

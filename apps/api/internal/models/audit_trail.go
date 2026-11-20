@@ -10,6 +10,7 @@ type AIAuditTrail struct {
 	ID                string         `json:"id"`
 	RequestID         string         `json:"requestId"`
 	UserID            string         `json:"userId"`
+	OrgID             string         `json:"orgId,omitempty"`
 	GatewayKeyID      *string        `json:"gatewayKeyId,omitempty"`
 	AgentID           *string        `json:"agentId,omitempty"`
 	AgentName         *string        `json:"agentName,omitempty"`
@@ -35,6 +36,7 @@ type AIAuditTrail struct {
 
 type AuditTrailFilter struct {
 	UserID           string     `json:"userId"`
+	OrgID            string     `json:"orgId,omitempty"`
 	AgentName        string     `json:"agentName"`
 	ModelSlug        string     `json:"modelSlug"`
 	ComplianceStatus string     `json:"complianceStatus"`

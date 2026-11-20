@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/roozylabs/prism/internal/middleware"
 	"github.com/roozylabs/prism/internal/models"
 	"github.com/roozylabs/prism/internal/repository"
 )
@@ -63,7 +64,8 @@ func (h *FinOpsHandler) GetSummary(c *gin.Context) {
 	userID := c.GetString("userId")
 
 	// 1. Fetch 30-day analytics
-	analytics, err := h.logs.GetLogAnalytics(c.Request.Context(), userID, 30)
+	tenantCtx := middleware.ContextWithTenant(c)
+	analytics, err := h.logs.GetLogAnalytics(tenantCtx, userID, 30)
 	if err != nil || analytics == nil {
 		c.JSON(http.StatusOK, FinOpsSummaryResponse{
 			Recommendations: []CostRecommendation{},
@@ -72,7 +74,7 @@ func (h *FinOpsHandler) GetSummary(c *gin.Context) {
 	}
 
 	// 2. Fetch 7-day analytics for short-term velocity
-	analytics7d, _ := h.logs.GetLogAnalytics(c.Request.Context(), userID, 7)
+	analytics7d, _ := h.logs.GetLogAnalytics(tenantCtx, userID, 7)
 
 	totalSpend30d := analytics.TotalSpendUSD
 	totalSpend7d := 0.0
@@ -91,7 +93,7 @@ func (h *FinOpsHandler) GetSummary(c *gin.Context) {
 
 	var forecast *SpendForecast
 	if h.forecastRepo != nil {
-		if series, err := h.forecastRepo.GetDailySpendSeries(c.Request.Context(), userID, 28); err == nil && len(series) > 0 {
+		if series, err := h.forecastRepo.GetDailySpendSeries(tenantCtx, userID, 28); err == nil && len(series) > 0 {
 			f := ComputeForecast(series)
 			forecast = &f
 		}
@@ -99,7 +101,7 @@ func (h *FinOpsHandler) GetSummary(c *gin.Context) {
 
 	// Fetch active user budget
 	monthlyBudgetUsd := 0.0
-	if userBudgets, err := h.budgets.ListByUserID(c.Request.Context(), userID); err == nil && len(userBudgets) > 0 {
+	if userBudgets, err := h.budgets.ListByUserID(tenantCtx, userID); err == nil && len(userBudgets) > 0 {
 		for _, b := range userBudgets {
 			if b.Enabled && b.MonthlyLimit > 0 {
 				monthlyBudgetUsd = b.MonthlyLimit
@@ -130,7 +132,7 @@ func (h *FinOpsHandler) GetSummary(c *gin.Context) {
 	}
 
 	// 3. Generate AI Cost Optimization Recommendations
-	allModels, _ := h.models.ListEnabled(c.Request.Context())
+	allModels, _ := h.models.ListEnabled(tenantCtx)
 	var recommendations []CostRecommendation
 	totalPotentialSavings := 0.0
 

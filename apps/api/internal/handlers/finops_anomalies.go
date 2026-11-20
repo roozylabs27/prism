@@ -6,6 +6,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/roozylabs/prism/internal/httputil"
+	"github.com/roozylabs/prism/internal/middleware"
 	"github.com/roozylabs/prism/internal/repository"
 )
 
@@ -34,7 +35,7 @@ func (h *FinOpsAnomaliesHandler) ListAnomalies(c *gin.Context) {
 		limit = maxFinOpsListLimit
 	}
 	severity := c.Query("severity")
-	anomalies, err := h.anomalies.ListForUser(c.Request.Context(), c.GetString("userId"), limit, severity)
+	anomalies, err := h.anomalies.ListForUser(middleware.ContextWithTenant(c), c.GetString("userId"), limit, severity)
 	if err != nil {
 		httputil.RespondInternalError(c, "Failed to fetch anomalies", err, "ANOMALIES_FETCH_FAILED")
 		return
@@ -53,7 +54,7 @@ func (h *FinOpsAnomaliesHandler) ListBudgetAlerts(c *gin.Context) {
 		limit = maxFinOpsListLimit
 	}
 	userID := c.GetString("userId")
-	alerts, err := h.alerts.ListUnacknowledged(c.Request.Context(), limit, userID)
+	alerts, err := h.alerts.ListUnacknowledged(middleware.ContextWithTenant(c), limit, userID)
 	if err != nil {
 		httputil.RespondInternalError(c, "Failed to fetch budget alerts", err, "BUDGET_ALERTS_FETCH_FAILED")
 		return
@@ -67,7 +68,7 @@ func (h *FinOpsAnomaliesHandler) AcknowledgeAlert(c *gin.Context) {
 		httputil.RespondBadRequest(c, "Alert ID is required", nil, "ALERT_ID_REQUIRED")
 		return
 	}
-	found, err := h.alerts.Acknowledge(c.Request.Context(), id, c.GetString("userId"))
+	found, err := h.alerts.Acknowledge(middleware.ContextWithTenant(c), id, c.GetString("userId"))
 	if err != nil {
 		httputil.RespondInternalError(c, "Failed to acknowledge alert", err, "ALERT_ACKNOWLEDGE_FAILED")
 		return

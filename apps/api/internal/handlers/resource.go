@@ -11,6 +11,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/roozylabs/prism/internal/httputil"
+	"github.com/roozylabs/prism/internal/middleware"
 	"github.com/roozylabs/prism/internal/models"
 	"github.com/roozylabs/prism/internal/proxy"
 	"github.com/roozylabs/prism/internal/repository"
@@ -117,7 +118,7 @@ type CreateResourceRequest struct {
 
 func (h *ResourceHandler) List(c *gin.Context) {
 	_, wsID, userID := getTenantContext(c)
-	resources, err := h.resources.ListByUserID(c.Request.Context(), userID, wsID)
+	resources, err := h.resources.ListByUserID(middleware.ContextWithTenant(c), userID, wsID)
 	if err != nil {
 		httputil.RespondInternalError(c, "Failed to list resources", err, "RESOURCES_LIST_FAILED")
 		return
@@ -130,7 +131,7 @@ func (h *ResourceHandler) List(c *gin.Context) {
 
 func (h *ResourceHandler) Get(c *gin.Context) {
 	_, _, userID := getTenantContext(c)
-	rwb, err := h.resources.GetResourceWithBackendsByID(c.Request.Context(), c.Param("id"), userID)
+	rwb, err := h.resources.GetResourceWithBackendsByID(middleware.ContextWithTenant(c), c.Param("id"), userID)
 	if err != nil {
 		httputil.RespondNotFound(c, "Resource not found", err, "RESOURCE_NOT_FOUND")
 		return
@@ -214,12 +215,12 @@ func (h *ResourceHandler) Create(c *gin.Context) {
 		backends = append(backends, b)
 	}
 
-	if err := h.resources.CreateWithBackendsTx(c.Request.Context(), res, backends); err != nil {
+	if err := h.resources.CreateWithBackendsTx(middleware.ContextWithTenant(c), res, backends); err != nil {
 		httputil.RespondStoreError(c, err, "Resource", "RESOURCE_CREATE")
 		return
 	}
 
-	rwb, _ := h.resources.GetResourceWithBackendsByID(c.Request.Context(), res.ID, userID)
+	rwb, _ := h.resources.GetResourceWithBackendsByID(middleware.ContextWithTenant(c), res.ID, userID)
 	c.JSON(http.StatusCreated, rwb)
 }
 
@@ -227,7 +228,7 @@ func (h *ResourceHandler) Update(c *gin.Context) {
 	_, _, userID := getTenantContext(c)
 	id := c.Param("id")
 
-	existing, err := h.resources.FindByID(c.Request.Context(), id, userID)
+	existing, err := h.resources.FindByID(middleware.ContextWithTenant(c), id, userID)
 	if err != nil {
 		httputil.RespondNotFound(c, "Resource not found", err, "RESOURCE_NOT_FOUND")
 		return
@@ -251,7 +252,7 @@ func (h *ResourceHandler) Update(c *gin.Context) {
 	if req.Enabled != nil {
 		existing.Enabled = *req.Enabled
 	}
-	if err := h.resources.Update(c.Request.Context(), existing); err != nil {
+	if err := h.resources.Update(middleware.ContextWithTenant(c), existing); err != nil {
 		httputil.RespondStoreError(c, err, "Resource", "RESOURCE_UPDATE")
 		return
 	}
@@ -269,13 +270,13 @@ func (h *ResourceHandler) Update(c *gin.Context) {
 		}
 	}
 
-	rwb, _ := h.resources.GetResourceWithBackendsByID(c.Request.Context(), id, userID)
+	rwb, _ := h.resources.GetResourceWithBackendsByID(middleware.ContextWithTenant(c), id, userID)
 	c.JSON(http.StatusOK, rwb)
 }
 
 func (h *ResourceHandler) Delete(c *gin.Context) {
 	_, _, userID := getTenantContext(c)
-	if err := h.resources.Delete(c.Request.Context(), c.Param("id"), userID); err != nil {
+	if err := h.resources.Delete(middleware.ContextWithTenant(c), c.Param("id"), userID); err != nil {
 		httputil.RespondStoreError(c, err, "Resource", "RESOURCE_DELETE")
 		return
 	}
@@ -290,7 +291,7 @@ func (h *ResourceHandler) TestResource(c *gin.Context) {
 	_, _, userID := getTenantContext(c)
 	id := c.Param("id")
 
-	res, err := h.resources.FindByID(c.Request.Context(), id, userID)
+	res, err := h.resources.FindByID(middleware.ContextWithTenant(c), id, userID)
 	if err != nil {
 		httputil.RespondNotFound(c, "Resource not found", err, "RESOURCE_NOT_FOUND")
 		return
