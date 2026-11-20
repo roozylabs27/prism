@@ -38,6 +38,7 @@ type ExecutionOrchestrator struct {
 	pricingRepo    *repository.ModelPricingRepository
 	auditRecorder  *proxy.AuditRecorder
 	postProcessor  *AsyncPostProcessor
+	outbox         OutboxEnqueuer
 }
 
 func NewExecutionOrchestrator(
@@ -77,6 +78,27 @@ func (o *ExecutionOrchestrator) SetBudgetManager(bm *proxy.BudgetManager) {
 	}
 }
 
+// SetOutbox attaches a durable delivery outbox for synchronous fallback when
+// AsyncPostProcessor is nil or when recording denied audit trails fails.
+func (o *ExecutionOrchestrator) SetOutbox(outbox OutboxEnqueuer) {
+	if o != nil && !isNilInterface(outbox) {
+		o.outbox = outbox
+	}
+}
+
+func hashRequestPrompt(req *proxy.ProxyRequest, requestID string) string {
+	if req != nil && len(req.Messages) > 0 {
+		if raw, err := json.Marshal(req.Messages); err == nil {
+			return proxy.HashPayload(string(raw))
+		}
+	}
+	model := ""
+	if req != nil {
+		model = req.Model
+	}
+	return proxy.HashPayload(model + ":" + requestID)
+}
+
 func (o *ExecutionOrchestrator) ExecuteChatCompletions(
 	c *gin.Context,
 	ctx context.Context,
@@ -105,6 +127,8 @@ func (o *ExecutionOrchestrator) ExecuteChatCompletions(
 			promptBuilder.WriteString(" ")
 		}
 	}
+
+	promptHash := hashRequestPrompt(req, requestID)
 
 	userID := ""
 	if gatewayKey != nil {
@@ -139,7 +163,7 @@ func (o *ExecutionOrchestrator) ExecuteChatCompletions(
 
 	if admRes.Decision == proxy.AdmissionDeny {
 		// Record audit event for denied request
-		o.recordDeniedAuditTrail(ctx, requestID, gatewayKey, tenantCtx, agentID, agentName, userRole, req.Model, admRes.Reason)
+		o.recordDeniedAuditTrail(ctx, requestID, gatewayKey, tenantCtx, agentID, agentName, userRole, req.Model, promptHash, admRes.Reason)
 
 		return &OrchestrationResult{
 			Denied:       true,
@@ -167,7 +191,7 @@ func (o *ExecutionOrchestrator) ExecuteChatCompletions(
 		}
 		if res == nil && bStatus != nil && bStatus.Status == "exceeded" && bStatus.Budget != nil && bStatus.Budget.HardLimit {
 			reason := fmt.Sprintf("%s budget limit of %q exceeded", bStatus.LimitPeriod, bStatus.Budget.Name)
-			o.recordDeniedAuditTrail(ctx, requestID, gatewayKey, tenantCtx, agentID, agentName, userRole, req.Model, reason)
+			o.recordDeniedAuditTrail(ctx, requestID, gatewayKey, tenantCtx, agentID, agentName, userRole, req.Model, promptHash, reason)
 			return &OrchestrationResult{
 				Denied:       true,
 				HTTPStatus:   429,
@@ -235,27 +259,38 @@ func (o *ExecutionOrchestrator) ExecuteChatCompletions(
 
 		if o.postProcessor != nil {
 			o.postProcessor.Enqueue(&PostProcessTask{
-				Ctx:        ctx,
-				RequestID:  requestID,
-				Log:        log,
-				GatewayKey: gatewayKey,
-				AgentID:    agentID,
-				AgentName:  agentName,
-				UserRole:   userRole,
-				ClientIP:   clientIP,
-				UserAgent:  userAgent,
-				ClientApp:  clientApp,
+				Ctx:              ctx,
+				RequestID:        requestID,
+				Log:              log,
+				GatewayKey:       gatewayKey,
+				AgentID:          agentID,
+				AgentName:        agentName,
+				UserRole:         userRole,
+				ClientIP:         clientIP,
+				UserAgent:        userAgent,
+				ClientApp:        clientApp,
+				PromptHash:       promptHash,
+				ToolsInvoked:     log.ToolsInvoked,
+				MCPServersCalled: log.MCPServersCalled,
 			})
 		} else {
 			// Save request log to database
 			if o.requestLogs != nil {
-				_ = o.requestLogs.Create(ctx, log)
+				if err := o.requestLogs.Create(ctx, log); err != nil {
+					enqueueOutboxFallback(ctx, o.outbox, models.OutboxEventRequestLog, log.OrgID, userID, log, err)
+				}
 			}
-			if o.gatewayKeys != nil && gatewayKey != nil {
-				_ = o.gatewayKeys.IncrementUsage(ctx, gatewayKey.ID)
+			if o.gatewayKeys != nil && gatewayKey != nil && gatewayKey.ID != "" {
+				if err := o.gatewayKeys.IncrementUsage(ctx, gatewayKey.ID); err != nil {
+					enqueueOutboxFallback(ctx, o.outbox, models.OutboxEventGatewayKeyUsage, log.OrgID, userID, models.OutboxGatewayKeyUsagePayload{
+						GatewayKeyID: gatewayKey.ID,
+						OrgID:        log.OrgID,
+						UserID:       userID,
+					}, err)
+				}
 			}
 			o.publishEvents(c, ctx, requestID, log, gatewayKey)
-			o.recordAuditTrail(ctx, log, gatewayKey, agentID, agentName, userRole)
+			o.recordAuditTrail(ctx, log, gatewayKey, agentID, agentName, userRole, promptHash)
 		}
 	}
 
@@ -318,13 +353,16 @@ func (o *ExecutionOrchestrator) recordDeniedAuditTrail(
 	agentName string,
 	userRole string,
 	modelSlug string,
+	promptHash string,
 	reason string,
 ) {
 	if o.auditRecorder == nil {
 		return
 	}
 
-	promptHash := utils.HashSHA256(modelSlug + ":" + requestID)
+	if promptHash == "" {
+		promptHash = proxy.HashPayload(modelSlug + ":" + requestID)
+	}
 
 	userID := ""
 	if gatewayKey != nil {
@@ -367,7 +405,9 @@ func (o *ExecutionOrchestrator) recordDeniedAuditTrail(
 		trail.AgentName = &agentName
 	}
 
-	_ = o.auditRecorder.Record(ctx, trail)
+	if err := o.auditRecorder.Record(ctx, trail); err != nil {
+		enqueueOutboxFallback(ctx, o.outbox, models.OutboxEventAIAuditTrail, trail.OrgID, trail.UserID, trail, err)
+	}
 }
 
 func (o *ExecutionOrchestrator) recordAuditTrail(
@@ -377,15 +417,11 @@ func (o *ExecutionOrchestrator) recordAuditTrail(
 	agentID string,
 	agentName string,
 	userRole string,
+	promptHash string,
 ) {
 	if o.auditRecorder == nil || log == nil {
 		return
 	}
-
-	failoverChain := extractFailoverChain(log.Attempts)
-
-	promptHash := utils.HashSHA256(log.Model + ":" + log.RequestID)
-	responseHash := utils.HashSHA256(log.Model + ":" + log.ProviderType + ":" + fmt.Sprintf("%d", log.TotalTokens))
 
 	userID := ""
 	if gatewayKey != nil {
@@ -398,37 +434,13 @@ func (o *ExecutionOrchestrator) recordAuditTrail(
 		ProjectID:   log.ProjectID,
 	})
 
-	trail := &models.AIAuditTrail{
-		RequestID:         log.RequestID,
-		UserID:            userID,
-		OrgID:             log.OrgID,
-		UserRole:          userRole,
-		ModelSlug:         log.Model,
-		FailoverChain:     failoverChain,
-		ToolsInvoked:      []string{},
-		ResourcesAccessed: []string{},
-		MCPServersCalled:  []string{},
-		PromptTokens:      log.InputTokens,
-		CompletionTokens:  log.OutputTokens,
-		TotalTokens:       log.TotalTokens,
-		TotalCostUSD:      log.CostUSD,
-		StatusCode:        log.StatusCode,
-		LatencyMS:         log.LatencyMs,
-		TTFTMS:            log.TTFTMs,
-		PromptHash:        promptHash,
-		ResponseHash:      responseHash,
-		ComplianceStatus:  "compliant",
+	trail := buildSuccessAuditTrail(log, gatewayKey, agentID, agentName, userRole, promptHash, log.ToolsInvoked, log.MCPServersCalled)
+	if trail == nil {
+		return
 	}
-
-	if gatewayKey != nil && gatewayKey.ID != "" {
-		trail.GatewayKeyID = &gatewayKey.ID
+	if err := o.auditRecorder.Record(ctx, trail); err != nil {
+		enqueueOutboxFallback(ctx, o.outbox, models.OutboxEventAIAuditTrail, trail.OrgID, trail.UserID, trail, err)
 	}
-	if agentID != "" {
-		trail.AgentID = &agentID
-		trail.AgentName = &agentName
-	}
-
-	_ = o.auditRecorder.Record(ctx, trail)
 }
 
 func extractFailoverChain(attemptsBytes []byte) []string {
@@ -443,14 +455,25 @@ func extractFailoverChain(attemptsBytes []byte) []string {
 
 	var chain []string
 	for _, att := range attempts {
-		if credID, ok := att["credential_id"].(string); ok && credID != "" {
-			provName, _ := att["provider_name"].(string)
-			if provName != "" {
-				chain = append(chain, fmt.Sprintf("%s:%s", provName, credID))
-			} else {
-				chain = append(chain, credID)
-			}
+		credID, _ := att["credential_id"].(string)
+		if credID == "" {
+			continue
 		}
+		label, _ := att["provider_name"].(string)
+		if label == "" {
+			label, _ = att["provider_id"].(string)
+		}
+		if label == "" {
+			label, _ = att["model"].(string)
+		}
+		if label != "" {
+			chain = append(chain, fmt.Sprintf("%s:%s", label, credID))
+		} else {
+			chain = append(chain, credID)
+		}
+	}
+	if chain == nil {
+		return []string{}
 	}
 	return chain
 }
