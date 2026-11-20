@@ -1,0 +1,364 @@
+---
+// Architectural Hero stage adapted from RoozyLabs company-profile
+// (PrismControlPlaneStage + ContinuumArtifact pointer tilt + ContinuumBridge).
+// Dual-theme (light paper & dark graphite) and respects prefers-reduced-motion.
+---
+
+<div
+	data-prism-stage
+	class="relative w-full select-none rounded-sm border border-rule bg-raised/90 p-3 sm:p-4 overflow-hidden"
+>
+	<!-- Subtle ambient stage aura (Hero stage only, documented in apps/web/DESIGN.md) -->
+	<div
+		aria-hidden="true"
+		class="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_52%_48%,rgb(var(--accent)/0.10),transparent_68%)]"
+	></div>
+
+	<div
+		data-prism-parallax
+		class="relative w-full transition-transform duration-200 ease-out will-change-transform"
+	>
+		<svg
+			role="img"
+			aria-label="Prism Control Plane diagram: incoming request passes through the governance and audit ring and refracts through the Prism gateway crystal to primary, balanced, and fallback model routes"
+			viewBox="0 0 810 540"
+			class="block h-auto w-full"
+		>
+			<defs>
+				<filter id="pr-blur-lg" x="-30%" y="-30%" width="160%" height="160%">
+					<feGaussianBlur stdDeviation="28" />
+				</filter>
+				<filter id="pr-blur-sm" x="-30%" y="-30%" width="160%" height="160%">
+					<feGaussianBlur stdDeviation="6" />
+				</filter>
+
+				<!-- 3D Prism Crystal Facets -->
+				<linearGradient id="pr-facet-ul" x1="0" y1="0" x2="1" y2="1">
+					<stop offset="0%" stop-color="#C4B5FD" />
+					<stop offset="55%" stop-color="#7C3AED" />
+					<stop offset="100%" stop-color="#4C1D95" />
+				</linearGradient>
+				<linearGradient id="pr-facet-ur" x1="1" y1="0" x2="0" y2="1">
+					<stop offset="0%" stop-color="#A78BFA" />
+					<stop offset="50%" stop-color="#5B21B6" />
+					<stop offset="100%" stop-color="#312E81" />
+				</linearGradient>
+				<linearGradient id="pr-facet-ll" x1="0" y1="0" x2="1" y2="1">
+					<stop offset="0%" stop-color="#6D28D9" />
+					<stop offset="70%" stop-color="#3B0764" />
+					<stop offset="100%" stop-color="#1E1B4B" />
+				</linearGradient>
+				<linearGradient id="pr-facet-lr" x1="1" y1="0" x2="0" y2="1">
+					<stop offset="0%" stop-color="#4C1D95" />
+					<stop offset="65%" stop-color="#2E1065" />
+					<stop offset="100%" stop-color="#170B3B" />
+				</linearGradient>
+				<linearGradient id="pr-table-upper" x1="0.5" y1="0" x2="0.5" y2="1">
+					<stop offset="0%" stop-color="#EDE9FE" />
+					<stop offset="48%" stop-color="#8B5CF6" />
+					<stop offset="100%" stop-color="#5B21B6" />
+				</linearGradient>
+				<linearGradient id="pr-table-lower" x1="0.5" y1="0" x2="0.5" y2="1">
+					<stop offset="0%" stop-color="#7C3AED" />
+					<stop offset="100%" stop-color="#2E1065" />
+				</linearGradient>
+			</defs>
+
+			<style>
+				.pr-label-primary {
+					fill: rgb(var(--ink));
+					font-family: "IBM Plex Sans", system-ui, sans-serif;
+					font-weight: 600;
+				}
+				.pr-label-mono {
+					fill: rgb(var(--ink-muted));
+					font-family: "IBM Plex Mono", ui-monospace, monospace;
+				}
+				.pr-label-accent {
+					fill: rgb(var(--accent));
+					font-family: "IBM Plex Mono", ui-monospace, monospace;
+					font-weight: 500;
+				}
+				.pr-node-fill {
+					fill: rgb(var(--paper));
+				}
+				.pr-field-fill {
+					fill: rgb(var(--accent) / 0.06);
+				}
+				.pr-grid-line {
+					stroke: rgb(var(--rule));
+				}
+				@keyframes pr-orbital-drift {
+					0% { transform: rotate(0deg); }
+					100% { transform: rotate(360deg); }
+				}
+				@keyframes pr-pulse-glow {
+					0%, 100% { opacity: 0.45; transform: scale(1); }
+					50% { opacity: 0.9; transform: scale(1.07); }
+				}
+				.pr-orbit-animated {
+					transform-origin: 336px 274px;
+					animation: pr-orbital-drift 36s linear infinite;
+				}
+				.pr-pulse-animated {
+					transform-origin: 489px 178px;
+					animation: pr-pulse-glow 2.8s ease-in-out infinite;
+				}
+				.pr-core-pulse-animated {
+					transform-origin: 336px 274px;
+					animation: pr-pulse-glow 3.2s ease-in-out infinite;
+				}
+				@media (prefers-reduced-motion: reduce) {
+					.pr-orbit-animated,
+					.pr-pulse-animated,
+					.pr-core-pulse-animated {
+						animation: none !important;
+					}
+				}
+			</style>
+
+			<!-- Architectural Coordinate Hairlines -->
+			<line x1="24" y1="274" x2="786" y2="274" class="pr-grid-line" stroke-width="1" stroke-dasharray="3 5" opacity="0.6" />
+			<line x1="336" y1="36" x2="336" y2="504" class="pr-grid-line" stroke-width="1" stroke-dasharray="3 5" opacity="0.6" />
+
+			<!-- Governance & Audit Boundary Ring -->
+			<circle
+				cx="336"
+				cy="274"
+				r="164"
+				fill="none"
+				stroke="rgb(var(--accent))"
+				stroke-width="1.4"
+				opacity="0.55"
+				stroke-dasharray="6 4"
+			/>
+			<circle
+				cx="336"
+				cy="274"
+				r="138"
+				class="pr-field-fill"
+				stroke="rgb(var(--accent))"
+				stroke-width="1"
+				opacity="0.7"
+			/>
+
+			<!-- Orbital Tracks Around Prism Crystal -->
+			<g class="pr-orbit-animated">
+				<circle
+					cx="336"
+					cy="274"
+					r="112"
+					fill="none"
+					stroke="rgb(var(--accent))"
+					stroke-width="1"
+					stroke-dasharray="4 6"
+					opacity="0.38"
+				/>
+				<circle
+					cx="336"
+					cy="274"
+					r="88"
+					fill="none"
+					stroke="rgb(var(--accent))"
+					stroke-width="1"
+					opacity="0.24"
+				/>
+				<circle cx="448" cy="274" r="3.5" fill="rgb(var(--accent))" opacity="0.85" />
+			</g>
+
+			<!-- Top Alignment Tick & Boundary Header -->
+			<line x1="336" y1="94" x2="336" y2="110" stroke="rgb(var(--accent))" stroke-width="1.5" />
+			<text x="336" y="82" text-anchor="middle" font-size="12.5" class="pr-label-accent">
+				GOVERNANCE &amp; AUDIT BOUNDARY
+			</text>
+
+			<!-- Client / Agent Node (Left) -->
+			<circle cx="58" cy="274" r="26" class="pr-node-fill" stroke="rgb(var(--accent))" stroke-width="1.8" />
+			<circle cx="58" cy="274" r="12" fill="rgb(var(--accent) / 0.18)" stroke="rgb(var(--accent))" stroke-width="1.4" />
+			<circle cx="58" cy="274" r="4.5" fill="rgb(var(--accent))" />
+			<text x="58" y="322" text-anchor="middle" font-size="12.5" class="pr-label-primary">
+				App / Agent
+			</text>
+
+			<!-- Incoming Request Stream -->
+			<text x="96" y="236" font-size="11" class="pr-label-mono">
+				POST /v1/chat · /v1/mcp
+			</text>
+			<line
+				x1="84"
+				y1="252"
+				x2="254"
+				y2="252"
+				stroke="rgb(var(--accent))"
+				stroke-width="3"
+				stroke-linecap="round"
+			/>
+			<polyline
+				points="183,246 191,252 183,258"
+				fill="none"
+				stroke="rgb(var(--accent))"
+				stroke-width="2"
+				stroke-linecap="round"
+				stroke-linejoin="round"
+			/>
+			<!-- Admission Gate Point on Ring -->
+			<circle cx="172" cy="252" r="5.5" class="pr-node-fill" stroke="rgb(var(--accent))" stroke-width="2" />
+
+			<!-- Response Stream -->
+			<text x="108" y="316" font-size="11" class="pr-label-mono">
+				X-Prism-Model · Audit
+			</text>
+			<line
+				x1="254"
+				y1="296"
+				x2="84"
+				y2="296"
+				stroke="rgb(var(--allow))"
+				stroke-width="2.2"
+				stroke-linecap="round"
+				stroke-dasharray="5 3"
+			/>
+			<polyline
+				points="154,290 146,296 154,302"
+				fill="none"
+				stroke="rgb(var(--allow))"
+				stroke-width="2"
+				stroke-linecap="round"
+				stroke-linejoin="round"
+			/>
+			<circle cx="172" cy="296" r="5.5" class="pr-node-fill" stroke="rgb(var(--allow))" stroke-width="2" />
+
+			<!-- Active Route (Top Right) -->
+			<text x="546" y="106" text-anchor="end" font-size="11.5" class="pr-label-accent">
+				Active route
+			</text>
+			<path
+				d="M 424,250 C 470,220 500,160 554,114"
+				fill="none"
+				stroke="rgb(var(--accent))"
+				stroke-width="3.5"
+				stroke-linecap="round"
+			/>
+			<path
+				d="M 554,130 C 510,170 480,230 430,265"
+				fill="none"
+				stroke="rgb(var(--allow))"
+				stroke-width="1.6"
+				opacity="0.8"
+				stroke-dasharray="5 3"
+			/>
+			<g class="pr-pulse-animated">
+				<circle cx="489" cy="178" r="10" fill="rgb(var(--accent))" opacity="0.35" filter="url(#pr-blur-sm)" />
+				<circle cx="489" cy="178" r="4.5" fill="rgb(var(--accent))" />
+			</g>
+
+			<!-- Policy / Balanced Route (Middle Right) -->
+			<line
+				x1="424"
+				y1="274"
+				x2="584"
+				y2="274"
+				stroke="rgb(var(--accent))"
+				stroke-width="1.8"
+				opacity="0.65"
+				stroke-dasharray="4 4"
+			/>
+
+			<!-- Cooldown Failover Route (Bottom Right) -->
+			<text x="548" y="446" text-anchor="end" font-size="11.5" class="pr-label-mono">
+				Failover standby
+			</text>
+			<path
+				d="M 424,298 C 470,328 500,390 560,434"
+				fill="none"
+				stroke="rgb(var(--accent))"
+				stroke-width="2.2"
+				opacity="0.75"
+				stroke-dasharray="6 4"
+			/>
+			<circle cx="490" cy="370" r="7.5" class="pr-node-fill" stroke="rgb(var(--accent))" stroke-width="1.6" />
+			<circle cx="490" cy="370" r="2.8" fill="rgb(var(--accent))" />
+
+			<!-- Central 3D Prism Crystal -->
+			<ellipse
+				cx="336"
+				cy="274"
+				rx="68"
+				ry="88"
+				fill="#7C3AED"
+				opacity="0.22"
+				filter="url(#pr-blur-lg)"
+			/>
+			<g>
+				<polygon points="336,144 248,274 336,274" fill="url(#pr-facet-ul)" />
+				<polygon points="336,144 424,274 336,274" fill="url(#pr-facet-ur)" />
+				<polygon points="248,274 336,404 336,274" fill="url(#pr-facet-ll)" />
+				<polygon points="424,274 336,404 336,274" fill="url(#pr-facet-lr)" />
+
+				<polygon points="336,174 286,250 386,250" fill="url(#pr-table-upper)" opacity="0.9" />
+				<polygon points="286,250 386,250 336,350" fill="url(#pr-table-lower)" opacity="0.88" />
+
+				<polygon
+					points="336,144 424,274 336,404 248,274"
+					fill="none"
+					stroke="#EDE9FE"
+					stroke-width="1.4"
+					opacity="0.85"
+				/>
+				<line x1="336" y1="144" x2="336" y2="404" stroke="#EDE9FE" stroke-width="1.1" opacity="0.75" />
+				<line x1="248" y1="274" x2="424" y2="274" stroke="#EDE9FE" stroke-width="1.1" opacity="0.75" />
+
+				<circle
+					cx="336"
+					cy="274"
+					r="18"
+					fill="#C4B5FD"
+					opacity="0.5"
+					filter="url(#pr-blur-sm)"
+					class="pr-core-pulse-animated"
+				/>
+				<circle cx="336" cy="274" r="7.5" fill="#FFFFFF" />
+			</g>
+
+			<text x="336" y="466" text-anchor="middle" font-size="14.5" class="pr-label-primary">
+				Prism Control Plane
+			</text>
+			<text x="336" y="486" text-anchor="middle" font-size="11.5" class="pr-label-mono">
+				Key · Budget · Policy · Route
+			</text>
+
+			<!-- Target Node 1: Primary Model / MCP Tool -->
+			<g>
+				<circle cx="586" cy="114" r="28" class="pr-node-fill" stroke="rgb(var(--accent))" stroke-width="2" />
+				<circle cx="586" cy="114" r="15" fill="rgb(var(--accent) / 0.22)" />
+				<circle cx="586" cy="114" r="6.5" fill="rgb(var(--accent))" />
+				<text x="628" y="109" font-size="14" class="pr-label-primary">Primary model</text>
+				<text x="628" y="128" font-size="12" class="pr-label-mono">Pinned or prism-auto</text>
+			</g>
+
+			<!-- Target Node 2: Governed MCP Server -->
+			<g>
+				<circle cx="612" cy="274" r="22" class="pr-node-fill" stroke="rgb(var(--accent))" stroke-width="1.6" />
+				<circle cx="612" cy="274" r="10" fill="rgb(var(--accent) / 0.18)" />
+				<circle cx="612" cy="274" r="4.5" fill="rgb(var(--accent))" />
+				<text x="646" y="269" font-size="14" class="pr-label-primary">MCP tool server</text>
+				<text x="646" y="288" font-size="12" class="pr-label-mono">Allow / !deny filtered</text>
+			</g>
+
+			<!-- Target Node 3: Fallback Credential -->
+			<g>
+				<circle cx="586" cy="434" r="24" class="pr-node-fill" stroke="rgb(var(--accent))" stroke-width="1.6" />
+				<circle cx="586" cy="434" r="11" fill="rgb(var(--accent) / 0.18)" />
+				<circle cx="586" cy="434" r="5" fill="rgb(var(--accent))" />
+				<text x="624" y="429" font-size="14" class="pr-label-primary">Fallback credential</text>
+				<text x="624" y="448" font-size="12" class="pr-label-mono">Retry-After cooldown</text>
+			</g>
+		</svg>
+	</div>
+
+	<!-- Footer caption bar inside stage -->
+	<div class="mt-2 pt-2.5 border-t border-rule flex flex-wrap items-center justify-between gap-2 font-mono text-xs text-muted">
+		<span>FIG. 01 · PRISM CONTROL STAGE</span>
+		<span>/v1/chat/completions · /v1/mcp</span>
+	</div>
+</div>

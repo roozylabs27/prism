@@ -1,0 +1,91 @@
+---
+import Icon from '../ui/Icon.astro';
+import { nav, links, cta, site } from '../../data/site';
+---
+
+<header
+	id="site-header"
+	data-scrolled="false"
+	class="sticky top-0 z-50 border-b border-transparent bg-transparent transition-[background-color,border-color,backdrop-filter] duration-200"
+>
+	<div class="mx-auto max-w-page px-5 sm:px-8 h-16 flex items-center justify-between gap-4">
+		<a href="/" class="flex items-center gap-2.5 min-h-[44px] no-underline" aria-label="Prism home">
+			<svg viewBox="0 0 24 24" class="h-6 w-6 text-accent" fill="none" stroke="currentColor" stroke-width="1.75" aria-hidden="true">
+				<path d="M12 3 21 19H3Z" />
+				<path d="M12 3v16" />
+			</svg>
+			<span class="font-semibold text-lg tracking-tight">{site.name}</span>
+			<span class="font-mono text-xs text-muted border border-rule rounded-sm px-1.5 py-0.5">v{site.version}</span>
+		</a>
+
+		<nav aria-label="Primary" class="hidden lg:flex items-center gap-1">
+			{nav.map((item) => (
+				<a href={item.href} class="px-3 min-h-[44px] inline-flex items-center text-[0.9375rem] text-muted hover:text-ink transition-colors duration-150">
+					{item.label}
+				</a>
+			))}
+			<a href={links.docs} target="_blank" rel="noopener noreferrer" class="px-3 min-h-[44px] inline-flex items-center gap-1 text-[0.9375rem] text-muted hover:text-ink transition-colors duration-150">
+				Docs <Icon name="external" class="h-3.5 w-3.5" />
+			</a>
+			<a href={links.repo} target="_blank" rel="noopener noreferrer" class="px-3 min-h-[44px] inline-flex items-center gap-1 text-[0.9375rem] text-muted hover:text-ink transition-colors duration-150">
+				GitHub <Icon name="external" class="h-3.5 w-3.5" />
+			</a>
+		</nav>
+
+		<div class="flex items-center gap-2">
+			<button
+				type="button"
+				data-theme-toggle
+				class="h-11 w-11 inline-flex items-center justify-center rounded-sm border border-rule text-muted hover:text-ink hover:border-ink transition-colors duration-150"
+				aria-label="Switch to dark theme"
+			>
+				<span class="dark:hidden"><Icon name="moon" class="h-[18px] w-[18px]" /></span>
+				<span class="hidden dark:inline"><Icon name="sun" class="h-[18px] w-[18px]" /></span>
+			</button>
+			<a
+				href={cta.primary.href}
+				target="_blank"
+				rel="noopener noreferrer"
+				class="hidden sm:inline-flex items-center min-h-[44px] px-4 rounded-sm bg-ink text-paper text-[0.9375rem] font-medium hover:bg-ink/85 transition-colors duration-150"
+			>
+				{cta.primary.label}
+			</a>
+			<button
+				type="button"
+				id="nav-toggle"
+				class="lg:hidden h-11 w-11 inline-flex items-center justify-center rounded-sm border border-rule text-ink"
+				aria-expanded="false"
+				aria-controls="mobile-nav"
+				aria-label="Open menu"
+			>
+				<span data-icon-open><Icon name="menu" class="h-5 w-5" /></span>
+				<span data-icon-close class="hidden"><Icon name="close" class="h-5 w-5" /></span>
+			</button>
+		</div>
+	</div>
+
+	<nav id="mobile-nav" aria-label="Mobile" class="hidden lg:hidden border-t border-rule bg-paper">
+		<ul class="mx-auto max-w-page px-5 sm:px-8 py-3">
+			{nav.map((item) => (
+				<li>
+					<a href={item.href} class="flex items-center min-h-[48px] border-b border-rule text-ink">{item.label}</a>
+				</li>
+			))}
+			<li>
+				<a href={links.docs} target="_blank" rel="noopener noreferrer" class="flex items-center justify-between min-h-[48px] border-b border-rule text-ink">
+					Docs <Icon name="external" class="h-4 w-4 text-muted" />
+				</a>
+			</li>
+			<li>
+				<a href={links.repo} target="_blank" rel="noopener noreferrer" class="flex items-center justify-between min-h-[48px] border-b border-rule text-ink">
+					GitHub <Icon name="external" class="h-4 w-4 text-muted" />
+				</a>
+			</li>
+			<li class="pt-4 pb-2">
+				<a href={cta.primary.href} target="_blank" rel="noopener noreferrer" class="flex items-center justify-center min-h-[48px] rounded-sm bg-ink text-paper font-medium">
+					{cta.primary.label}
+				</a>
+			</li>
+		</ul>
+	</nav>
+</header>

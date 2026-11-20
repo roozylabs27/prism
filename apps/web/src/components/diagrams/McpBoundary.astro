@@ -1,0 +1,32 @@
+---
+// Three calls from one agent. Status is spelled out in text, color only reinforces it.
+const calls = [
+	{ call: 'crm__lookup_customer', via: 'through /v1/mcp', status: 'Allowed', tone: 'allow', why: 'On the agent allowlist. Recorded.' },
+	{ call: 'crm__delete_customer', via: 'through /v1/mcp', status: 'Denied', tone: 'deny', why: 'Matches !delete_customer. Recorded.' },
+	{ call: 'rm -rf ./data', via: 'agent shell, direct', status: 'Not seen', tone: 'none', why: 'Never reaches Prism. Govern it in the agent runtime.' },
+] as const;
+
+const toneClass = {
+	allow: 'text-allow border-allow',
+	deny: 'text-deny border-deny',
+	none: 'text-muted border-rule border-dashed',
+};
+---
+
+<figure class="border border-rule rounded-sm bg-raised p-5 sm:p-6">
+	<figcaption class="eyebrow">Agent <span class="text-ink">support-bot-acme</span> makes three calls</figcaption>
+	<ul class="mt-5 divide-y divide-rule">
+		{calls.map((c) => (
+			<li class="py-4 grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
+				<div class="min-w-0">
+					<code class="font-mono text-sm break-all">{c.call}</code>
+					<span class="block text-sm text-muted">{c.via}</span>
+				</div>
+				<div class="sm:text-right">
+					<span class:list={['inline-block font-mono text-sm px-2 py-0.5 border rounded-sm', toneClass[c.tone]]}>{c.status}</span>
+					<span class="block text-sm text-muted mt-1">{c.why}</span>
+				</div>
+			</li>
+		))}
+	</ul>
+</figure>
