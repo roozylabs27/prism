@@ -56,6 +56,39 @@ func DefaultRoutingPolicy() *RoutingPolicy {
 	}
 }
 
+// NormalizePolicyWeights returns a fresh normalized weight map whose values
+// sum to 1.0, falling back to DefaultRoutingPolicy().Weights when empty or non-positive.
+func NormalizePolicyWeights(weights map[string]float64) map[string]float64 {
+	sum := 0.0
+	for _, w := range weights {
+		if !math.IsNaN(w) && !math.IsInf(w, 0) && w > 0 {
+			sum += w
+		}
+	}
+	if sum <= 0 || math.IsNaN(sum) || math.IsInf(sum, 0) {
+		defaults := DefaultRoutingPolicy().Weights
+		out := make(map[string]float64, len(defaults))
+		for k, v := range defaults {
+			out[k] = v
+		}
+		return out
+	}
+	out := make(map[string]float64, len(weights))
+	needsScale := math.Abs(sum-1.0) > 1e-6
+	for k, w := range weights {
+		if math.IsNaN(w) || math.IsInf(w, 0) || w <= 0 {
+			out[k] = 0
+			continue
+		}
+		if needsScale {
+			out[k] = w / sum
+		} else {
+			out[k] = w
+		}
+	}
+	return out
+}
+
 func ScoreCandidates(candidates []*models.Model, chars RequestCharacteristics, policy *RoutingPolicy) []*ModelScore {
 	return ScoreCandidatesWithTelemetry(candidates, chars, policy, nil)
 }
@@ -93,7 +126,9 @@ func ScoreCandidatesWithTelemetry(candidates []*models.Model, chars RequestChara
 		}
 	}
 
-	weights := taskAwareWeights(complexityAdjustedWeights(policy, chars.Complexity), chars.Task)
+	normalizedPolicy := *policy
+	normalizedPolicy.Weights = NormalizePolicyWeights(policy.Weights)
+	weights := taskAwareWeights(complexityAdjustedWeights(&normalizedPolicy, chars.Complexity), chars.Task)
 
 	referencePrice := defaultCostReferencePrice
 	if v, ok := policy.Constraints["cost_reference_price"]; ok && v > 0 {

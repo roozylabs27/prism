@@ -86,12 +86,12 @@ func (h *ProviderHandler) Get(c *gin.Context) {
 // @Failure      400 {object} map[string]string
 // @Router       /api/providers [post]
 func (h *ProviderHandler) Create(c *gin.Context) {
-	var p models.Provider
-	if err := c.ShouldBindJSON(&p); err != nil {
+	var req createProviderRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
 		httputil.RespondBadRequest(c, "Invalid request payload", err, "INVALID_REQUEST_BODY")
 		return
 	}
-	p.UserID = c.GetString("userId")
+	p := buildProviderFromCreate(req, c.GetString("userId"))
 	if !baseURLAllowed(c, p.BaseURL) {
 		return
 	}
@@ -122,16 +122,18 @@ func (h *ProviderHandler) Update(c *gin.Context) {
 		return
 	}
 
-	if err := c.ShouldBindJSON(existing); err != nil {
+	var req updateProviderRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
 		httputil.RespondBadRequest(c, "Invalid request payload", err, "INVALID_REQUEST_BODY")
 		return
 	}
+	if req.BaseURL != nil && !baseURLAllowed(c, trimString(*req.BaseURL)) {
+		return
+	}
+	applyProviderUpdate(existing, req)
 	// The body may not move the provider to another id or owner.
 	existing.ID = id
 	existing.UserID = userID
-	if !baseURLAllowed(c, existing.BaseURL) {
-		return
-	}
 
 	if err := h.providers.Update(c.Request.Context(), existing); err != nil {
 		httputil.RespondStoreError(c, err, "Provider", "PROVIDER_UPDATE")

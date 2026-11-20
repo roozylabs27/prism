@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -11,21 +12,43 @@ import (
 	"github.com/roozylabs/prism/internal/models"
 	"github.com/roozylabs/prism/internal/proxy"
 	"github.com/roozylabs/prism/internal/repository"
+	"github.com/roozylabs/prism/internal/security"
 	"github.com/roozylabs/prism/internal/utils"
 )
 
+type toolStore interface {
+	ListByUserID(ctx context.Context, userID string) ([]models.Tool, error)
+	FindByID(ctx context.Context, id, userID string) (*models.Tool, error)
+	CreateWithBackendsTx(ctx context.Context, t *models.Tool, backends []models.ToolBackend) error
+	Update(ctx context.Context, t *models.Tool) error
+	Delete(ctx context.Context, id, userID string) error
+	GetToolWithBackendsByID(ctx context.Context, id, userID string) (*models.ToolWithBackends, error)
+}
+
+type toolBackendStore interface {
+	ListByToolID(ctx context.Context, toolID string) ([]models.ToolBackend, error)
+	DeleteByToolID(ctx context.Context, toolID string) error
+	Create(ctx context.Context, b *models.ToolBackend) error
+}
+
+var (
+	_ toolStore        = (*repository.ToolRepository)(nil)
+	_ toolBackendStore = (*repository.ToolBackendRepository)(nil)
+)
+
 type ToolHandler struct {
-	tools    *repository.ToolRepository
-	backends *repository.ToolBackendRepository
+	tools    toolStore
+	backends toolBackendStore
 	gateway  *proxy.ToolGateway
 	encKey   string
 }
 
-func NewToolHandler(tools *repository.ToolRepository, backends *repository.ToolBackendRepository, gateway *proxy.ToolGateway, encKey string) *ToolHandler {
+func NewToolHandler(tools toolStore, backends toolBackendStore, gateway *proxy.ToolGateway, encKey string) *ToolHandler {
 	return &ToolHandler{tools: tools, backends: backends, gateway: gateway, encKey: encKey}
 }
 
 type BackendRequest struct {
+	ID          string `json:"id"`
 	Name        string `json:"name" binding:"required"`
 	EndpointURL string `json:"endpointUrl" binding:"required"`
 	AuthToken   string `json:"authToken"`
@@ -40,6 +63,14 @@ type CreateToolRequest struct {
 	InputSchema json.RawMessage  `json:"inputSchema"`
 	Enabled     *bool            `json:"enabled"`
 	Backends    []BackendRequest `json:"backends"`
+}
+
+type UpdateToolRequest struct {
+	DisplayName *string           `json:"displayName"`
+	Description *string           `json:"description"`
+	InputSchema json.RawMessage   `json:"inputSchema"`
+	Enabled     *bool             `json:"enabled"`
+	Backends    *[]BackendRequest `json:"backends"`
 }
 
 func (h *ToolHandler) List(c *gin.Context) {
@@ -93,6 +124,10 @@ func (h *ToolHandler) Create(c *gin.Context) {
 
 	var backends []models.ToolBackend
 	for _, br := range req.Backends {
+		if err := security.ValidateOutboundURL(br.EndpointURL); err != nil {
+			httputil.RespondBadRequest(c, "Tool backend URL is blocked or invalid: "+br.Name, err, "TOOL_BACKEND_URL_BLOCKED")
+			return
+		}
 		b := models.ToolBackend{
 			Name:        br.Name,
 			BackendType: "http",
@@ -107,7 +142,7 @@ func (h *ToolHandler) Create(c *gin.Context) {
 		if b.Priority <= 0 {
 			b.Priority = 1
 		}
-		if br.AuthToken != "" && h.encKey != "" {
+		if strings.TrimSpace(br.AuthToken) != "" && h.encKey != "" {
 			enc, err := utils.EncryptAES256GCM(br.AuthToken, h.encKey)
 			if err != nil {
 				httputil.RespondInternalError(c, "Failed to encrypt auth token for backend: "+br.Name, err, "ENCRYPTION_FAILED")
@@ -137,14 +172,27 @@ func (h *ToolHandler) Update(c *gin.Context) {
 		return
 	}
 
-	var req CreateToolRequest
+	var req UpdateToolRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		httputil.RespondBadRequest(c, "Invalid request payload", err, "INVALID_REQUEST_BODY")
 		return
 	}
 
-	existing.DisplayName = req.DisplayName
-	existing.Description = req.Description
+	if req.Backends != nil {
+		for _, br := range *req.Backends {
+			if err := security.ValidateOutboundURL(br.EndpointURL); err != nil {
+				httputil.RespondBadRequest(c, "Tool backend URL is blocked or invalid: "+br.Name, err, "TOOL_BACKEND_URL_BLOCKED")
+				return
+			}
+		}
+	}
+
+	if req.DisplayName != nil {
+		existing.DisplayName = *req.DisplayName
+	}
+	if req.Description != nil {
+		existing.Description = *req.Description
+	}
 	if req.InputSchema != nil {
 		existing.InputSchema = req.InputSchema
 	}
@@ -160,12 +208,18 @@ func (h *ToolHandler) Update(c *gin.Context) {
 	}
 
 	if req.Backends != nil {
+		priorBackends, err := h.backends.ListByToolID(c.Request.Context(), id)
+		if err != nil {
+			httputil.RespondInternalError(c, "Failed to load existing backends", err, "BACKENDS_LOAD_FAILED")
+			return
+		}
 		if err := h.backends.DeleteByToolID(c.Request.Context(), id); err != nil {
 			httputil.RespondInternalError(c, "Failed to replace backends", err, "BACKENDS_REPLACE_FAILED")
 			return
 		}
-		for _, br := range req.Backends {
-			if err := h.createBackend(c.Request.Context(), id, br); err != nil {
+		for _, br := range *req.Backends {
+			prior := matchPriorToolBackend(br, priorBackends)
+			if err := h.createBackendWithPrior(c.Request.Context(), id, br, prior); err != nil {
 				httputil.RespondInternalError(c, "Backend failed: "+br.Name, err, "TOOL_BACKEND_FAILED")
 				return
 			}
@@ -215,7 +269,33 @@ func (h *ToolHandler) TestTool(c *gin.Context) {
 	c.JSON(http.StatusOK, result)
 }
 
-func (h *ToolHandler) createBackend(ctx context.Context, toolID string, br BackendRequest) error {
+func matchPriorToolBackend(br BackendRequest, prior []models.ToolBackend) *models.ToolBackend {
+	if br.ID != "" {
+		for i := range prior {
+			if prior[i].ID == br.ID {
+				return &prior[i]
+			}
+		}
+	}
+	lowerName := strings.ToLower(strings.TrimSpace(br.Name))
+	for i := range prior {
+		if strings.ToLower(strings.TrimSpace(prior[i].Name)) == lowerName && prior[i].EndpointURL == br.EndpointURL {
+			return &prior[i]
+		}
+	}
+	var uniqueMatch *models.ToolBackend
+	for i := range prior {
+		if strings.ToLower(strings.TrimSpace(prior[i].Name)) == lowerName {
+			if uniqueMatch != nil {
+				return nil
+			}
+			uniqueMatch = &prior[i]
+		}
+	}
+	return uniqueMatch
+}
+
+func (h *ToolHandler) createBackendWithPrior(ctx context.Context, toolID string, br BackendRequest, prior *models.ToolBackend) error {
 	backend := &models.ToolBackend{
 		ToolID:      toolID,
 		Name:        br.Name,
@@ -231,12 +311,17 @@ func (h *ToolHandler) createBackend(ctx context.Context, toolID string, br Backe
 	if br.Priority <= 0 {
 		backend.Priority = 1
 	}
-	if br.AuthToken != "" && h.encKey != "" {
+	if strings.TrimSpace(br.AuthToken) != "" && h.encKey != "" {
 		enc, err := utils.EncryptAES256GCM(br.AuthToken, h.encKey)
 		if err != nil {
 			return err
 		}
 		backend.AuthTokenEncrypted = &enc
+	} else if prior != nil && prior.AuthTokenEncrypted != nil {
+		encCopy := *prior.AuthTokenEncrypted
+		backend.AuthTokenEncrypted = &encCopy
+		backend.AuthHeaderName = prior.AuthHeaderName
+		backend.AuthHeaderPrefix = prior.AuthHeaderPrefix
 	}
 	return h.backends.Create(ctx, backend)
 }

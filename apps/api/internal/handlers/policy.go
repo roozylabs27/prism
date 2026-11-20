@@ -1,21 +1,46 @@
 package handlers
 
 import (
+	"context"
 	"database/sql"
+	"fmt"
+	"math"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
 	"github.com/roozylabs/prism/internal/httputil"
 	"github.com/roozylabs/prism/internal/models"
+	"github.com/roozylabs/prism/internal/proxy"
 	"github.com/roozylabs/prism/internal/repository"
 )
 
+type routingPolicyStore interface {
+	ListByUserID(ctx context.Context, userID string) ([]models.RoutingPolicy, error)
+	FindByID(ctx context.Context, id, userID string) (*models.RoutingPolicy, error)
+	Create(ctx context.Context, p *models.RoutingPolicy) error
+	Update(ctx context.Context, p *models.RoutingPolicy) error
+	Delete(ctx context.Context, id, userID string) error
+	SetDefault(ctx context.Context, id, userID string) error
+	FindByName(ctx context.Context, name, userID string) (*models.RoutingPolicy, error)
+}
+
+var _ routingPolicyStore = (*repository.RoutingPolicyRepository)(nil)
+
+func validateAndNormalizePolicyWeights(weights map[string]float64) (map[string]float64, error) {
+	for k, v := range weights {
+		if math.IsNaN(v) || math.IsInf(v, 0) || v < 0 {
+			return nil, fmt.Errorf("weight %q must be finite and non-negative", k)
+		}
+	}
+	return proxy.NormalizePolicyWeights(weights), nil
+}
+
 type RoutingPolicyHandler struct {
-	policyRepo *repository.RoutingPolicyRepository
+	policyRepo routingPolicyStore
 	audit      *AdminAudit
 }
 
-func NewRoutingPolicyHandler(policyRepo *repository.RoutingPolicyRepository) *RoutingPolicyHandler {
+func NewRoutingPolicyHandler(policyRepo routingPolicyStore) *RoutingPolicyHandler {
 	return &RoutingPolicyHandler{policyRepo: policyRepo}
 }
 
@@ -60,6 +85,13 @@ func (h *RoutingPolicyHandler) Create(c *gin.Context) {
 	}
 	if req.Weights == nil {
 		req.Weights = map[string]float64{"task_match": 0.35, "quality": 0.35, "cost": 0.15, "speed": 0.15}
+	} else {
+		normalized, err := validateAndNormalizePolicyWeights(req.Weights)
+		if err != nil {
+			httputil.RespondBadRequest(c, "Invalid policy weights", err, "INVALID_WEIGHTS")
+			return
+		}
+		req.Weights = normalized
 	}
 	if req.Constraints == nil {
 		req.Constraints = map[string]float64{"max_cost_per_request": 0.05}
@@ -103,7 +135,12 @@ func (h *RoutingPolicyHandler) Update(c *gin.Context) {
 		existing.Name = *req.Name
 	}
 	if req.Weights != nil {
-		existing.Weights = req.Weights
+		normalized, err := validateAndNormalizePolicyWeights(req.Weights)
+		if err != nil {
+			httputil.RespondBadRequest(c, "Invalid policy weights", err, "INVALID_WEIGHTS")
+			return
+		}
+		existing.Weights = normalized
 	}
 	if req.Constraints != nil {
 		existing.Constraints = req.Constraints
