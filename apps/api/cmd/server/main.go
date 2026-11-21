@@ -408,8 +408,12 @@ func main() {
 			// Workspaces & Projects (Multi-Client Isolation Hierarchy)
 			protected.GET("/workspaces", requirePermission("organization:read"), workspaceHandler.ListWorkspaces)
 			protected.POST("/workspaces", requirePermission("organization:update"), workspaceHandler.CreateWorkspace)
+			protected.PUT("/workspaces/:workspaceId", requirePermission("organization:update"), workspaceHandler.UpdateWorkspace)
+			protected.DELETE("/workspaces/:workspaceId", requirePermission("organization:update"), workspaceHandler.DeleteWorkspace)
 			protected.GET("/workspaces/:workspaceId/projects", requirePermission("organization:read"), workspaceHandler.ListProjects)
 			protected.POST("/workspaces/:workspaceId/projects", requirePermission("organization:update"), workspaceHandler.CreateProject)
+			protected.PUT("/workspaces/:workspaceId/projects/:projectId", requirePermission("organization:update"), workspaceHandler.UpdateProject)
+			protected.DELETE("/workspaces/:workspaceId/projects/:projectId", requirePermission("organization:update"), workspaceHandler.DeleteProject)
 
 			// Providers
 			protected.GET("/providers", requirePermission("model:read"), providerHandler.List)
@@ -561,6 +565,7 @@ func main() {
 			protected.GET("/mcp/registry", requirePermission("mcp:read"), mcpRegistryHandler.ListCatalog)
 			protected.GET("/mcp/registry/:slug", requirePermission("mcp:read"), mcpRegistryHandler.GetCatalogBySlug)
 			protected.POST("/mcp/registry", requirePermission("mcp:create"), mcpRegistryHandler.RegisterServer)
+			protected.POST("/mcp/registry/register", requirePermission("mcp:create"), mcpRegistryHandler.RegisterServer)
 
 			// Agent Gateway & Infrastructure
 			protected.GET("/agents", requirePermission("agent:read"), agentHandler.List)

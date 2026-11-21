@@ -280,6 +280,115 @@ func (r *WorkspaceRepository) CreateProject(ctx context.Context, orgID, workspac
 	return p, nil
 }
 
+func (r *WorkspaceRepository) UpdateWorkspace(ctx context.Context, orgID, workspaceID, name, slug string) (*models.Workspace, error) {
+	if orgID == "" || workspaceID == "" {
+		return nil, ErrWorkspaceNotFound
+	}
+	existing, err := r.FindWorkspaceInOrg(ctx, orgID, workspaceID)
+	if err != nil {
+		return nil, err
+	}
+	if trimmed := strings.TrimSpace(name); trimmed != "" {
+		existing.Name = trimmed
+	}
+	if trimmedSlug := strings.TrimSpace(slug); trimmedSlug != "" {
+		existing.Slug = normalizeSlug(trimmedSlug, existing.Name, "workspace", "")
+	}
+	existing.UpdatedAt = time.Now().UTC()
+
+	res, err := r.db.ExecContext(ctx,
+		`UPDATE workspaces SET name = $1, slug = $2, updated_at = $3 WHERE org_id = $4 AND id = $5`,
+		existing.Name, existing.Slug, existing.UpdatedAt, orgID, workspaceID,
+	)
+	if err != nil {
+		var pqErr *pq.Error
+		if errors.As(err, &pqErr) && pqErr.Code == "23505" {
+			return nil, ErrWorkspaceSlugExists
+		}
+		return nil, err
+	}
+	if err := requireOneRow(res, nil); err != nil {
+		return nil, ErrWorkspaceNotFound
+	}
+	return existing, nil
+}
+
+func (r *WorkspaceRepository) DeleteWorkspace(ctx context.Context, orgID, workspaceID string) error {
+	if orgID == "" || workspaceID == "" {
+		return ErrWorkspaceNotFound
+	}
+	res, err := r.db.ExecContext(ctx,
+		`DELETE FROM workspaces WHERE org_id = $1 AND id = $2`,
+		orgID, workspaceID,
+	)
+	if err := requireOneRow(res, err); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return ErrWorkspaceNotFound
+		}
+		return err
+	}
+	return nil
+}
+
+func (r *WorkspaceRepository) UpdateProject(ctx context.Context, orgID, workspaceID, projectID, name, slug string) (*models.Project, error) {
+	if orgID == "" || workspaceID == "" || projectID == "" {
+		return nil, ErrProjectNotFound
+	}
+	if _, err := r.FindWorkspaceInOrg(ctx, orgID, workspaceID); err != nil {
+		return nil, err
+	}
+	existing, err := r.FindProjectInOrg(ctx, orgID, projectID)
+	if err != nil || existing.WorkspaceID != workspaceID {
+		return nil, ErrProjectNotFound
+	}
+	if trimmed := strings.TrimSpace(name); trimmed != "" {
+		existing.Name = trimmed
+	}
+	if trimmedSlug := strings.TrimSpace(slug); trimmedSlug != "" {
+		existing.Slug = normalizeSlug(trimmedSlug, existing.Name, "project", "")
+	}
+	existing.UpdatedAt = time.Now().UTC()
+
+	res, err := r.db.ExecContext(ctx,
+		`UPDATE projects p SET name = $1, slug = $2, updated_at = $3
+		 FROM workspaces w
+		 WHERE w.id = p.workspace_id AND w.org_id = $4 AND p.workspace_id = $5 AND p.id = $6`,
+		existing.Name, existing.Slug, existing.UpdatedAt, orgID, workspaceID, projectID,
+	)
+	if err != nil {
+		var pqErr *pq.Error
+		if errors.As(err, &pqErr) && pqErr.Code == "23505" {
+			return nil, ErrProjectSlugExists
+		}
+		return nil, err
+	}
+	if err := requireOneRow(res, nil); err != nil {
+		return nil, ErrProjectNotFound
+	}
+	return existing, nil
+}
+
+func (r *WorkspaceRepository) DeleteProject(ctx context.Context, orgID, workspaceID, projectID string) error {
+	if orgID == "" || workspaceID == "" || projectID == "" {
+		return ErrProjectNotFound
+	}
+	if _, err := r.FindWorkspaceInOrg(ctx, orgID, workspaceID); err != nil {
+		return err
+	}
+	res, err := r.db.ExecContext(ctx,
+		`DELETE FROM projects p USING workspaces w
+		 WHERE w.id = p.workspace_id AND w.org_id = $1 AND p.workspace_id = $2 AND p.id = $3`,
+		orgID, workspaceID, projectID,
+	)
+	if err := requireOneRow(res, err); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return ErrProjectNotFound
+		}
+		return err
+	}
+	return nil
+}
+
 func normalizeSlug(explicitSlug, fallbackName, defaultPrefix, suffix string) string {
 	trimmedExplicit := strings.TrimSpace(explicitSlug)
 	source := trimmedExplicit

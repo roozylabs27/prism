@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -236,6 +237,11 @@ func (h *AuditTrailHandler) ExportLogs(c *gin.Context) {
 		httputil.RespondForbidden(c, "Organization context required", nil, "TENANT_REQUIRED")
 		return
 	}
+	exportType := strings.ToLower(strings.TrimSpace(c.DefaultQuery("type", c.Query("scope"))))
+	if exportType == "ai" {
+		h.exportAITrails(c, orgID)
+		return
+	}
 	req, err := auditLogFilters(c)
 	if err != nil {
 		httputil.RespondBadRequest(c, err.Error(), err, "INVALID_DATE")
@@ -304,6 +310,68 @@ func (h *AuditTrailHandler) ExportLogs(c *gin.Context) {
 			csvCell(l.DetailsJSON), csvCell(l.ActorIP), csvCell(l.ActorUserAgent),
 		})
 	})
+	w.Flush()
+}
+
+func (h *AuditTrailHandler) exportAITrails(c *gin.Context, orgID string) {
+	req, err := auditLogFilters(c)
+	if err != nil {
+		httputil.RespondBadRequest(c, err.Error(), err, "INVALID_DATE")
+		return
+	}
+	userID := c.GetString("userId")
+	filter := models.AuditTrailFilter{
+		UserID:           userID,
+		OrgID:            orgID,
+		AgentName:        c.Query("agentName"),
+		ModelSlug:        c.Query("modelSlug"),
+		ComplianceStatus: c.Query("complianceStatus"),
+		StartDate:        req.Since,
+		EndDate:          req.Until,
+		Limit:            1000,
+		Offset:           0,
+	}
+	trails, _, err := h.repo.ListWithFilter(middleware.ContextWithTenant(c), filter)
+	if err != nil {
+		httputil.RespondInternalError(c, "Failed to export AI audit trails", err, "AUDIT_TRAILS_EXPORT_FAILED")
+		return
+	}
+	stamp := time.Now().UTC().Format("20060102-150405")
+	if strings.EqualFold(req.Format, "json") {
+		c.Header("Content-Type", "application/json; charset=utf-8")
+		c.Header("Content-Disposition", "attachment; filename=\"prism_ai_audit_"+stamp+".json\"")
+		c.JSON(http.StatusOK, gin.H{
+			"object":     "list",
+			"exportedAt": time.Now().UTC().Format(time.RFC3339),
+			"data":       trails,
+		})
+		return
+	}
+	c.Header("Content-Type", "text/csv; charset=utf-8")
+	c.Header("Content-Disposition", "attachment; filename=\"prism_ai_audit_"+stamp+".csv\"")
+	c.Status(http.StatusOK)
+	w := csv.NewWriter(c.Writer)
+	_ = w.Write([]string{"ID", "Timestamp", "RequestID", "UserRole", "AgentName", "ModelSlug", "TotalTokens", "TotalCostUSD", "StatusCode", "LatencyMS", "ComplianceStatus", "SignatureHash"})
+	for _, t := range trails {
+		agName := ""
+		if t.AgentName != nil {
+			agName = *t.AgentName
+		}
+		_ = w.Write([]string{
+			csvCell(t.ID),
+			t.CreatedAt.UTC().Format(time.RFC3339),
+			csvCell(t.RequestID),
+			csvCell(t.UserRole),
+			csvCell(agName),
+			csvCell(t.ModelSlug),
+			strconv.Itoa(t.TotalTokens),
+			strconv.FormatFloat(t.TotalCostUSD, 'f', 6, 64),
+			strconv.Itoa(t.StatusCode),
+			strconv.Itoa(t.LatencyMS),
+			csvCell(t.ComplianceStatus),
+			csvCell(t.SignatureHash),
+		})
+	}
 	w.Flush()
 }
 
