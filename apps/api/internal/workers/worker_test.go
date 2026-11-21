@@ -40,3 +40,46 @@ func TestFirstRunDelayIsBounded(t *testing.T) {
 		}
 	}
 }
+
+func TestManagerGracefulShutdownWaitsForInFlightJob(t *testing.T) {
+	old := maxStartJitter
+	maxStartJitter = time.Millisecond
+	defer func() { maxStartJitter = old }()
+
+	started := make(chan struct{})
+	release := make(chan struct{})
+	var finished atomic.Bool
+
+	m := NewManager()
+	m.Register("slow-job", time.Hour, func(context.Context) {
+		close(started)
+		<-release
+		finished.Store(true)
+	})
+
+	ctx, cancel := context.WithCancel(context.Background())
+	m.Start(ctx)
+	<-started
+	cancel()
+
+	done := make(chan error, 1)
+	go func() {
+		shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer shutdownCancel()
+		done <- m.Shutdown(shutdownCtx)
+	}()
+
+	select {
+	case err := <-done:
+		t.Fatalf("Shutdown returned before in-flight job completed (err=%v)", err)
+	case <-time.After(40 * time.Millisecond):
+	}
+
+	close(release)
+	if err := <-done; err != nil {
+		t.Fatalf("Shutdown failed after release: %v", err)
+	}
+	if !finished.Load() {
+		t.Fatal("expected in-flight job to complete before Shutdown returned")
+	}
+}

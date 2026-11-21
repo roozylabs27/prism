@@ -14,6 +14,7 @@ import (
 	"github.com/roozylabs/prism/internal/proxy"
 	goredis "github.com/roozylabs/prism/internal/redis"
 	"github.com/roozylabs/prism/internal/repository"
+	"github.com/roozylabs/prism/internal/telemetry"
 	"github.com/roozylabs/prism/internal/utils"
 )
 
@@ -78,9 +79,17 @@ func (h *ResourceGatewayHandler) ExecuteQuery(c *gin.Context) {
 	}
 
 	executionID := uuid.New().String()
+	spanCtx, resSpan := telemetry.StartSpan(middleware.ContextWithTenant(c), "prism.resource.query")
+	telemetry.SetSpanAttributes(resSpan, map[string]interface{}{
+		"prism.execution_id":  executionID,
+		"prism.resource_name": resourceName,
+		"prism.org_id":        tenantCtx.OrgID,
+		"prism.agent_id":      agentID,
+	})
+	defer resSpan.End()
 
 	if h.admission != nil {
-		admRes, admErr := h.admission.Evaluate(middleware.ContextWithTenant(c), proxy.AdmissionRequest{
+		admRes, admErr := h.admission.Evaluate(spanCtx, proxy.AdmissionRequest{
 			UserID:       gatewayKey.UserID,
 			Role:         userRole,
 			AgentID:      agentID,

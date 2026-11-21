@@ -13,6 +13,7 @@ import (
 	"github.com/roozylabs/prism/internal/proxy"
 	goredis "github.com/roozylabs/prism/internal/redis"
 	"github.com/roozylabs/prism/internal/repository"
+	"github.com/roozylabs/prism/internal/telemetry"
 	"github.com/roozylabs/prism/internal/utils"
 )
 
@@ -141,6 +142,18 @@ func (o *ExecutionOrchestrator) ExecuteChatCompletions(
 		ProjectID:   tenantCtx.ProjectID,
 	})
 
+	ctx, rootSpan := telemetry.StartSpan(ctx, "prism.gateway.chat_completions")
+	telemetry.SetSpanAttributes(rootSpan, map[string]interface{}{
+		"prism.request_id":   requestID,
+		"prism.org_id":       tenantCtx.OrgID,
+		"prism.workspace_id": tenantCtx.WorkspaceID,
+		"prism.project_id":   tenantCtx.ProjectID,
+		"prism.agent_id":     agentID,
+		"prism.model":        req.Model,
+		"prism.stream":       req.Stream,
+	})
+	defer rootSpan.End()
+
 	// 1. Admission Control Gate
 	if c != nil && req.Agent == nil {
 		req.Agent = resolvedAgent(c)
@@ -156,7 +169,9 @@ func (o *ExecutionOrchestrator) ExecuteChatCompletions(
 		TenantCtx:     tenantCtx,
 	}
 
-	admRes, err := o.admission.Evaluate(ctx, admReq)
+	admCtx, admSpan := telemetry.StartSpan(ctx, "prism.admission.evaluate")
+	admRes, err := o.admission.Evaluate(admCtx, admReq)
+	admSpan.End()
 	if err != nil {
 		return nil, fmt.Errorf("admission control evaluate: %w", err)
 	}

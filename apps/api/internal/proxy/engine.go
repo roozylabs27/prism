@@ -363,7 +363,18 @@ func (e *Engine) resolveRoutes(c *gin.Context, req *ProxyRequest, gatewayKey *mo
 		if orgID == "" && gatewayKey != nil && gatewayKey.OrgID != nil {
 			orgID = *gatewayKey.OrgID
 		}
-		routes, decision, err := e.router.ResolveSemantic(ctx, req, gatewayKey, e.cooldown, e.telemetry, sPolicy, budgetStatus)
+		resolveCtx, routeSpan := telemetry.StartSpan(ctx, "prism.router.resolve")
+		routes, decision, err := e.router.ResolveSemantic(resolveCtx, req, gatewayKey, e.cooldown, e.telemetry, sPolicy, budgetStatus)
+		if decision != nil {
+			telemetry.SetSpanAttributes(routeSpan, map[string]interface{}{
+				"prism.policy":         decision.PolicyName,
+				"prism.selected_model": decision.SelectedModel,
+				"prism.provider":       decision.SelectedProvider,
+				"prism.task":           decision.Task,
+				"prism.complexity":     decision.Complexity,
+			})
+		}
+		routeSpan.End()
 		if err == nil && decision != nil {
 			decision.RequestID = safeGetString(c, "requestID")
 			// Log routing decision asynchronously
@@ -555,7 +566,20 @@ func (e *Engine) Proxy(c *gin.Context, req *ProxyRequest, gatewayKey *models.Gat
 
 		attemptStart := time.Now()
 		upstreamCalls++
+		_, dispatchSpan := telemetry.StartSpan(ctx, "prism.upstream.dispatch")
+		telemetry.SetSpanAttributes(dispatchSpan, map[string]interface{}{
+			"prism.provider":  route.Provider.Type,
+			"prism.model":     targetModel,
+			"prism.attempt":   upstreamCalls,
+			"prism.streaming": false,
+		})
 		httpResp, err := e.client.Do(httpReq)
+		if httpResp != nil {
+			telemetry.SetSpanAttributes(dispatchSpan, map[string]interface{}{
+				"http.status_code": httpResp.StatusCode,
+			})
+		}
+		dispatchSpan.End()
 		if err != nil {
 			release()
 			if ctx.Err() != nil {

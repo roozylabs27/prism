@@ -16,6 +16,7 @@ import (
 	goredis "github.com/roozylabs/prism/internal/redis"
 	"github.com/roozylabs/prism/internal/repository"
 	"github.com/roozylabs/prism/internal/service"
+	"github.com/roozylabs/prism/internal/telemetry"
 	"github.com/roozylabs/prism/internal/utils"
 )
 
@@ -172,6 +173,13 @@ func (h *MCPServerHandler) Handle(c *gin.Context) {
 		})
 		return
 	}
+
+	spanCtx, mcpSpan := telemetry.StartSpan(c.Request.Context(), "prism.mcp.handle")
+	telemetry.SetSpanAttributes(mcpSpan, map[string]interface{}{
+		"prism.mcp.method": rpcReq.Method,
+	})
+	defer mcpSpan.End()
+	c.Request = c.Request.WithContext(spanCtx)
 
 	switch rpcReq.Method {
 	case "initialize":
