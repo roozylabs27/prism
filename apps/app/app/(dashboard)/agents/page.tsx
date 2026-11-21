@@ -7,12 +7,18 @@ import { PageHeader } from "@/components/molecules/PageHeader";
 import { Card, CardHeader, CardTitle, CardContent, CardDescription, CardFooter } from "@/components/molecules/Card";
 import { Button } from "@/components/atoms/Button";
 import { Badge, StatusDot } from "@/components/atoms/Badge";
-import { useAgentsQuery, useDeleteAgent } from "@/hooks/queries/useAgentsQuery";
+import {
+  useAgentsQuery,
+  useAgentTemplatesQuery,
+  useDeleteAgent,
+  useInstantiateAgentTemplateMutation,
+} from "@/hooks/queries/useAgentsQuery";
 import { useToolsQuery } from "@/hooks/queries/useToolsQuery";
 import { useModelsListQuery } from "@/hooks/queries/useModelsListQuery";
 import { useResourcesQuery } from "@/hooks/queries/useResourcesQuery";
 import { useMCPServersQuery } from "@/hooks/queries/useMCPServersQuery";
-import { ApiAgent } from "@/lib/api";
+import { ApiAgent, ApiAgentTemplate } from "@/lib/api";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/molecules/Tabs";
 import { ErrorState, EmptyState } from "@/components/molecules/StateAlerts";
 import { CardSkeletonGrid } from "@/components/molecules/CardSkeleton";
 import { Bot, Plus, Settings, Trash2, ArrowUpRight, Eye } from "lucide-react";
@@ -29,7 +35,9 @@ function formatBudgetCents(cents: number): string {
 
 export default function AgentsPage() {
   const { data, isLoading, isError, refetch } = useAgentsQuery();
+  const { data: templatesData = [], isLoading: templatesLoading } = useAgentTemplatesQuery();
   const deleteMutation = useDeleteAgent();
+  const instantiateMutation = useInstantiateAgentTemplateMutation();
   const modelsData = useModelsListQuery();
   const toolsData = useToolsQuery();
   const resourcesData = useResourcesQuery();
@@ -71,7 +79,18 @@ export default function AgentsPage() {
     });
   };
 
+  const handleInstantiateTemplate = (tmpl: ApiAgentTemplate) => {
+    instantiateMutation.mutate(
+      { templateId: tmpl.id },
+      {
+        onSuccess: (created) => toast.success(`Instantiated agent "${created.name || tmpl.name}"`),
+        onError: (err) => toast.error(`Instantiate failed: ${getErrorMessage(err)}`),
+      }
+    );
+  };
+
   const agents: ApiAgent[] = (data && Array.isArray(data)) ? data : [];
+  const templates: ApiAgentTemplate[] = Array.isArray(templatesData) ? templatesData : [];
   const isPending = deleteMutation.isPending;
 
   return (
@@ -85,6 +104,14 @@ export default function AgentsPage() {
           </Button>
         }
       />
+
+      <Tabs defaultValue="agents" className="space-y-4">
+        <TabsList>
+          <TabsTrigger value="agents">Active Agents ({agents.length})</TabsTrigger>
+          <TabsTrigger value="templates">Agent Templates ({templates.length})</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="agents">
 
       {isError ? (
         <ErrorState
@@ -211,6 +238,63 @@ export default function AgentsPage() {
           ))}
         </div>
       )}
+        </TabsContent>
+
+        <TabsContent value="templates">
+          {templatesLoading ? (
+            <CardSkeletonGrid count={3} />
+          ) : templates.length === 0 ? (
+            <EmptyState
+              title="No Agent Templates"
+              description="No preset or custom agent templates are available yet."
+            />
+          ) : (
+            <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
+              {templates.map((tmpl) => (
+                <Card key={tmpl.id} className="flex flex-col justify-between">
+                  <CardHeader>
+                    <div className="flex items-center justify-between gap-2">
+                      <CardTitle className="text-base font-bold flex items-center gap-2">
+                        <Bot className="h-5 w-5 text-prism-violet" />
+                        <span>{tmpl.name}</span>
+                      </CardTitle>
+                      {tmpl.isPreset && <Badge variant="violet" className="text-[10px]">Preset</Badge>}
+                    </div>
+                    <CardDescription className="text-xs">
+                      {tmpl.description || `Role: ${tmpl.role || 'assistant'}`}
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-2 text-xs">
+                    {tmpl.role && (
+                      <div className="flex items-center justify-between">
+                        <span className="text-muted-foreground">Role</span>
+                        <Badge variant="outline" className="font-mono text-[10px]">{tmpl.role}</Badge>
+                      </div>
+                    )}
+                    <div className="flex items-center justify-between">
+                      <span className="text-muted-foreground">Spend Cap</span>
+                      <span className="font-mono text-emerald-500 font-semibold">
+                        {formatBudgetCents(tmpl.maxBudgetCents ?? 0)}
+                      </span>
+                    </div>
+                  </CardContent>
+                  <CardFooter className="border-t border-border pt-3">
+                    <Button
+                      variant="prismViolet"
+                      size="sm"
+                      className="w-full gap-1.5 text-xs"
+                      disabled={instantiateMutation.isPending}
+                      onClick={() => handleInstantiateTemplate(tmpl)}
+                    >
+                      <Plus className="h-3.5 w-3.5" /> Instantiate Agent
+                    </Button>
+                  </CardFooter>
+                </Card>
+              ))}
+            </div>
+          )}
+        </TabsContent>
+      </Tabs>
 
       <AgentFormDialog
         open={modalOpen}

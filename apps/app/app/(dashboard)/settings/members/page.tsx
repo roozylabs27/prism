@@ -8,9 +8,15 @@ import { Button } from '@/components/atoms/Button';
 import { Badge } from '@/components/atoms/Badge';
 import { useMembersQuery } from '@/hooks/queries/useMembersQuery';
 import { usePendingInvitesQuery } from '@/hooks/queries/useInvitesQuery';
-import { useRevokeInviteMutation } from '@/hooks/mutations/useMemberMutations';
+import {
+  useRevokeInviteMutation,
+  useRemoveMemberMutation,
+  useUpdateMemberRoleMutation,
+} from '@/hooks/mutations/useMemberMutations';
 import { ErrorState, EmptyState } from '@/components/molecules/StateAlerts';
-import { Users, Shield, UserPlus, Mail, Calendar, Clock, X } from 'lucide-react';
+import { ConfirmDialog } from '@/components/molecules/ConfirmDialog';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/molecules/Select';
+import { Users, Shield, UserPlus, Mail, Calendar, Clock, X, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { parseApiError } from '@/lib/http/errors';
 import { InviteMemberSheet } from './_components/InviteMemberSheet';
@@ -19,7 +25,27 @@ export default function MembersPage() {
   const { data: members, isLoading, isError, refetch } = useMembersQuery();
   const { data: invites, isLoading: invitesLoading, refetch: refetchInvites } = usePendingInvitesQuery();
   const { mutateAsync: revokeInvite, isPending: revoking } = useRevokeInviteMutation();
+  const { mutateAsync: updateMemberRole, isPending: updatingRole } = useUpdateMemberRoleMutation();
+  const { mutateAsync: removeMember, isPending: removingMember } = useRemoveMemberMutation();
   const [drawerOpen, setDrawerOpen] = useState(false);
+
+  const handleRoleChange = async (userId: string, role: string) => {
+    try {
+      await updateMemberRole({ memberId: userId, role });
+      refetch();
+    } catch (err: unknown) {
+      toast.error(parseApiError(err, 'Failed to update member role').message);
+    }
+  };
+
+  const handleRemoveMember = async (userId: string) => {
+    try {
+      await removeMember(userId);
+      refetch();
+    } catch (err: unknown) {
+      toast.error(parseApiError(err, 'Failed to remove member').message);
+    }
+  };
 
   const handleRevoke = async (inviteId: string) => {
     try {
@@ -86,6 +112,41 @@ export default function MembersPage() {
                           )}
                         </div>
                       </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Select
+                        value={member.role}
+                        onValueChange={(nextRole) => handleRoleChange(member.userId, nextRole)}
+                        disabled={updatingRole}
+                      >
+                        <SelectTrigger className="h-8 w-[155px] text-xs capitalize">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="owner">Owner</SelectItem>
+                          <SelectItem value="developer">Developer</SelectItem>
+                          <SelectItem value="agent_manager">Agent Manager</SelectItem>
+                          <SelectItem value="finops_manager">FinOps Manager</SelectItem>
+                          <SelectItem value="auditor">Security Auditor</SelectItem>
+                          <SelectItem value="viewer">Read-Only Viewer</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <ConfirmDialog
+                        title="Remove Organization Member"
+                        description={`Remove ${member.userName || member.userEmail || member.userId} from this organization?`}
+                        confirmText="Remove"
+                        onConfirm={() => handleRemoveMember(member.userId)}
+                        trigger={
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-destructive hover:text-destructive"
+                            disabled={removingMember}
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </Button>
+                        }
+                      />
                     </div>
                   </div>
                 ))}

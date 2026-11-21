@@ -17,7 +17,7 @@ export default defineConfig({
     environment: 'jsdom',
     setupFiles: ['./vitest.setup.ts'],
     include: ['**/*.test.{ts,tsx}'],
-    exclude: ['node_modules/**', '.next/**'],
+    exclude: ['node_modules/**', '.next/**', 'e2e/**'],
     testTimeout: 15000,
     css: false,
     clearMocks: true,

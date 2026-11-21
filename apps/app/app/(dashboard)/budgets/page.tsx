@@ -9,7 +9,14 @@ import { Progress } from '@/components/atoms/Progress';
 import { Badge } from '@/components/atoms/Badge';
 import { Button } from '@/components/atoms/Button';
 import { DataTable, Column } from '@/components/organisms/DataTable';
-import { useBudgetsQuery, useBudgetStatusQuery, useDeleteBudget } from '@/hooks/queries/useBudgetsQuery';
+import {
+  useBudgetsQuery,
+  useBudgetStatusQuery,
+  useDeleteBudget,
+  useBudgetAlertsQuery,
+  useFinOpsAnomaliesQuery,
+  useAcknowledgeBudgetAlertMutation,
+} from '@/hooks/queries/useBudgetsQuery';
 import { useQuotasQuery } from '@/hooks/queries/useQuotasQuery';
 import { ApiBudget, ApiTenantQuota, ApiBudgetStatus } from '@/lib/api';
 import { ErrorState, EmptyState } from '@/components/molecules/StateAlerts';
@@ -29,6 +36,9 @@ export default function BudgetsPage() {
   const { data: budgets, isLoading: budgetsLoading, isError: budgetsError, refetch: refetchBudgets } = useBudgetsQuery();
   const { data: budgetStatus, isLoading: statusLoading, isError: statusError, refetch: refetchStatus } = useBudgetStatusQuery();
   const { data: quotasData, isLoading: quotasLoading, isError: quotasError, refetch: refetchQuotas } = useQuotasQuery();
+  const { data: alertsList = [] } = useBudgetAlertsQuery();
+  const { data: anomaliesList = [] } = useFinOpsAnomaliesQuery();
+  const ackMutation = useAcknowledgeBudgetAlertMutation();
   const deleteMutation = useDeleteBudget();
 
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -199,6 +209,9 @@ export default function BudgetsPage() {
         <TabsList>
           <TabsTrigger value="budgets">Global Budgets</TabsTrigger>
           <TabsTrigger value="quotas">Multi-Tenant Quotas</TabsTrigger>
+          <TabsTrigger value="alerts">
+            FinOps Alerts &amp; Anomalies ({alertsList.length + anomaliesList.length})
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="budgets" className="space-y-4">
@@ -309,6 +322,82 @@ export default function BudgetsPage() {
               )}
             </CardContent>
           </Card>
+        </TabsContent>
+
+        <TabsContent value="alerts" className="space-y-4">
+          <div className="grid gap-6 lg:grid-cols-2">
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-sm font-semibold">Unacknowledged Budget Alerts</CardTitle>
+              </CardHeader>
+              <CardContent>
+                {alertsList.length === 0 ? (
+                  <EmptyState
+                    title="No Active Budget Alerts"
+                    description="All budgets are currently below threshold or alerts have been acknowledged."
+                  />
+                ) : (
+                  <div className="space-y-2">
+                    {alertsList.map((a) => (
+                      <div key={a.id} className="flex items-center justify-between gap-2 rounded border border-border p-3 text-xs">
+                        <div className="min-w-0">
+                          <div className="font-semibold text-foreground font-mono">{a.alert_type}</div>
+                          <div className="text-muted-foreground font-mono text-[11px]">
+                            Spent {toMoney(a.monthly_spent)} / {toMoney(a.monthly_limit)} ({Math.round(Number(a.usage_percent ?? 0))}%)
+                          </div>
+                        </div>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-7 text-xs"
+                          disabled={ackMutation.isPending}
+                          onClick={() =>
+                            ackMutation.mutate(a.id, {
+                              onSuccess: () => toast.success('Alert acknowledged'),
+                              onError: (err) => toast.error(`Acknowledge failed: ${getErrorMessage(err)}`),
+                            })
+                          }
+                        >
+                          Acknowledge
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-sm font-semibold">Spend &amp; Spike Anomalies</CardTitle>
+              </CardHeader>
+              <CardContent>
+                {anomaliesList.length === 0 ? (
+                  <EmptyState
+                    title="No Cost Anomalies Detected"
+                    description="Automated hourly anomaly detection has not flagged unusual spend deviations."
+                  />
+                ) : (
+                  <div className="space-y-2">
+                    {anomaliesList.map((an) => (
+                      <div key={an.id} className="flex items-center justify-between gap-2 rounded border border-border p-3 text-xs">
+                        <div>
+                          <div className="font-semibold text-foreground font-mono">{an.metric}</div>
+                          <div className="text-muted-foreground font-mono text-[11px]">
+                            Observed: {Number(an.observed).toFixed(4)} · Mean: {Number(an.baseline_mean ?? 0).toFixed(4)}
+                            {an.z_score != null ? ` · z=${an.z_score.toFixed(2)}` : ''}
+                          </div>
+                        </div>
+                        <Badge variant={an.severity === 'critical' || an.severity === 'high' ? 'destructive' : 'violet'}>
+                          {an.severity}
+                        </Badge>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
         </TabsContent>
       </Tabs>
 

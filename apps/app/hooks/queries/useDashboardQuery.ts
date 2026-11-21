@@ -1,5 +1,10 @@
 import { useQuery } from '@tanstack/react-query';
-import { apiGetDashboardStats, apiGetDashboardUsage, apiGetDashboardHealth } from '@/lib/api';
+import {
+  apiGetDashboardStats,
+  apiGetDashboardUsage,
+  apiGetDashboardHealth,
+  apiGetPilotOutcomes,
+} from '@/lib/api';
 
 export function dateRangeToParams(dateRange?: string): { days?: number } | undefined {
   if (!dateRange || dateRange === '30d') return { days: 30 };
@@ -30,5 +35,12 @@ export function useDashboardHealthQuery() {
   return useQuery({
     queryKey: ['dashboard-health'],
     queryFn: apiGetDashboardHealth,
+  });
+}
+
+export function usePilotOutcomesQuery(days = 30) {
+  return useQuery({
+    queryKey: ['pilot-outcomes', days],
+    queryFn: () => apiGetPilotOutcomes(days),
   });
 }

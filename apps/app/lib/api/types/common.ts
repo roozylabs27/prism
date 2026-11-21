@@ -55,6 +55,8 @@ export interface ApiWorkspace {
   orgId: string;
   name: string;
   slug?: string;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface ApiResponse<T> {

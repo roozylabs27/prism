@@ -51,6 +51,40 @@ export async function apiReplayRouting(data: ApiRoutingReplayReq = {}): Promise<
   return response.data;
 }
 
+export interface ApiRoutingRule {
+  id: string;
+  userId?: string;
+  orgId?: string;
+  modelPattern: string;
+  providerId?: string | null;
+  priority: number;
+  enabled: boolean;
+  providerName?: string;
+  providerType?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export async function apiGetRoutingRules(): Promise<ApiRoutingRule[]> {
+  const response = await api.get<ApiRoutingRule[]>('/routing-rules');
+  return Array.isArray(response.data) ? response.data : [];
+}
+
+export async function apiCreateRoutingRule(data: {
+  modelPattern: string;
+  providerId?: string;
+  priority?: number;
+  enabled?: boolean;
+}): Promise<ApiRoutingRule> {
+  const response = await api.post<ApiRoutingRule>('/routing-rules', data);
+  return response.data;
+}
+
+export async function apiDeleteRoutingRule(id: string): Promise<{ message: string }> {
+  const response = await api.delete<{ message: string }>(`/routing-rules/${id}`);
+  return response.data;
+}
+
 export async function apiGetFinOpsSummary(): Promise<ApiFinOpsSummary> {
   const response = await api.get<ApiFinOpsSummary | { data: ApiFinOpsSummary }>('/analytics/finops');
   if (response.data && typeof response.data === 'object' && 'data' in response.data) {

@@ -41,11 +41,14 @@ export async function apiCompleteOnboarding(data: ApiCompleteOnboardingRequest):
   return response.data;
 }
 
-export async function apiGetTurnstileConfig(): Promise<{ siteKey: string }> {
+export async function apiGetTurnstileConfig(): Promise<{ enabled?: boolean; siteKey: string }> {
   try {
-    const response = await api.get<{ siteKey: string }>('/auth/turnstile-config');
+    const response = await api.get<{ enabled?: boolean; siteKey: string }>('/auth/turnstile-config');
     return response.data;
   } catch {
-    return { siteKey: process.env.NEXT_PUBLIC_CLOUDFLARE_SITE_KEY || '1x00000000000000000000AA' };
+    return {
+      enabled: Boolean(process.env.NEXT_PUBLIC_CLOUDFLARE_SITE_KEY),
+      siteKey: process.env.NEXT_PUBLIC_CLOUDFLARE_SITE_KEY || '1x00000000000000000000AA',
+    };
   }
 }

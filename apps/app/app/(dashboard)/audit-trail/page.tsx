@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import { AppLayout } from '@/components/AppLayout';
 import { PageHeader } from '@/components/molecules/PageHeader';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/molecules/Card';
@@ -22,14 +23,28 @@ import {
 import { ScrollText, Download, FileSpreadsheet, FileCode, ShieldCheck } from 'lucide-react';
 import { toast } from 'sonner';
 
+const AUDIT_PAGE_SIZE = 25;
+
 export default function AuditTrailPage() {
-  const { data: logsData, isLoading: logsLoading, isError: logsError, refetch: refetchLogs } = useAuditLogsQuery();
-  const { data: trailsData, isLoading: trailsLoading, isError: trailsError, refetch: refetchTrails } = useAuditTrailsQuery();
+  const [activeTab, setActiveTab] = useState<'ai-audit' | 'admin-logs'>('ai-audit');
+  const [aiPage, setAiPage] = useState(1);
+  const [adminPage, setAdminPage] = useState(1);
+
+  const { data: logsData, isLoading: logsLoading, isError: logsError, refetch: refetchLogs } = useAuditLogsQuery({
+    page: adminPage,
+    limit: AUDIT_PAGE_SIZE,
+  });
+  const { data: trailsData, isLoading: trailsLoading, isError: trailsError, refetch: refetchTrails } = useAuditTrailsQuery({
+    page: aiPage,
+    limit: AUDIT_PAGE_SIZE,
+  });
   const verifyMutation = useVerifyAuditIntegrity();
   const exportMutation = useExportAuditLogsMutation();
 
   const auditLogsList: ApiAuditLogItem[] = logsData?.data ?? [];
+  const auditLogsTotal = logsData?.total ?? auditLogsList.length;
   const aiAuditTrailsList: ApiAIAuditTrail[] = trailsData?.data ?? [];
+  const aiAuditTrailsTotal = trailsData?.total ?? aiAuditTrailsList.length;
 
   const handleVerify = (id: string) => {
     verifyMutation.mutate(id, {
@@ -45,30 +60,32 @@ export default function AuditTrailPage() {
   };
 
   const handleExportCsv = async () => {
+    const exportType = activeTab === 'ai-audit' ? 'ai' : 'admin';
     try {
-      const blob = await exportMutation.mutateAsync({ format: 'csv' });
+      const blob = await exportMutation.mutateAsync({ format: 'csv', type: exportType });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = 'audit-logs.csv';
+      a.download = exportType === 'ai' ? 'ai-audit-trails.csv' : 'audit-logs.csv';
       a.click();
       URL.revokeObjectURL(url);
-      toast.success('Exported audit logs as CSV');
+      toast.success(`Exported ${exportType === 'ai' ? 'AI audit trails' : 'admin audit logs'} as CSV`);
     } catch (err: unknown) {
       toast.error(`Failed to export audit logs: ${getErrorMessage(err)}`);
     }
   };
 
   const handleExportJson = async () => {
+    const exportType = activeTab === 'ai-audit' ? 'ai' : 'admin';
     try {
-      const blob = await exportMutation.mutateAsync({ format: 'json' });
+      const blob = await exportMutation.mutateAsync({ format: 'json', type: exportType });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = 'audit-logs.json';
+      a.download = exportType === 'ai' ? 'ai-audit-trails.json' : 'audit-logs.json';
       a.click();
       URL.revokeObjectURL(url);
-      toast.success('Exported audit logs as JSON');
+      toast.success(`Exported ${exportType === 'ai' ? 'AI audit trails' : 'admin audit logs'} as JSON`);
     } catch (err: unknown) {
       toast.error(`Failed to export audit logs: ${getErrorMessage(err)}`);
     }
@@ -203,7 +220,7 @@ export default function AuditTrailPage() {
         }
       />
 
-      <Tabs defaultValue="ai-audit" className="space-y-4">
+      <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'ai-audit' | 'admin-logs')} className="space-y-4">
         <TabsList>
           <TabsTrigger value="ai-audit">AI Cryptographic Audit Trails</TabsTrigger>
           <TabsTrigger value="admin-logs">System Admin Audit Logs</TabsTrigger>
@@ -235,9 +252,10 @@ export default function AuditTrailPage() {
                   columns={aiTrailColumns}
                   rowKey="id"
                   loading={trailsLoading}
-                  pageSize={10}
+                  pageSize={AUDIT_PAGE_SIZE}
                   searchPlaceholder="Search by request ID, model, or user..."
                   onRefresh={refetchTrails}
+                  server={{ total: aiAuditTrailsTotal, page: aiPage, onPageChange: setAiPage }}
                 />
               )}
             </CardContent>
@@ -270,9 +288,10 @@ export default function AuditTrailPage() {
                   columns={adminLogColumns}
                   rowKey="id"
                   loading={logsLoading}
-                  pageSize={10}
+                  pageSize={AUDIT_PAGE_SIZE}
                   searchPlaceholder="Search by actor, action, or resource..."
                   onRefresh={refetchLogs}
+                  server={{ total: auditLogsTotal, page: adminPage, onPageChange: setAdminPage }}
                 />
               )}
             </CardContent>

@@ -222,25 +222,34 @@ export default function LogsPage() {
 
               <div className="space-y-2">
                 <span className="font-semibold text-foreground block">Execution Timeline</span>
-                <div className="p-3 rounded-md border border-border bg-muted/30 space-y-2 font-mono text-[11px]">
-                  <div className="flex items-center gap-2">
-                    <span className="h-2 w-2 rounded-full bg-emerald-500 shrink-0" />
-                    <span className="text-muted-foreground">1. Ingress & Admission:</span>
-                    <span className="text-foreground font-semibold">RBAC & Budget OK</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="h-2 w-2 rounded-full bg-blue-500 shrink-0" />
-                    <span className="text-muted-foreground">2. Smart Router:</span>
-                    <span className="text-foreground font-semibold">{selectedLog.model} ({selectedLog.providerId || 'Upstream'})</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className={`h-2 w-2 rounded-full ${selectedLog.statusCode === 200 ? 'bg-emerald-500' : 'bg-red-500'} shrink-0`} />
-                    <span className="text-muted-foreground">3. Upstream Proxy:</span>
-                    <span className={selectedLog.statusCode === 200 ? 'text-emerald-700 dark:text-emerald-400 font-semibold' : 'text-rose-700 dark:text-rose-400 font-semibold'}>
-                      HTTP {selectedLog.statusCode} ({selectedLog.latencyMs}ms)
-                    </span>
-                  </div>
-                </div>
+                {(() => {
+                  const gatewayRejected =
+                    selectedLog.statusCode === 403 ||
+                    (!selectedLog.providerId && selectedLog.statusCode >= 400);
+                  return (
+                    <div className="p-3 rounded-md border border-border bg-muted/30 space-y-2 font-mono text-[11px]">
+                      <div className="flex items-center gap-2">
+                        <span className={`h-2 w-2 rounded-full ${gatewayRejected ? 'bg-red-500' : 'bg-emerald-500'} shrink-0`} />
+                        <span className="text-muted-foreground">1. Ingress &amp; Admission:</span>
+                        <span className={gatewayRejected ? 'text-rose-600 dark:text-rose-400 font-semibold' : 'text-foreground font-semibold'}>
+                          {gatewayRejected ? `Denied at Gateway Admission (HTTP ${selectedLog.statusCode})` : 'RBAC & Budget OK'}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="h-2 w-2 rounded-full bg-blue-500 shrink-0" />
+                        <span className="text-muted-foreground">2. Smart Router:</span>
+                        <span className="text-foreground font-semibold">{selectedLog.model} ({selectedLog.providerId || 'Gateway'})</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className={`h-2 w-2 rounded-full ${selectedLog.statusCode === 200 ? 'bg-emerald-500' : 'bg-red-500'} shrink-0`} />
+                        <span className="text-muted-foreground">3. Upstream Proxy:</span>
+                        <span className={selectedLog.statusCode === 200 ? 'text-emerald-700 dark:text-emerald-400 font-semibold' : 'text-rose-700 dark:text-rose-400 font-semibold'}>
+                          {gatewayRejected ? 'Skipped (blocked prior to upstream dispatch)' : `HTTP ${selectedLog.statusCode} (${selectedLog.latencyMs}ms)`}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })()}
               </div>
 
               <div className="space-y-2">

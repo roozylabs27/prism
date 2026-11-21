@@ -20,9 +20,10 @@ import {
   useDashboardStatsQuery,
   useUsageChartQuery,
   useDashboardHealthQuery,
+  usePilotOutcomesQuery,
 } from '@/hooks/queries/useDashboardQuery';
 import { useLogsQuery, useLogAnalyticsQuery } from '@/hooks/queries/useLogsQuery';
-import { ApiRequestLog, ApiProviderHealth } from '@/lib/api';
+import { apiExportPilotOutcomes, ApiRequestLog, ApiProviderHealth } from '@/lib/api';
 import { AppRoutes } from '@/constants/routes';
 import {
   Activity,
@@ -107,6 +108,7 @@ export default function DashboardPage() {
     refetch: refetchHealth,
   } = useDashboardHealthQuery();
   const { data: analyticsData, isLoading: isAnalyticsLoading, refetch: refetchAnalytics } = useLogAnalyticsQuery(selectedDays);
+  const { data: pilotOutcomes, refetch: refetchPilot } = usePilotOutcomesQuery(selectedDays);
 
   const rangeLabelMap: Record<string, string> = {
     '24h': '24h',
@@ -281,7 +283,7 @@ export default function DashboardPage() {
       ),
     },
     {
-      title: 'Route Policy / App',
+      title: 'Client App / Model',
       dataIndex: 'route',
       key: 'route',
       render: (route) => (
@@ -349,7 +351,23 @@ export default function DashboardPage() {
     refetchLogs();
     refetchHealth();
     refetchAnalytics();
+    refetchPilot();
     toast.info('Refreshing gateway telemetry');
+  };
+
+  const handleDownloadPilotOutcomes = async (format: 'csv' | 'json') => {
+    try {
+      const blob = await apiExportPilotOutcomes(format, selectedDays);
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `prism-pilot-outcomes-${selectedDays}d.${format}`;
+      link.click();
+      URL.revokeObjectURL(url);
+      toast.success(`Exported pilot outcomes (${format.toUpperCase()})`);
+    } catch {
+      toast.error('Failed to export pilot outcomes');
+    }
   };
 
   const handleExportReport = () => {
@@ -764,6 +782,55 @@ export default function DashboardPage() {
             </CardContent>
           </Card>
         </section>
+
+        {/* Row 3b: Pilot Outcomes & Value Attribution */}
+        {pilotOutcomes && (
+          <Card>
+            <CardHeader className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <CardTitle className="flex items-center gap-2 text-sm font-semibold">
+                  <DollarSign className="h-4 w-4 text-emerald-500" />
+                  <span>Pilot Outcomes &amp; Value Attribution ({pilotOutcomes.windowDays}d)</span>
+                </CardTitle>
+                <p className="text-[11px] text-muted-foreground mt-0.5">{pilotOutcomes.methodologyNote}</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <Button variant="outline" size="sm" className="h-8 gap-1 text-xs" onClick={() => handleDownloadPilotOutcomes('csv')}>
+                  <Download className="h-3.5 w-3.5" /> CSV
+                </Button>
+                <Button variant="outline" size="sm" className="h-8 gap-1 text-xs" onClick={() => handleDownloadPilotOutcomes('json')}>
+                  <Download className="h-3.5 w-3.5" /> JSON
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent className="grid gap-3 grid-cols-2 lg:grid-cols-4 font-mono text-xs">
+              <div className="rounded border border-border bg-muted/20 p-3">
+                <span className="text-[10px] text-muted-foreground block">SMART ROUTED SAVINGS</span>
+                <span className="text-base font-bold text-emerald-600 dark:text-emerald-400">
+                  ${pilotOutcomes.totals.estimatedSavingsUsd.toFixed(2)}
+                </span>
+              </div>
+              <div className="rounded border border-border bg-muted/20 p-3">
+                <span className="text-[10px] text-muted-foreground block">P95 LATENCY</span>
+                <span className="text-base font-bold text-foreground">
+                  {Math.round(pilotOutcomes.totals.p95LatencyMs)}ms
+                </span>
+              </div>
+              <div className="rounded border border-border bg-muted/20 p-3">
+                <span className="text-[10px] text-muted-foreground block">POLICY / QUOTA BLOCKS</span>
+                <span className="text-base font-bold text-foreground">
+                  {pilotOutcomes.governance.policyDenials403 + pilotOutcomes.governance.budgetQuotaDenials429}
+                </span>
+              </div>
+              <div className="rounded border border-border bg-muted/20 p-3">
+                <span className="text-[10px] text-muted-foreground block">WORKSPACES TRACKED</span>
+                <span className="text-base font-bold text-foreground">
+                  {pilotOutcomes.workspaces?.length ?? 0}
+                </span>
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Row 4: Recent AI Activity Table */}
         <Card>
