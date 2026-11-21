@@ -38,9 +38,9 @@ export function useDashboardHealthQuery() {
   });
 }
 
-export function usePilotOutcomesQuery(days = 30) {
+export function usePilotOutcomesQuery(days = 30, workspaceId?: string) {
   return useQuery({
-    queryKey: ['pilot-outcomes', days],
-    queryFn: () => apiGetPilotOutcomes(days),
+    queryKey: ['pilot-outcomes', days, workspaceId || 'all'],
+    queryFn: () => apiGetPilotOutcomes(days, workspaceId || undefined),
   });
 }

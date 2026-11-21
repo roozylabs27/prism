@@ -398,3 +398,111 @@ export class RateLimitError extends APIError {
   }
 }
 
+export interface Workspace {
+  id: string;
+  orgId: string;
+  name: string;
+  slug?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface Project {
+  id: string;
+  workspaceId: string;
+  name: string;
+  slug?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface MCPJSONRPCRequest {
+  jsonrpc?: "2.0";
+  id?: string | number;
+  method: string;
+  params?: Record<string, unknown>;
+}
+
+export interface MCPJSONRPCResponse<T = unknown> {
+  jsonrpc: "2.0";
+  id?: string | number | null;
+  result?: T;
+  error?: { code: number; message: string; data?: unknown };
+}
+
+export interface MCPRegistryCatalogItem {
+  id: string;
+  slug: string;
+  name: string;
+  description?: string;
+  category?: string;
+  serverUrl?: string;
+  transportType?: string;
+}
+
+export interface BudgetSummary {
+  id: string;
+  name: string;
+  orgId?: string;
+  workspaceId?: string;
+  period: string;
+  limitUsd: number;
+  spentUsd?: number;
+  hardLimit: boolean;
+  enabled: boolean;
+}
+
+export interface TenantQuota {
+  id: string;
+  targetType: "organization" | "workspace" | "project";
+  targetId: string;
+  monthlySpendLimitUsd?: number;
+  dailySpendLimitUsd?: number;
+  dailyRequestLimit?: number;
+  maxConcurrentStreams?: number;
+  enforceHardLimit?: boolean;
+}
+
+export interface PilotOutcomesSummary {
+  orgId: string;
+  windowDays: number;
+  methodologyNote: string;
+  totals: {
+    totalRequests: number;
+    errorCount: number;
+    errorRatePct: number;
+    failoverCount: number;
+    totalTokens: number;
+    actualCostUsd: number;
+    baselineFlagshipCostUsd: number;
+    estimatedSavingsUsd: number;
+    avgLatencyMs: number;
+    p95LatencyMs: number;
+  };
+  workspaces?: Array<{
+    workspaceId: string;
+    workspaceName: string;
+    totalRequests: number;
+    errorCount: number;
+    errorRatePct: number;
+    failoverCount: number;
+    totalTokens: number;
+    actualCostUsd: number;
+    baselineFlagshipCostUsd: number;
+    estimatedSavingsUsd: number;
+    avgLatencyMs: number;
+    p95LatencyMs: number;
+  }>;
+}
+
+export interface ApprovalRequest {
+  id: string;
+  status: "pending" | "approved" | "denied" | "expired" | "consumed";
+  targetType: string;
+  targetName: string;
+  reason?: string;
+  expiresAt?: string;
+  createdAt: string;
+}
+
+

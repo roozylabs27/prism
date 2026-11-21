@@ -56,9 +56,15 @@ export interface ApiPilotOutcomesReport {
     workspaceId: string;
     workspaceName: string;
     totalRequests: number;
+    errorCount?: number;
+    errorRatePct?: number;
+    failoverCount?: number;
+    totalTokens?: number;
     actualCostUsd: number;
+    baselineFlagshipCostUsd?: number;
     estimatedSavingsUsd: number;
     avgLatencyMs: number;
+    p95LatencyMs?: number;
   }>;
   governance: {
     totalAuditEvents: number;
@@ -67,5 +73,15 @@ export interface ApiPilotOutcomesReport {
     policyDenials403: number;
     budgetQuotaDenials429: number;
     mcpToolInvocations: number;
+    delegatedTaskCalls?: number;
   };
+  routingBreakdown?: Array<{
+    policyName: string;
+    model: string;
+    requests: number;
+    actualCostUsd: number;
+    baselineFlagshipCostUsd: number;
+    estimatedSavingsUsd: number;
+    avgLatencyMs: number;
+  }>;
 }
