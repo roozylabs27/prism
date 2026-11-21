@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/gin-gonic/gin"
@@ -131,4 +132,31 @@ func TestMetrics_LowCardinalityLabels(t *testing.T) {
 	telemetry.RecordProviderAttempt(ctx, "openai", "gpt-4o", 200, 0.12, false)
 	telemetry.RecordRoutingDecision(ctx, "balanced", "fallback", false)
 	telemetry.RecordAdmissionEvaluation(ctx, true, "allowed", "org_default")
+}
+
+func TestTelemetry_StartSpanAndDeployOTelConfigs(t *testing.T) {
+	ctx, span := telemetry.StartSpan(context.Background(), "prism.gateway.test")
+	telemetry.SetSpanAttributes(span, map[string]interface{}{
+		"prism.model":   "gpt-4o",
+		"prism.attempt": 1,
+		"prism.stream":  false,
+	})
+	_ = telemetry.TraceIDFromContext(ctx)
+	span.End()
+
+	otelDir := filepath.Join("..", "..", "..", "..", "deploy", "otel")
+	for _, name := range []string{"tempo.yaml", "alertmanager.yml", "prism-alerts.yml", "prometheus.yml", "docker-compose.otel.yml"} {
+		data, err := os.ReadFile(filepath.Join(otelDir, name))
+		assert.NoError(t, err, "missing %s", name)
+		assert.NotEmpty(t, data)
+		if name == "prism-alerts.yml" {
+			assert.Contains(t, string(data), `max(up{job="prism-gateway"}) == 0`)
+		}
+		if name == "prometheus.yml" {
+			assert.Contains(t, string(data), "alertmanager:9093")
+		}
+		if name == "docker-compose.otel.yml" {
+			assert.Contains(t, string(data), "alertmanager:")
+		}
+	}
 }

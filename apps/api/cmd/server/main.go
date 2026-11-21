@@ -658,10 +658,14 @@ func main() {
 	}
 	log.Println("HTTP server stopped")
 
-	// Background writes queued by the last requests get a bounded chance to
-	// land before the post-processor and the database close.
+	// Signal background workers to stop and drain in-flight ticks before closing
+	// background writers and database handles.
+	workerStop()
 	effectsCtx, cancelEffects := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancelEffects()
+	if err := workerMgr.Shutdown(effectsCtx); err != nil {
+		log.Printf("Background workers not drained cleanly: %v", err)
+	}
 	if err := engine.Shutdown(effectsCtx); err != nil {
 		log.Printf("Background writes not finished: %v (%d dropped during run)", err, engine.SideEffectsDropped())
 	}

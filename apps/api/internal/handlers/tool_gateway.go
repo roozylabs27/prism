@@ -14,6 +14,7 @@ import (
 	"github.com/roozylabs/prism/internal/proxy"
 	goredis "github.com/roozylabs/prism/internal/redis"
 	"github.com/roozylabs/prism/internal/repository"
+	"github.com/roozylabs/prism/internal/telemetry"
 	"github.com/roozylabs/prism/internal/utils"
 )
 
@@ -114,7 +115,14 @@ func (h *ToolGatewayHandler) ExecuteTool(c *gin.Context) {
 	}
 
 	executionID := uuid.New().String()
-	tenantScopedCtx := middleware.ContextWithTenant(c)
+	tenantScopedCtx, toolSpan := telemetry.StartSpan(middleware.ContextWithTenant(c), "prism.tool.execute")
+	telemetry.SetSpanAttributes(toolSpan, map[string]interface{}{
+		"prism.execution_id": executionID,
+		"prism.tool_name":    toolName,
+		"prism.org_id":       tenantCtx.OrgID,
+		"prism.agent_id":     agentID,
+	})
+	defer toolSpan.End()
 
 	var approvalRequired bool
 	var approvalPolicyID, approvalPolicyName, approvalReason string

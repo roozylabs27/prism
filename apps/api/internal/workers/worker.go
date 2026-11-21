@@ -10,6 +10,7 @@ import (
 
 type Manager struct {
 	mu   sync.Mutex
+	wg   sync.WaitGroup
 	jobs []job
 }
 
@@ -33,7 +34,24 @@ func (m *Manager) Start(ctx context.Context) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	for _, j := range m.jobs {
+		m.wg.Add(1)
 		go m.run(ctx, j)
+	}
+}
+
+// Shutdown waits for all worker goroutines to exit after ctx cancellation, or
+// returns ctx.Err() if the shutdown deadline expires first.
+func (m *Manager) Shutdown(ctx context.Context) error {
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		m.wg.Wait()
+	}()
+	select {
+	case <-done:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
 	}
 }
 
@@ -53,6 +71,7 @@ func firstRunDelay(interval time.Duration) time.Duration {
 }
 
 func (m *Manager) run(ctx context.Context, j job) {
+	defer m.wg.Done()
 	first := time.NewTimer(firstRunDelay(j.interval))
 	defer first.Stop()
 	ticker := time.NewTicker(j.interval)
