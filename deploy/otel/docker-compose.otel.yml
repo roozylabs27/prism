@@ -73,6 +73,19 @@ services:
       - otel
     restart: unless-stopped
 
+  # Prometheus Alertmanager (Routes alerts defined in prism-alerts.yml)
+  alertmanager:
+    image: prom/alertmanager:v0.27.0
+    container_name: prism-alertmanager
+    command: ["--config.file=/etc/alertmanager/alertmanager.yml"]
+    volumes:
+      - ./alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+    ports:
+      - "127.0.0.1:9093:9093"
+    networks:
+      - otel
+    restart: unless-stopped
+
 networks:
   otel:
   prism:

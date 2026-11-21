@@ -81,7 +81,7 @@ services:
     networks:
       prism-network:
         aliases:
-          - api
+          - api-green
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/ready"]
       interval: 5s
@@ -91,6 +91,7 @@ services:
 
   # Go API Gateway Backend (Green)
   api-green:
+    profiles: ["green"]
     image: ghcr.io/roozylabs/prism-api:${API_IMAGE_TAG:-latest}
     build:
       context: ./apps/api
@@ -171,7 +172,7 @@ services:
     networks:
       prism-network:
         aliases:
-          - api
+          - api-green
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/ready"]
       interval: 10s
@@ -234,7 +235,7 @@ services:
         aliases:
           - app
     healthcheck:
-      test: ["CMD-SHELL", "curl -s -o /dev/null -w '%{http_code}' http://localhost:3000/login | grep -E '^(200|302|307|308)$' || exit 1"]
+      test: ["CMD-SHELL", "curl -s -o /dev/null -w '%{http_code}' http://localhost:3000/api/health | grep -E '^(200|302|307|308)$' || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -242,6 +243,7 @@ services:
 
   # Next.js Frontend Dashboard (Green)
   app-green:
+    profiles: ["green"]
     image: ghcr.io/roozylabs/prism-app:${APP_IMAGE_TAG:-latest}
     build:
       context: ./apps/app
@@ -273,9 +275,9 @@ services:
     networks:
       prism-network:
         aliases:
-          - app
+          - app-green
     healthcheck:
-      test: ["CMD-SHELL", "curl -s -o /dev/null -w '%{http_code}' http://localhost:3000/login | grep -E '^(200|302|307|308)$' || exit 1"]
+      test: ["CMD-SHELL", "curl -s -o /dev/null -w '%{http_code}' http://localhost:3000/api/health | grep -E '^(200|302|307|308)$' || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -309,7 +311,7 @@ services:
     networks:
       prism-network:
         aliases:
-          - web
+          - web-green
     healthcheck:
       test: ["CMD-SHELL", "curl -s -o /dev/null -w '%{http_code}' http://localhost:3001/ | grep -E '^(200|301|302|307|308)$' || exit 1"]
       interval: 10s
@@ -319,6 +321,7 @@ services:
 
   # Astro Landing Page Website (Green)
   web-green:
+    profiles: ["green"]
     image: ghcr.io/roozylabs/prism-web:${WEB_IMAGE_TAG:-latest}
     build:
       context: ./apps/web
@@ -345,7 +348,7 @@ services:
     networks:
       prism-network:
         aliases:
-          - web
+          - web-green
     healthcheck:
       test: ["CMD-SHELL", "curl -s -o /dev/null -w '%{http_code}' http://localhost:3001/ | grep -E '^(200|301|302|307|308)$' || exit 1"]
       interval: 10s
