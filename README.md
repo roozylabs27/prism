@@ -86,9 +86,12 @@ For the detailed internal architecture, see [docs/ARCHITECTURE.md](docs/ARCHITEC
 - **`apps/api`**: Go 1.25 API proxy engine and control plane.
 - **`apps/app`**: Next.js 16 admin console and dashboard.
 - **`apps/web`**: Astro 5.0 marketing landing page.
+- **`packages/sdk`**: Official TypeScript SDK (`@roozylabs/prism`) for chat, routing, workspaces, governed tools/MCP (`/v1/mcp`), and analytics.
+- **`packages/cli`**: Official CLI (`@roozylabs/prism-cli`).
+- **`packages/python-sdk`**: Python SDK (`roozylabs-prism`).
 - **Database**: PostgreSQL 15
-- **Cache & State Store**: Redis 7 (rate limiting, cooldown, tenant keyspaces)
-- **CI/CD**: GitHub Actions (linting, tests, container registry, automated VPS deployment)
+- **Cache & State Store**: Redis 7 (rate limiting, cooldown, distributed budget reservations, tenant keyspaces)
+- **CI/CD**: GitHub Actions (linting, tests, backup/restore RLS drill, container registry, automated blue/green VPS deployment)
 
 ---
 
@@ -140,12 +143,12 @@ The stack will be available at:
 
 | Area | Endpoint Prefix | Description |
 | :--- | :--- | :--- |
-| **Health & Auth** | `/health`, `/api/auth/*` | Service health, login, session, OAuth |
-| **Control Plane** | `/api/*` | Organizations, workspaces, members, RBAC, onboarding |
-| **MCP & Agents** | `/v1/mcp/*`, `/v1/agent-templates/*` | MCP registry, agent templates |
-| **Audit & Compliance** | `/v1/audit-trail/*` | Action logs and compliance export |
-| **Quotas & Billing** | `/v1/quotas`, `/v1/billing/*` | Tenant quotas, subscription, invoices |
-| **Gateway (OpenAI-compatible)** | `/v1/models`, `/v1/chat/completions` | Model listing and inference |
+| **Health & Auth** | `/health`, `/ready`, `/api/auth/*` | Service readiness, login, session, OAuth |
+| **Control Plane** | `/api/*` | Organizations, workspaces, projects, members, RBAC, approvals, onboarding |
+| **MCP & Governance** | `/api/mcp/*`, `/api/approvals/*`, `/api/agent-templates/*` | MCP registry catalog, human approvals, agent templates |
+| **Audit & Compliance** | `/api/audit-trail/*` | AI audit trails, admin action logs, HMAC verification & CSV/JSON export |
+| **FinOps & Analytics** | `/api/budgets/*`, `/api/quotas/*`, `/api/analytics/*` | Budgets, quotas, alerts, anomalies, and client workspace pilot outcomes |
+| **Model & Tool Gateway** | `/v1/chat/completions`, `/v1/messages`, `/v1/mcp`, `/v1/tools/*`, `/v1/resources/*` | OpenAI/Anthropic inference, inbound JSON-RPC MCP, governed tools/resources |
 
 See the full [API Reference](docs/api-reference.md) for complete endpoint details, parameters, and authentication.
 

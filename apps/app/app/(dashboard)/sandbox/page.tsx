@@ -4,8 +4,7 @@ import React, { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { ApiEndpoints } from "@/constants/routes";
-import { api } from "@/lib/api/client";
-import { getTenantHeaders } from "@/stores/useTenantStore";
+import { api, apiExecuteSandboxChatAsync } from "@/lib/api";
 
 import { AppLayout } from "@/components/AppLayout";
 import { PageHeader } from "@/components/molecules/PageHeader";
@@ -522,39 +521,19 @@ export default function SandboxPage() {
       if (values.enableAsync) {
         jobStartTimeRef.current = startTime;
         setIsAsyncExecuting(true);
-        const asyncRes = await fetch(ApiEndpoints.SANDBOX_CHAT_COMPLETIONS_ASYNC, {
-          method: "POST",
-          credentials: "include",
-          headers: {
-            "Content-Type": "application/json",
-            ...getTenantHeaders(),
-            "X-Sandbox-Key-Prefix": values.keyPrefix,
-            ...(values.agentId !== "default" && {
-              "X-Prism-Agent-ID": values.agentId,
-            }),
-            ...(values.model === "prism-auto" && values.routingPolicy && {
-              "X-Routing-Policy": values.routingPolicy,
-            }),
-          },
-          body: JSON.stringify({
-            model: values.model,
-            messages: [{ role: "user", content: savedPrompt }],
-            temperature: 0.7,
-            stream: false,
-          }),
-        });
-
-        if (!asyncRes.ok) {
-          const errData = await asyncRes.json();
+        const asyncJob = await apiExecuteSandboxChatAsync({
+          keyPrefix: values.keyPrefix,
+          routingPolicy: values.routingPolicy,
+          agentId: values.agentId,
+          model: values.model,
+          messages: [{ role: "user", content: savedPrompt }],
+          temperature: 0.7,
+          stream: false,
+        }).catch((asyncErr) => {
           setIsAsyncExecuting(false);
           form.setValue("userPrompt", savedPrompt);
-          throw new Error(
-            errData?.error?.message ||
-              `Failed to submit async job (Status ${asyncRes.status})`,
-          );
-        }
-
-        const asyncJob = await asyncRes.json();
+          throw asyncErr;
+        });
         const jobId = asyncJob.job_id;
         setActiveJobId(jobId);
         toast.info(`Async Job ${jobId} queued successfully`);

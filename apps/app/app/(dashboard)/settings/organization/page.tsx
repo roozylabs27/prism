@@ -21,8 +21,9 @@ import {
 } from '@/hooks/queries/useWorkspacesQuery';
 import { useTenantStore } from '@/stores/useTenantStore';
 import { ErrorState, EmptyState } from '@/components/molecules/StateAlerts';
-import { Settings, Pencil, Layers, FolderKanban, Plus, Trash2, Check, X } from 'lucide-react';
+import { Settings, Pencil, Layers, FolderKanban, Plus, Trash2, Check, X, Rocket } from 'lucide-react';
 import { ApiSetting, ApiWorkspace, ApiProject } from '@/lib/api';
+import { ClientOnboardingModal } from '@/components/organisms/ClientOnboardingModal';
 import { SettingFormSheet } from './_components/SettingFormSheet';
 import { toast } from 'sonner';
 import { getErrorMessage } from '@/types/ui';
@@ -61,6 +62,7 @@ export default function SettingsOrganizationPage() {
 
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [editingSetting, setEditingSetting] = useState<ApiSetting | null>(null);
+  const [onboardingOpen, setOnboardingOpen] = useState(false);
 
   const openEditDrawer = (s: ApiSetting) => {
     setEditingSetting(s);
@@ -203,11 +205,20 @@ export default function SettingsOrganizationPage() {
           <div className="grid gap-6 lg:grid-cols-2">
             {/* Workspaces CRUD */}
             <Card>
-              <CardHeader>
+              <CardHeader className="flex flex-row items-center justify-between gap-2">
                 <CardTitle className="text-sm font-semibold flex items-center gap-2">
                   <Layers className="h-4 w-4 text-prism-cyan" />
                   <span>Client Workspaces ({workspaces.length})</span>
                 </CardTitle>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-7 gap-1 text-xs"
+                  onClick={() => setOnboardingOpen(true)}
+                >
+                  <Rocket className="h-3.5 w-3.5 text-prism-violet" />
+                  Onboard Client
+                </Button>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="flex flex-wrap gap-2">
@@ -417,6 +428,12 @@ export default function SettingsOrganizationPage() {
         open={drawerOpen}
         onOpenChange={setDrawerOpen}
         editingSetting={editingSetting}
+      />
+
+      <ClientOnboardingModal
+        open={onboardingOpen}
+        onOpenChange={setOnboardingOpen}
+        onCompleted={({ workspaceId }) => setSelectedWsId(workspaceId)}
       />
     </AppLayout>
   );
