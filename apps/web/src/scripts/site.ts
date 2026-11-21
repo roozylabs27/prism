@@ -1,4 +1,5 @@
-// Client behaviour for the landing page: theme, mobile nav, code tabs, copy, and Hero stage pointer tilt.
+// Client behaviour for the landing page: theme, mobile nav, section scroll-spy,
+// Hero stage route inspector & pointer tilt, code tabs, and command/code copy.
 
 function setupTheme() {
 	const buttons = document.querySelectorAll<HTMLButtonElement>('[data-theme-toggle]');
@@ -48,11 +49,13 @@ function setupMobileNav(onMenuChange?: () => void) {
 	if (!toggle || !panel) return;
 	const iconOpen = toggle.querySelector('[data-icon-open]');
 	const iconClose = toggle.querySelector('[data-icon-close]');
+	const label = toggle.querySelector('[data-menu-label]');
 
 	const setOpen = (open: boolean, returnFocus = false) => {
 		panel.classList.toggle('hidden', !open);
 		iconOpen?.classList.toggle('hidden', open);
 		iconClose?.classList.toggle('hidden', !open);
+		if (label) label.textContent = open ? 'Close' : 'Menu';
 		toggle.setAttribute('aria-expanded', String(open));
 		toggle.setAttribute('aria-label', open ? 'Close menu' : 'Open menu');
 		onMenuChange?.();
@@ -68,6 +71,72 @@ function setupMobileNav(onMenuChange?: () => void) {
 	window.matchMedia('(min-width: 1024px)').addEventListener('change', (e) => {
 		if (e.matches) setOpen(false);
 	});
+}
+
+function setupSectionObserver() {
+	const links = Array.from(document.querySelectorAll<HTMLAnchorElement>('[data-nav-link]'));
+	if (!links.length || !('IntersectionObserver' in window)) return;
+
+	const linkById = new Map<string, HTMLAnchorElement>();
+	links.forEach((link) => {
+		const href = link.getAttribute('href');
+		if (href?.startsWith('#')) {
+			linkById.set(href.slice(1), link);
+		}
+	});
+
+	const sections = Array.from(document.querySelectorAll<HTMLElement>('main section[id]')).filter((sec) =>
+		linkById.has(sec.id),
+	);
+	if (!sections.length) return;
+
+	const setActive = (activeId: string | null) => {
+		links.forEach((link) => {
+			const id = link.getAttribute('href')?.slice(1) ?? '';
+			if (activeId && id === activeId) {
+				link.setAttribute('aria-current', 'location');
+			} else {
+				link.removeAttribute('aria-current');
+			}
+		});
+	};
+
+	const visible = new Set<string>();
+	const observer = new IntersectionObserver(
+		(entries) => {
+			entries.forEach((entry) => {
+				if (entry.isIntersecting) visible.add(entry.target.id);
+				else visible.delete(entry.target.id);
+			});
+			const firstVisible = sections.find((sec) => visible.has(sec.id));
+			if (firstVisible) {
+				setActive(firstVisible.id);
+			} else if (window.scrollY < 160) {
+				setActive(null);
+			}
+		},
+		{ rootMargin: '-25% 0px -55% 0px', threshold: 0 },
+	);
+
+	sections.forEach((sec) => observer.observe(sec));
+}
+
+async function copyTextWithFeedback(
+	text: string,
+	label: Element | null,
+	status: Element | null,
+) {
+	try {
+		await navigator.clipboard.writeText(text);
+		if (label) label.textContent = 'Copied';
+		if (status) status.textContent = 'Code copied to clipboard';
+	} catch {
+		if (label) label.textContent = 'Copy failed';
+		if (status) status.textContent = 'Copy failed. Select the code and copy it manually.';
+	}
+	window.setTimeout(() => {
+		if (label) label.textContent = 'Copy';
+	}, 2000);
 }
 
 function setupTabs() {
@@ -104,19 +173,62 @@ function setupTabs() {
 		const copy = root.querySelector<HTMLButtonElement>('[data-copy]');
 		const label = root.querySelector('[data-copy-label]');
 		const status = root.querySelector('[data-copy-status]');
-		copy?.addEventListener('click', async () => {
+		copy?.addEventListener('click', () => {
 			const code = panels.find((p) => !p.hidden)?.querySelector('code')?.textContent ?? '';
-			try {
-				await navigator.clipboard.writeText(code);
-				if (label) label.textContent = 'Copied';
-				if (status) status.textContent = 'Code copied to clipboard';
-			} catch {
-				if (label) label.textContent = 'Copy failed';
-				if (status) status.textContent = 'Copy failed. Select the code and copy it manually.';
+			void copyTextWithFeedback(code, label, status);
+		});
+	});
+}
+
+function setupCommandCopyBlocks() {
+	document.querySelectorAll<HTMLElement>('[data-copy-block]').forEach((block) => {
+		const button = block.querySelector<HTMLButtonElement>('[data-copy-command]');
+		const label = block.querySelector('[data-copy-label]');
+		const status = block.querySelector('[data-copy-status]');
+		const code = block.querySelector('code');
+		if (!button || !code) return;
+
+		button.addEventListener('click', () => {
+			void copyTextWithFeedback(code.textContent ?? '', label, status);
+		});
+	});
+}
+
+function setupPrismStageInspector() {
+	const stage = document.querySelector<HTMLElement>('[data-prism-stage]');
+	const inspector = stage?.querySelector<HTMLElement>('[data-stage-inspector]');
+	if (!stage || !inspector) return;
+
+	const tabs = Array.from(inspector.querySelectorAll<HTMLButtonElement>('[role="tab"]'));
+	const panels = Array.from(inspector.querySelectorAll<HTMLElement>('[role="tabpanel"]'));
+
+	const select = (index: number, focus = false) => {
+		tabs.forEach((tab, i) => {
+			const active = i === index;
+			tab.setAttribute('aria-selected', String(active));
+			tab.tabIndex = active ? 0 : -1;
+			if (panels[i]) panels[i].hidden = !active;
+			if (active) {
+				const mode = tab.dataset.stageMode;
+				if (mode) stage.dataset.activeMode = mode;
 			}
-			window.setTimeout(() => {
-				if (label) label.textContent = 'Copy';
-			}, 2000);
+		});
+		if (focus) tabs[index]?.focus();
+	};
+
+	tabs.forEach((tab, i) => {
+		tab.addEventListener('click', () => select(i));
+		tab.addEventListener('keydown', (e) => {
+			const keys: Record<string, number> = {
+				ArrowRight: (i + 1) % tabs.length,
+				ArrowLeft: (i - 1 + tabs.length) % tabs.length,
+				Home: 0,
+				End: tabs.length - 1,
+			};
+			if (e.key in keys) {
+				e.preventDefault();
+				select(keys[e.key], true);
+			}
 		});
 	});
 }
@@ -150,5 +262,8 @@ function setupPrismStageParallax() {
 setupTheme();
 const syncHeader = setupHeaderScroll();
 setupMobileNav(syncHeader);
+setupSectionObserver();
 setupTabs();
+setupCommandCopyBlocks();
+setupPrismStageInspector();
 setupPrismStageParallax();

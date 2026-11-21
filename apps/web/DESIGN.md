@@ -62,4 +62,4 @@ ENERGY 1 · RHYTHM 2 · MOTION 1
 - Mobile: single column, diagrams switch to a vertical layout, code blocks scroll horizontally inside their own box, 44px targets.
 - Navigation: sticky header with anchor links; mobile drawer with Escape and focus return.
 - Conversion: primary CTA "Self-host with Docker" (GitHub quickstart), secondary "Apply for a design-partner pilot".
-- Themes: light by default, follows system preference, manual toggle persisted.
+- Themes: dark editorial interface by default, full light theme supported, manual toggle persisted.

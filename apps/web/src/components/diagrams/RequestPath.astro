@@ -1,35 +1,38 @@
 ---
-// The path a model call takes through Prism. Built as an ordered list so it reads correctly without CSS.
+// The path a model or MCP request takes through Prism. Built as an ordered list so it reads cleanly without CSS.
 const checks = [
-	{ name: 'Gateway key', detail: 'Which client workspace and project' },
-	{ name: 'Budget and quota', detail: 'Refuse before spend, not after' },
-	{ name: 'Agent policy', detail: 'Models this agent may use' },
-	{ name: 'Route', detail: 'Pinned model or prism-auto' },
+	{ name: '1. Gateway key scope', detail: 'Resolves org, workspace & project; blocks spoofed headers (403)' },
+	{ name: '2. Quotas & budget', detail: 'Enforces spend, request & stream caps before upstream (429)' },
+	{ name: '3. Agent policy', detail: 'Checks allowed models, tools & !deny overrides (403)' },
+	{ name: '4. Route & failover', detail: 'Pins model or scores prism-auto; fails over on 429/5xx' },
 ];
 ---
 
 <figure class="border border-rule rounded-sm bg-raised p-5 sm:p-6">
-	<figcaption class="eyebrow">Path of one request</figcaption>
-	<ol class="mt-5 grid gap-3 md:grid-cols-[minmax(0,1fr)_minmax(0,3fr)_minmax(0,1fr)] md:items-stretch">
-		<li class="border border-rule rounded-sm p-4 flex flex-col justify-center">
-			<span class="font-medium">Your app or agent</span>
-			<span class="text-sm text-muted mt-1">OpenAI SDK, MCP client</span>
+	<figcaption class="eyebrow">Request flow: AI Client / Agent → Prism Control Plane → Providers &amp; MCP Tools</figcaption>
+	<ol class="mt-5 grid gap-3 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,2.6fr)_minmax(0,1.2fr)] lg:items-stretch">
+		<li class="border border-rule rounded-sm p-4 flex flex-col justify-center bg-paper/50">
+			<span class="font-mono text-xs text-muted">01 · CALLER</span>
+			<span class="font-medium mt-1">AI Client or Agent</span>
+			<span class="text-sm text-muted mt-1">OpenAI SDK, n8n, LangGraph, or HTTP MCP client</span>
+			<code class="mt-2 font-mono text-xs text-muted break-all">Bearer prism_sk_... · X-Prism-Agent-ID</code>
 		</li>
-		<li class="border-2 border-accent rounded-sm p-4">
-			<span class="font-mono text-sm text-accent">Prism checks, in order</span>
-			<ol class="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
-				{checks.map((c, i) => (
-					<li class="border-t border-rule pt-2">
-						<span class="font-mono text-sm text-muted">{i + 1}</span>
-						<span class="block font-medium leading-snug">{c.name}</span>
-						<span class="block text-sm text-muted leading-snug mt-0.5">{c.detail}</span>
+		<li class="border-2 border-accent rounded-sm p-4 bg-paper/30">
+			<span class="font-mono text-xs text-accent">02 · PRISM GATEWAY CHECKS (IN ORDER)</span>
+			<ol class="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+				{checks.map((c) => (
+					<li class="border-t border-rule pt-2.5">
+						<span class="block font-medium text-sm leading-snug">{c.name}</span>
+						<span class="block text-sm text-muted leading-snug mt-1">{c.detail}</span>
 					</li>
 				))}
 			</ol>
 		</li>
-		<li class="border border-rule rounded-sm p-4 flex flex-col justify-center">
-			<span class="font-medium">Provider</span>
-			<span class="text-sm text-muted mt-1">Your key, encrypted at rest</span>
+		<li class="border border-rule rounded-sm p-4 flex flex-col justify-center bg-paper/50">
+			<span class="font-mono text-xs text-muted">03 · UPSTREAM</span>
+			<span class="font-medium mt-1">Providers &amp; MCP Tools</span>
+			<span class="text-sm text-muted mt-1">AES-256-GCM key decrypted on the fly; response + audit recorded</span>
+			<code class="mt-2 font-mono text-xs text-muted break-all">X-Prism-Model · X-Prism-Provider</code>
 		</li>
 	</ol>
 </figure>

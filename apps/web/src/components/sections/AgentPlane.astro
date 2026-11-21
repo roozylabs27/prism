@@ -5,22 +5,29 @@ import { agentControls, agentPolicyExample } from '../../data/content';
 
 <Section
 	id="agents"
-	label="04 · Agent calls"
-	title="Each agent gets a name, a scope and a spending cap."
-	intro="Register an agent once, then every model, tool and MCP call it makes through Prism is checked against its policy."
+	label="04 · Agent permissions & MCP"
+	title="Every agent gets an identity, a tool scope, and a spending cap."
+	intro="Register an agent profile once, then every chat completion, REST tool call, and /v1/mcp invocation it makes is checked against its policy."
+	layout="stacked"
 >
-	<div class="grid gap-10 xl:grid-cols-[minmax(0,1fr)_minmax(0,22rem)]">
-		<dl class="divide-y divide-rule border-y border-rule">
+	<div class="grid gap-10 lg:grid-cols-12 lg:items-start">
+		<dl class="lg:col-span-7 divide-y divide-rule border-y border-rule">
 			{agentControls.map((c) => (
-				<div class="py-4 grid gap-1 sm:grid-cols-[9rem_minmax(0,1fr)] sm:gap-6">
-					<dt class="font-medium">{c.term}</dt>
+				<div class="py-4 grid gap-1 sm:grid-cols-[10rem_minmax(0,1fr)] sm:gap-6">
+					<dt class="font-medium text-ink">{c.term}</dt>
 					<dd class="text-muted">{c.def}</dd>
 				</div>
 			))}
 		</dl>
-		<figure class="self-start min-w-0 w-full border border-rule rounded-sm bg-raised">
-			<figcaption class="px-4 pt-4 eyebrow">POST /api/agents</figcaption>
+		<figure class="lg:col-span-5 self-start min-w-0 w-full border border-rule rounded-sm bg-raised">
+			<figcaption class="px-4 py-3 border-b border-rule eyebrow flex items-center justify-between gap-2">
+				<span>POST /api/agents</span>
+				<span class="text-xs text-muted">JSON policy</span>
+			</figcaption>
 			<pre class="p-4 overflow-x-auto text-sm leading-relaxed"><code>{agentPolicyExample}</code></pre>
+			<div class="px-4 py-3 border-t border-rule font-mono text-xs text-muted">
+				DENY &gt; ALLOW precedence · !delete_customer blocks even when * is allowed
+			</div>
 		</figure>
 	</div>
 </Section>

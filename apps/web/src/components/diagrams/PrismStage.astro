@@ -1,12 +1,32 @@
 ---
-// Architectural Hero stage adapted from RoozyLabs company-profile
-// (PrismControlPlaneStage + ContinuumArtifact pointer tilt + ContinuumBridge).
-// Dual-theme (light paper & dark graphite) and respects prefers-reduced-motion.
+// Architectural Hero stage with interactive route/policy inspector.
+// Dual-theme (dark graphite & light paper) and respects prefers-reduced-motion.
+const stageModes = [
+	{
+		id: 'primary',
+		label: '01 · prism-auto route',
+		request: 'POST /v1/chat/completions  (model: "prism-auto", X-Routing-Policy: balanced)',
+		outcome: '200 OK · X-Prism-Model: claude-3-7-sonnet · X-Prism-Provider: anthropic · X-Prism-Failovers: 0',
+	},
+	{
+		id: 'mcp',
+		label: '02 · MCP tool gate',
+		request: 'POST /v1/mcp  (tools/call, X-Prism-Agent-ID: support-bot-acme)',
+		outcome: 'Allowed: crm__lookup_customer · Denied (-32001): crm__delete_customer (!delete_customer)',
+	},
+	{
+		id: 'failover',
+		label: '03 · 429 failover',
+		request: 'POST /v1/chat/completions  (primary credential returned 429 Retry-After: 30)',
+		outcome: 'Credential cooled down in Redis · Retried standby credential · X-Prism-Failovers: 1',
+	},
+] as const;
 ---
 
 <div
 	data-prism-stage
-	class="relative w-full select-none rounded-sm border border-rule bg-raised/90 p-3 sm:p-4 overflow-hidden"
+	data-active-mode="primary"
+	class="relative w-full rounded-sm border border-rule bg-raised/90 p-3 sm:p-4 overflow-hidden"
 >
 	<!-- Subtle ambient stage aura (Hero stage only, documented in apps/web/DESIGN.md) -->
 	<div
@@ -16,11 +36,11 @@
 
 	<div
 		data-prism-parallax
-		class="relative w-full transition-transform duration-200 ease-out will-change-transform"
+		class="relative w-full select-none transition-transform duration-200 ease-out will-change-transform"
 	>
 		<svg
 			role="img"
-			aria-label="Prism Control Plane diagram: incoming request passes through the governance and audit ring and refracts through the Prism gateway crystal to primary, balanced, and fallback model routes"
+			aria-label="Prism Control Plane diagram: incoming request passes through the governance and audit ring and refracts through the Prism gateway crystal to primary model, MCP tool server, and failover credential routes"
 			viewBox="0 0 810 540"
 			class="block h-auto w-full"
 		>
@@ -87,6 +107,14 @@
 				}
 				.pr-grid-line {
 					stroke: rgb(var(--rule));
+				}
+				.pr-route-branch {
+					transition: opacity 180ms ease;
+				}
+				[data-prism-stage][data-active-mode="primary"] .pr-route-branch:not([data-route-group="primary"]),
+				[data-prism-stage][data-active-mode="mcp"] .pr-route-branch:not([data-route-group="mcp"]),
+				[data-prism-stage][data-active-mode="failover"] .pr-route-branch:not([data-route-group="failover"]) {
+					opacity: 0.28;
 				}
 				@keyframes pr-orbital-drift {
 					0% { transform: rotate(0deg); }
@@ -228,56 +256,75 @@
 			/>
 			<circle cx="172" cy="296" r="5.5" class="pr-node-fill" stroke="rgb(var(--allow))" stroke-width="2" />
 
-			<!-- Active Route (Top Right) -->
-			<text x="546" y="106" text-anchor="end" font-size="11.5" class="pr-label-accent">
-				Active route
-			</text>
-			<path
-				d="M 424,250 C 470,220 500,160 554,114"
-				fill="none"
-				stroke="rgb(var(--accent))"
-				stroke-width="3.5"
-				stroke-linecap="round"
-			/>
-			<path
-				d="M 554,130 C 510,170 480,230 430,265"
-				fill="none"
-				stroke="rgb(var(--allow))"
-				stroke-width="1.6"
-				opacity="0.8"
-				stroke-dasharray="5 3"
-			/>
-			<g class="pr-pulse-animated">
-				<circle cx="489" cy="178" r="10" fill="rgb(var(--accent))" opacity="0.35" filter="url(#pr-blur-sm)" />
-				<circle cx="489" cy="178" r="4.5" fill="rgb(var(--accent))" />
+			<!-- Route Group 1: Primary Model (Top Right) -->
+			<g class="pr-route-branch" data-route-group="primary">
+				<text x="546" y="106" text-anchor="end" font-size="11.5" class="pr-label-accent">
+					Active route
+				</text>
+				<path
+					d="M 424,250 C 470,220 500,160 554,114"
+					fill="none"
+					stroke="rgb(var(--accent))"
+					stroke-width="3.5"
+					stroke-linecap="round"
+				/>
+				<path
+					d="M 554,130 C 510,170 480,230 430,265"
+					fill="none"
+					stroke="rgb(var(--allow))"
+					stroke-width="1.6"
+					opacity="0.8"
+					stroke-dasharray="5 3"
+				/>
+				<g class="pr-pulse-animated">
+					<circle cx="489" cy="178" r="10" fill="rgb(var(--accent))" opacity="0.35" filter="url(#pr-blur-sm)" />
+					<circle cx="489" cy="178" r="4.5" fill="rgb(var(--accent))" />
+				</g>
+				<circle cx="586" cy="114" r="28" class="pr-node-fill" stroke="rgb(var(--accent))" stroke-width="2" />
+				<circle cx="586" cy="114" r="15" fill="rgb(var(--accent) / 0.22)" />
+				<circle cx="586" cy="114" r="6.5" fill="rgb(var(--accent))" />
+				<text x="628" y="109" font-size="14" class="pr-label-primary">Primary model</text>
+				<text x="628" y="128" font-size="12" class="pr-label-mono">Pinned or prism-auto</text>
 			</g>
 
-			<!-- Policy / Balanced Route (Middle Right) -->
-			<line
-				x1="424"
-				y1="274"
-				x2="584"
-				y2="274"
-				stroke="rgb(var(--accent))"
-				stroke-width="1.8"
-				opacity="0.65"
-				stroke-dasharray="4 4"
-			/>
+			<!-- Route Group 2: Governed MCP Server (Middle Right) -->
+			<g class="pr-route-branch" data-route-group="mcp">
+				<line
+					x1="424"
+					y1="274"
+					x2="584"
+					y2="274"
+					stroke="rgb(var(--accent))"
+					stroke-width="2.4"
+					stroke-dasharray="4 4"
+				/>
+				<circle cx="612" cy="274" r="22" class="pr-node-fill" stroke="rgb(var(--accent))" stroke-width="1.8" />
+				<circle cx="612" cy="274" r="10" fill="rgb(var(--accent) / 0.18)" />
+				<circle cx="612" cy="274" r="4.5" fill="rgb(var(--accent))" />
+				<text x="646" y="269" font-size="14" class="pr-label-primary">MCP tool server</text>
+				<text x="646" y="288" font-size="12" class="pr-label-mono">Allow / !deny filtered</text>
+			</g>
 
-			<!-- Cooldown Failover Route (Bottom Right) -->
-			<text x="548" y="446" text-anchor="end" font-size="11.5" class="pr-label-mono">
-				Failover standby
-			</text>
-			<path
-				d="M 424,298 C 470,328 500,390 560,434"
-				fill="none"
-				stroke="rgb(var(--accent))"
-				stroke-width="2.2"
-				opacity="0.75"
-				stroke-dasharray="6 4"
-			/>
-			<circle cx="490" cy="370" r="7.5" class="pr-node-fill" stroke="rgb(var(--accent))" stroke-width="1.6" />
-			<circle cx="490" cy="370" r="2.8" fill="rgb(var(--accent))" />
+			<!-- Route Group 3: Cooldown Failover Route (Bottom Right) -->
+			<g class="pr-route-branch" data-route-group="failover">
+				<text x="548" y="446" text-anchor="end" font-size="11.5" class="pr-label-mono">
+					Failover standby
+				</text>
+				<path
+					d="M 424,298 C 470,328 500,390 560,434"
+					fill="none"
+					stroke="rgb(var(--accent))"
+					stroke-width="2.4"
+					stroke-dasharray="6 4"
+				/>
+				<circle cx="490" cy="370" r="7.5" class="pr-node-fill" stroke="rgb(var(--accent))" stroke-width="1.6" />
+				<circle cx="490" cy="370" r="2.8" fill="rgb(var(--accent))" />
+				<circle cx="586" cy="434" r="24" class="pr-node-fill" stroke="rgb(var(--accent))" stroke-width="1.8" />
+				<circle cx="586" cy="434" r="11" fill="rgb(var(--accent) / 0.18)" />
+				<circle cx="586" cy="434" r="5" fill="rgb(var(--accent))" />
+				<text x="624" y="429" font-size="14" class="pr-label-primary">Fallback credential</text>
+				<text x="624" y="448" font-size="12" class="pr-label-mono">Retry-After cooldown</text>
+			</g>
 
 			<!-- Central 3D Prism Crystal -->
 			<ellipse
@@ -324,41 +371,43 @@
 				Prism Control Plane
 			</text>
 			<text x="336" y="486" text-anchor="middle" font-size="11.5" class="pr-label-mono">
-				Key · Budget · Policy · Route
+				Key · Quota · Policy · Route
 			</text>
-
-			<!-- Target Node 1: Primary Model / MCP Tool -->
-			<g>
-				<circle cx="586" cy="114" r="28" class="pr-node-fill" stroke="rgb(var(--accent))" stroke-width="2" />
-				<circle cx="586" cy="114" r="15" fill="rgb(var(--accent) / 0.22)" />
-				<circle cx="586" cy="114" r="6.5" fill="rgb(var(--accent))" />
-				<text x="628" y="109" font-size="14" class="pr-label-primary">Primary model</text>
-				<text x="628" y="128" font-size="12" class="pr-label-mono">Pinned or prism-auto</text>
-			</g>
-
-			<!-- Target Node 2: Governed MCP Server -->
-			<g>
-				<circle cx="612" cy="274" r="22" class="pr-node-fill" stroke="rgb(var(--accent))" stroke-width="1.6" />
-				<circle cx="612" cy="274" r="10" fill="rgb(var(--accent) / 0.18)" />
-				<circle cx="612" cy="274" r="4.5" fill="rgb(var(--accent))" />
-				<text x="646" y="269" font-size="14" class="pr-label-primary">MCP tool server</text>
-				<text x="646" y="288" font-size="12" class="pr-label-mono">Allow / !deny filtered</text>
-			</g>
-
-			<!-- Target Node 3: Fallback Credential -->
-			<g>
-				<circle cx="586" cy="434" r="24" class="pr-node-fill" stroke="rgb(var(--accent))" stroke-width="1.6" />
-				<circle cx="586" cy="434" r="11" fill="rgb(var(--accent) / 0.18)" />
-				<circle cx="586" cy="434" r="5" fill="rgb(var(--accent))" />
-				<text x="624" y="429" font-size="14" class="pr-label-primary">Fallback credential</text>
-				<text x="624" y="448" font-size="12" class="pr-label-mono">Retry-After cooldown</text>
-			</g>
 		</svg>
 	</div>
 
-	<!-- Footer caption bar inside stage -->
-	<div class="mt-2 pt-2.5 border-t border-rule flex flex-wrap items-center justify-between gap-2 font-mono text-xs text-muted">
-		<span>FIG. 01 · PRISM CONTROL STAGE</span>
-		<span>/v1/chat/completions · /v1/mcp</span>
+	<!-- Interactive Route & Policy Inspector -->
+	<div class="mt-2 pt-3 border-t border-rule" data-stage-inspector>
+		<div class="flex flex-wrap items-center justify-between gap-2">
+			<span class="font-mono text-xs text-muted">FIG. 01 · INSPECT ROUTE PATH</span>
+			<div role="tablist" aria-label="Control plane route modes" class="flex flex-wrap gap-1.5">
+				{stageModes.map((mode, i) => (
+					<button
+						type="button"
+						role="tab"
+						id={`stage-tab-${mode.id}`}
+						data-stage-mode={mode.id}
+						aria-controls={`stage-panel-${mode.id}`}
+						aria-selected={i === 0 ? 'true' : 'false'}
+						tabindex={i === 0 ? 0 : -1}
+						class="min-h-[44px] px-3 py-1 rounded-sm border border-rule font-mono text-xs text-muted hover:text-ink hover:border-ink aria-selected:border-accent aria-selected:text-ink aria-selected:bg-paper transition-colors duration-150"
+					>
+						{mode.label}
+					</button>
+				))}
+			</div>
+		</div>
+		{stageModes.map((mode, i) => (
+			<div
+				role="tabpanel"
+				id={`stage-panel-${mode.id}`}
+				aria-labelledby={`stage-tab-${mode.id}`}
+				hidden={i !== 0}
+				class="mt-2.5 rounded-sm border border-rule bg-paper px-3 py-2 font-mono text-xs space-y-1"
+			>
+				<p class="text-ink break-words"><span class="text-muted">REQ: </span>{mode.request}</p>
+				<p class="text-muted break-words"><span class="text-accent">OUT: </span>{mode.outcome}</p>
+			</div>
+		))}
 	</div>
 </div>

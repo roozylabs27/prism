@@ -12,7 +12,7 @@ const canonical = new URL(Astro.url.pathname, site.url).toString();
 ---
 
 <!doctype html>
-<html lang="en">
+<html lang="en" class="dark">
 	<head>
 		<meta charset="utf-8" />
 		<meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -32,12 +32,12 @@ const canonical = new URL(Astro.url.pathname, site.url).toString();
 		<meta name="twitter:title" content={title} />
 		<meta name="twitter:description" content={description} />
 
-		<!-- Theme before paint: stored choice wins, otherwise follow the system. -->
+		<!-- Theme before paint: dark editorial interface by default unless light is stored. -->
 		<script is:inline>
 			(function () {
 				var stored = null;
 				try { stored = localStorage.getItem('theme'); } catch (e) {}
-				var dark = stored ? stored === 'dark' : window.matchMedia('(prefers-color-scheme: dark)').matches;
+				var dark = stored ? stored === 'dark' : true;
 				document.documentElement.classList.toggle('dark', dark);
 			})();
 		</script>

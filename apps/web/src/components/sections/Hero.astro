@@ -13,23 +13,23 @@ import { cta } from '../../data/site';
 		class="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_74%_36%,rgb(var(--accent)/0.08)_0%,transparent_66%)]"
 	></div>
 
-	<div class="relative mx-auto max-w-page px-5 sm:px-8 pt-12 sm:pt-16 lg:pt-20 pb-10 sm:pb-14">
+	<div class="relative mx-auto max-w-page px-5 sm:px-8 pt-10 sm:pt-14 lg:pt-18 pb-10 sm:pb-14">
 		<div class="grid grid-cols-1 items-center gap-10 lg:grid-cols-12 lg:gap-10">
 			<div class="lg:col-span-6 min-w-0">
 				<div class="inline-flex items-center gap-3">
 					<span class="h-px w-6 bg-accent" aria-hidden="true"></span>
-					<p class="eyebrow">Gateway for AI agencies and platform teams</p>
+					<p class="eyebrow">AI infrastructure gateway · OpenAI-compatible &amp; MCP</p>
 				</div>
 				<h1
 					id="hero-title"
-					class="mt-4 text-[2.25rem] sm:text-[3rem] lg:text-[3.35rem] leading-[1.08] font-semibold tracking-tight text-balance"
+					class="mt-4 text-[2.125rem] sm:text-[2.875rem] lg:text-[3.25rem] leading-[1.08] font-semibold tracking-tight text-balance"
 				>
 					The control layer between your AI agents and the models and tools they call.
 				</h1>
-				<p class="mt-6 text-lg sm:text-xl text-muted max-w-prose">
-					Give every client its own gateway keys, budgets, model routing and MCP tool permissions. Self-hosted, OpenAI-compatible, and explicit about what it does not control.
+				<p class="mt-6 text-lg text-muted max-w-prose">
+					Prism sits between your applications or agent runtimes and upstream LLM providers and MCP servers. Issue scoped gateway keys per workspace or project, enforce spend quotas and tool allowlists before execution, route across encrypted provider credentials with automatic failover, and keep raw API keys off caller machines.
 				</p>
-				<div class="mt-8 flex flex-col sm:flex-row gap-3">
+				<div class="mt-8 flex flex-col sm:flex-row flex-wrap gap-3">
 					<Button href={cta.primary.href} external>
 						{cta.primary.label}
 						<Icon name="external" class="h-4 w-4" />
@@ -38,6 +38,20 @@ import { cta } from '../../data/site';
 						{cta.secondary.label}
 					</Button>
 				</div>
+				<dl class="mt-8 pt-5 border-t border-rule grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs font-mono">
+					<div>
+						<dt class="text-muted">GATEWAY SURFACES</dt>
+						<dd class="mt-1 text-ink">/v1/chat/completions · /v1/mcp</dd>
+					</div>
+					<div>
+						<dt class="text-muted">ENFORCEMENT</dt>
+						<dd class="mt-1 text-ink">Quotas · !deny tool rules</dd>
+					</div>
+					<div>
+						<dt class="text-muted">STACK</dt>
+						<dd class="mt-1 text-ink">Self-hosted Go · Postgres · Redis</dd>
+					</div>
+				</dl>
 			</div>
 
 			<div class="lg:col-span-6 min-w-0">
@@ -50,7 +64,7 @@ import { cta } from '../../data/site';
 		</div>
 	</div>
 
-	<!-- Continuum Bridge geometric hairline sweeping from Hero right-stage axis (x=1040) into the 4/8 section spine (x=420) -->
+	<!-- Continuum Bridge geometric hairline sweeping from Hero right-stage axis (x=1040) into the section spine (x=420) -->
 	<div aria-hidden="true" class="pointer-events-none relative h-12 sm:h-14 w-full overflow-hidden select-none">
 		<svg viewBox="0 0 1440 56" fill="none" preserveAspectRatio="none" class="h-full w-full">
 			<defs>

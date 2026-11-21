@@ -5,17 +5,18 @@ import { inference } from '../../data/content';
 
 <Section
 	id="inference"
-	label="03 · Model calls"
-	title="Routing, failover and spend, decided per request."
-	intro="Point any OpenAI-compatible client at Prism. Your provider keys stay in Prism; clients only ever hold a Prism key."
+	label="03 · Model routing"
+	title="Routing, failover, and spend checks evaluated per request."
+	intro="Point any OpenAI-compatible client at Prism. Upstream provider keys stay encrypted in Prism; callers only ever hold a scoped gateway key."
+	layout="split"
 	class="bg-raised/60"
 >
 	<div class="grid gap-x-10 gap-y-10 sm:grid-cols-2">
 		{inference.map((block) => (
-			<article>
+			<article class="border-t border-rule pt-5">
 				<h3 class="font-semibold text-lg">{block.title}</h3>
-				<p class="mt-2 text-muted">{block.body}</p>
-				<p class="mt-3"><code class="inline-code">{block.ref}</code></p>
+				<p class="mt-2 text-muted text-base">{block.body}</p>
+				<p class="mt-3"><code class="inline-code text-xs">{block.ref}</code></p>
 			</article>
 		))}
 	</div>

@@ -3,19 +3,23 @@ import { links, site } from '../../data/site';
 
 const groups = [
 	{
-		title: 'Product',
+		title: 'Sections',
 		items: [
-			{ label: 'What Prism governs', href: '#boundary' },
-			{ label: 'For agencies', href: '#agencies' },
-			{ label: 'Integrate', href: '#integrate' },
-			{ label: 'What ships today', href: '#status' },
+			{ label: 'Boundary & scope', href: '#boundary' },
+			{ label: 'Operator workflows', href: '#agencies' },
+			{ label: 'Model routing', href: '#inference' },
+			{ label: 'Agent permissions & MCP', href: '#agents' },
+			{ label: 'Integration examples', href: '#integrate' },
+			{ label: 'Self-host & pilot', href: '#start' },
 		],
 	},
 	{
 		title: 'Project',
 		items: [
 			{ label: 'Repository', href: links.repo, external: true },
+			{ label: 'Getting started', href: links.gettingStarted, external: true },
 			{ label: 'Documentation', href: links.docs, external: true },
+			{ label: 'Pilot charter', href: links.pilotProgram, external: true },
 			{ label: 'Changelog', href: links.changelog, external: true },
 			{ label: 'Issues', href: links.issues, external: true },
 		],
@@ -28,7 +32,10 @@ const groups = [
 		<div class="lg:col-span-6">
 			<p class="font-semibold text-lg">{site.name}</p>
 			<p class="mt-2 text-muted max-w-prose">
-				A gateway for model calls and agent tool calls, with keys, budgets and permissions per client.
+				A self-hostable AI gateway for model routing and governed MCP tool calls, with scoped keys, workspace quotas, and agent policies.
+			</p>
+			<p class="mt-4 font-mono text-xs text-muted">
+				MIT Licensed · Go + PostgreSQL + Redis
 			</p>
 		</div>
 		{groups.map((group) => (

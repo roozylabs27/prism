@@ -2,40 +2,109 @@
 import Section from '../ui/Section.astro';
 import Button from '../ui/Button.astro';
 import Icon from '../ui/Icon.astro';
-import { startOptions } from '../../data/content';
+import { selfHostOption, pilotOption } from '../../data/content';
 import { links } from '../../data/site';
 ---
 
 <Section
 	id="start"
-	label="07 · Start"
-	title="Two ways to try Prism."
-	intro="There are no paid plans yet. Run it yourself, or set it up with us as a design partner."
-	class="bg-raised/60"
+	label="06 · Start"
+	title="Two ways to start with Prism."
+	intro="There are no paid hosted tiers enabled today. Deploy the stack on your own infrastructure, or run a guided staging pilot with us."
+	layout="stacked"
 >
-	<div class="grid gap-6 md:grid-cols-2">
-		{startOptions.map((opt, i) => (
-			<article class="border border-rule rounded-sm bg-paper p-6 flex flex-col">
-				<h3 class="font-semibold text-xl">{opt.title}</h3>
-				<p class="mt-2 text-muted">{opt.who}</p>
-				<ol class="mt-5 space-y-2 flex-1">
-					{opt.steps.map((step, n) => (
-						<li class="flex gap-3">
-							<span class="font-mono text-sm text-muted w-5 shrink-0 pt-0.5">{n + 1}</span>
-							<span>{step}</span>
+	<div class="grid gap-8 lg:grid-cols-2 lg:items-stretch">
+		<!-- Entry path 1: Self-host -->
+		<article class="border border-rule rounded-sm bg-raised/40 p-6 sm:p-7 flex flex-col">
+			<div class="flex flex-wrap items-baseline justify-between gap-2">
+				<h3 class="font-semibold text-xl">{selfHostOption.title}</h3>
+				<span class="font-mono text-xs text-muted">{selfHostOption.tag}</span>
+			</div>
+			<p class="mt-2 text-muted">{selfHostOption.who}</p>
+
+			<p class="mt-4 text-sm">
+				<span class="font-mono text-xs uppercase tracking-wider text-muted">Prerequisites: </span>
+				<span class="text-ink">{selfHostOption.prerequisites}</span>
+			</p>
+
+			<div class="mt-4 border border-rule rounded-sm bg-paper" data-copy-block>
+				<div class="flex items-center justify-between gap-2 px-3 py-2 border-b border-rule">
+					<span class="font-mono text-xs text-muted">Docker Compose quick start</span>
+					<button
+						type="button"
+						data-copy-command
+						class="inline-flex items-center gap-1.5 min-h-[44px] px-3 text-xs font-mono text-muted hover:text-ink transition-colors duration-150"
+					>
+						<Icon name="copy" class="h-3.5 w-3.5" />
+						<span data-copy-label>Copy</span>
+					</button>
+				</div>
+				<pre class="p-3.5 overflow-x-auto text-xs sm:text-sm leading-relaxed"><code>{selfHostOption.command}</code></pre>
+				<p data-copy-status class="sr-only" aria-live="polite"></p>
+			</div>
+
+			<ol class="mt-5 space-y-2.5 text-sm sm:text-base flex-1">
+				{selfHostOption.steps.map((step, n) => (
+					<li class="flex gap-3">
+						<span class="font-mono text-sm text-muted w-5 shrink-0 pt-0.5">{n + 1}</span>
+						<span>{step}</span>
+					</li>
+				))}
+			</ol>
+
+			<div class="mt-6 pt-5 border-t border-rule space-y-3">
+				<Button href={links.quickstart} variant="primary" external class="w-full sm:w-auto">
+					{selfHostOption.linkLabel}
+					<Icon name="external" class="h-4 w-4" />
+				</Button>
+				<p class="text-xs sm:text-sm text-muted">{selfHostOption.expectAfterClick}</p>
+			</div>
+		</article>
+
+		<!-- Entry path 2: Design-partner staging pilot -->
+		<article class="border border-rule rounded-sm bg-raised/40 p-6 sm:p-7 flex flex-col">
+			<div class="flex flex-wrap items-baseline justify-between gap-2">
+				<h3 class="font-semibold text-xl">{pilotOption.title}</h3>
+				<span class="font-mono text-xs text-muted">{pilotOption.tag}</span>
+			</div>
+			<p class="mt-2 text-muted">{pilotOption.who}</p>
+
+			<p class="mt-4 text-sm">
+				<span class="font-mono text-xs uppercase tracking-wider text-muted">Prerequisites: </span>
+				<span class="text-ink">{pilotOption.prerequisites}</span>
+			</p>
+
+			<ol class="mt-5 space-y-2.5 text-sm sm:text-base flex-1">
+				{pilotOption.steps.map((step, n) => (
+					<li class="flex gap-3">
+						<span class="font-mono text-sm text-muted w-5 shrink-0 pt-0.5">{n + 1}</span>
+						<span>{step}</span>
+					</li>
+				))}
+			</ol>
+
+			<div class="mt-5 pt-4 border-t border-rule">
+				<p class="font-mono text-xs uppercase tracking-wider text-muted">Available during pilot</p>
+				<ul class="mt-2.5 grid gap-2 sm:grid-cols-2 text-sm text-ink">
+					{pilotOption.capabilities.map((cap) => (
+						<li class="flex items-center gap-2">
+							<Icon name="check" class="h-4 w-4 shrink-0 text-allow" />
+							<span>{cap}</span>
 						</li>
 					))}
-				</ol>
-				<div class="mt-6">
-					<Button href={links[opt.linkKey]} variant={i === 0 ? 'primary' : 'secondary'} external class="w-full sm:w-auto">
-						{opt.linkLabel}
-						<Icon name="external" class="h-4 w-4" />
-					</Button>
-				</div>
-			</article>
-		))}
+				</ul>
+			</div>
+
+			<div class="mt-6 pt-5 border-t border-rule space-y-3">
+				<Button href={links.pilotRequest} variant="secondary" external class="w-full sm:w-auto">
+					{pilotOption.linkLabel}
+					<Icon name="external" class="h-4 w-4" />
+				</Button>
+				<p class="text-xs sm:text-sm text-muted">{pilotOption.expectAfterClick}</p>
+			</div>
+		</article>
 	</div>
-	<p class="mt-6 text-muted">
-		How the pilot works: <a href={links.pilotProgram} target="_blank" rel="noopener noreferrer" class="link">design-partner pilot program</a>.
+	<p class="mt-6 text-muted text-sm sm:text-base">
+		Read the full scope, timeline, and commitments in the <a href={links.pilotProgram} target="_blank" rel="noopener noreferrer" class="link">design-partner pilot program charter</a>.
 	</p>
 </Section>

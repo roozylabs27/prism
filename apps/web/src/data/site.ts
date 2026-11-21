@@ -3,9 +3,9 @@ export const site = {
   org: 'RoozyLabs',
   version: '0.4.0',
   url: 'https://prism.roozylabs.com',
-  title: 'Prism: the control layer for AI apps and agents',
+  title: 'Prism: the control layer between AI agents, models, and tools',
   description:
-    'Prism is a self-hostable gateway that gives each client its own keys, budgets, model routing and MCP tool permissions. OpenAI-compatible API, governed MCP endpoint, audit records.',
+    'Prism is a self-hostable AI gateway that gives each workspace and project its own keys, spend quotas, model routing, and MCP tool permissions.',
 };
 
 const repo = 'https://github.com/roozylabs27/prism';
@@ -23,13 +23,15 @@ export const links = {
 };
 
 export const nav = [
-  { label: 'Product', href: '#boundary' },
-  { label: 'Agencies', href: '#agencies' },
+  { label: 'Boundary', href: '#boundary' },
+  { label: 'Workflows', href: '#agencies' },
+  { label: 'Routing', href: '#inference' },
+  { label: 'Agents & MCP', href: '#agents' },
   { label: 'Integrate', href: '#integrate' },
-  { label: 'Status', href: '#status' },
+  { label: 'Start', href: '#start' },
 ];
 
 export const cta = {
   primary: { label: 'Self-host with Docker', href: links.quickstart },
-  secondary: { label: 'Apply for a pilot', href: '#start' },
+  secondary: { label: 'Apply for a design-partner pilot', href: '#start' },
 };

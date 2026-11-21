@@ -2,14 +2,21 @@ import { defineConfig } from 'astro/config';
 import tailwind from '@astrojs/tailwind';
 import node from '@astrojs/node';
 
-// Server output keeps the existing Dockerfile entry (dist/server/entry.mjs) working.
-// The landing page itself is prerendered to static HTML.
+// On Vercel (process.env.VERCEL is set), output pure static HTML into dist/
+// so Vercel serves dist/index.html directly from its edge CDN without 404s.
+// Outside Vercel, server output keeps the Dockerfile entry (dist/server/entry.mjs) working.
+const isVercel = Boolean(process.env.VERCEL);
+
 export default defineConfig({
   site: 'https://prism.roozylabs.com',
-  output: 'server',
-  adapter: node({
-    mode: 'standalone',
-  }),
+  output: isVercel ? 'static' : 'server',
+  ...(isVercel
+    ? {}
+    : {
+        adapter: node({
+          mode: 'standalone',
+        }),
+      }),
   integrations: [
     tailwind({
       applyBaseStyles: false,
