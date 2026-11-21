@@ -140,23 +140,30 @@ function setupSectionObserver() {
 	};
 
 	const visible = new Set<string>();
+	const updateActive = () => {
+		if (window.scrollY < 160) {
+			setActive(null);
+			return;
+		}
+		const firstVisible = sections.find((sec) => visible.has(sec.id));
+		if (firstVisible) {
+			setActive(firstVisible.id);
+		}
+	};
+
 	const observer = new IntersectionObserver(
 		(entries) => {
 			entries.forEach((entry) => {
 				if (entry.isIntersecting) visible.add(entry.target.id);
 				else visible.delete(entry.target.id);
 			});
-			const firstVisible = sections.find((sec) => visible.has(sec.id));
-			if (firstVisible) {
-				setActive(firstVisible.id);
-			} else if (window.scrollY < 160) {
-				setActive(null);
-			}
+			updateActive();
 		},
 		{ rootMargin: '-25% 0px -55% 0px', threshold: 0 },
 	);
 
 	sections.forEach((sec) => observer.observe(sec));
+	window.addEventListener('scroll', updateActive, { passive: true });
 }
 
 async function copyTextWithFeedback(
