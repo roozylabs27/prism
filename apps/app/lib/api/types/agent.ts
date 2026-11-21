@@ -2,18 +2,25 @@ export interface ApiAgentTemplate {
   id: string;
   name: string;
   slug: string;
+  role?: string;
   description: string;
-  category: string;
-  systemPrompt: string;
-  suggestedModel: string;
-  temperature: number;
-  maxTokens: number;
+  icon?: string;
+  category?: string;
+  systemPrompt?: string;
+  suggestedModel?: string;
+  temperature?: number;
+  maxTokens?: number;
+  allowedModels?: string[];
+  allowedTools?: string[];
+  allowedResources?: string[];
+  maxBudgetCents?: number;
   builtinToolNames?: string[];
   mcpServerSlugs?: string[];
   capabilities?: string[];
   tags?: string[];
-  author: string;
-  isOfficial: boolean;
+  author?: string;
+  isPreset?: boolean;
+  isOfficial?: boolean;
   createdAt: string;
 }
 

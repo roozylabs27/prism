@@ -4,7 +4,7 @@ import React, { createContext, useContext, useEffect } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { ApiUserPermissionsResponse } from '@/lib/api';
 import { useUserPermissionsQuery } from '@/hooks/queries/useUserPermissionsQuery';
-import { UserRole } from '@/types/roles';
+import { checkHasPermission, normalizeRoleSlug, UserRole } from '@/types/roles';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/atoms/Tooltip';
 
 interface PermissionContextType {
@@ -39,13 +39,7 @@ export function PermissionProvider({
 
   // roleSlug is the member's role in the active organization; primaryRole is
   // only what the user picked as a job title and grants nothing.
-  const rawRole = (data?.roleSlug || '').toLowerCase();
-  const role: UserRole =
-    rawRole === 'owner'
-      ? UserRole.OWNER
-      : rawRole === 'viewer'
-      ? UserRole.VIEWER
-      : UserRole.MEMBER;
+  const role = normalizeRoleSlug(data?.roleSlug);
 
   const permissions = data?.permissions || [];
   const isOnboarded = data?.isOnboarded ?? true;
@@ -64,10 +58,7 @@ export function PermissionProvider({
     }
   }, [data, isLoading, pathname, router]);
 
-  const hasPermission = (perm: string): boolean => {
-    if (role === UserRole.OWNER) return true;
-    return permissions.includes(perm);
-  };
+  const hasPermission = (perm: string): boolean => checkHasPermission(role, permissions, perm);
 
   return (
     <PermissionContext.Provider value={{ role, permissions, hasPermission, isLoading, isOnboarded }}>

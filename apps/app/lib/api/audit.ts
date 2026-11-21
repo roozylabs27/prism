@@ -19,6 +19,7 @@ export async function apiGetAuditLogs(params?: {
 
 export async function apiExportAuditLogs(params?: {
   format?: 'json' | 'csv';
+  type?: 'ai' | 'admin';
   startDate?: string;
   endDate?: string;
 } | 'json' | 'csv'): Promise<Blob> {

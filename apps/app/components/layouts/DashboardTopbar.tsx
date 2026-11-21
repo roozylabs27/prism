@@ -36,6 +36,7 @@ const ROUTE_TITLES: Array<{ prefix: string; label: string }> = [
   { prefix: AppRoutes.MCP, label: 'MCP Gateway' },
   { prefix: AppRoutes.PLAYGROUND, label: 'Routing Simulator' },
   { prefix: AppRoutes.GOVERNANCE, label: 'Governance & RBAC' },
+  { prefix: AppRoutes.APPROVALS, label: 'Approvals' },
   { prefix: AppRoutes.BUDGETS, label: 'Budgets & Quotas' },
   { prefix: AppRoutes.SETTINGS_MEMBERS, label: 'Team Members' },
   { prefix: AppRoutes.BILLING, label: 'Billing & Plans' },

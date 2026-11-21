@@ -65,11 +65,14 @@ export async function apiGetMCPServerStats(id: string, days?: number): Promise<A
 }
 
 export async function apiGetMCPRegistryCatalog(): Promise<ApiMCPRegistryServer[]> {
-  const response = await api.get<ApiMCPRegistryServer[]>('/mcp/registry');
-  return response.data;
+  const response = await api.get<ApiMCPRegistryServer[] | { data?: ApiMCPRegistryServer[] }>('/mcp/registry');
+  if (response.data && typeof response.data === 'object' && 'data' in response.data && Array.isArray(response.data.data)) {
+    return response.data.data;
+  }
+  return Array.isArray(response.data) ? response.data : [];
 }
 
 export async function apiRegisterMCPRegistryServer(data: ApiRegisterMCPRegistryRequest): Promise<ApiMCPServer> {
-  const response = await api.post<ApiMCPServer>('/mcp/registry/register', data);
+  const response = await api.post<ApiMCPServer>('/mcp/registry', data);
   return response.data;
 }

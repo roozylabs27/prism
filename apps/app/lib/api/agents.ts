@@ -7,13 +7,19 @@ import {
 } from './types/agent';
 
 export async function apiGetAgentTemplates(): Promise<ApiAgentTemplate[]> {
-  const response = await api.get<ApiAgentTemplate[]>('/agent-templates');
-  return response.data;
+  const response = await api.get<ApiAgentTemplate[] | { data?: ApiAgentTemplate[] }>('/agent-templates');
+  if (response.data && typeof response.data === 'object' && 'data' in response.data && Array.isArray(response.data.data)) {
+    return response.data.data;
+  }
+  return Array.isArray(response.data) ? response.data : [];
 }
 
 export async function apiInstantiateAgentTemplate(templateId: string, name?: string): Promise<ApiAgent> {
-  const response = await api.post<ApiAgent>(`/agent-templates/${templateId}/instantiate`, { name });
-  return response.data;
+  const response = await api.post<ApiAgent | { agent: ApiAgent }>(`/agent-templates/${templateId}/instantiate`, { name });
+  if (response.data && typeof response.data === 'object' && 'agent' in response.data && response.data.agent) {
+    return response.data.agent;
+  }
+  return response.data as ApiAgent;
 }
 
 export async function apiGetAgents(): Promise<ApiAgent[]> {

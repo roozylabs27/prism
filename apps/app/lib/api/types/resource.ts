@@ -8,6 +8,7 @@ export interface ApiResource {
   description: string;
   resourceUri?: string;
   mimeType?: string;
+  parametersSchema?: Record<string, unknown>;
   enabled: boolean;
   cacheTtlSeconds?: number;
   createdAt: string;
@@ -32,16 +33,22 @@ export interface ApiResourceBackend {
   updatedAt: string;
 }
 
-export interface ApiResourceWithBackends extends ApiResource {
+export interface ApiResourceWithBackends extends Partial<ApiResource> {
+  resource?: ApiResource;
   backends?: ApiResourceBackend[];
 }
 
 export interface ApiCreateResourceBackend {
+  id?: string;
   name: string;
   backendType: 'postgres' | 'http' | 's3' | 'blob';
+  endpointUrl?: string;
+  httpMethod?: string;
+  authToken?: string;
   connectionString?: string;
   queryTemplate?: string;
-  authType: 'none' | 'bearer' | 'api_key' | 'basic';
+  sqlQuery?: string;
+  authType?: 'none' | 'bearer' | 'api_key' | 'basic';
   authConfig?: Record<string, string>;
   priority?: number;
   weight?: number;

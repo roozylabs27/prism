@@ -32,12 +32,14 @@ export function useTurnstile(): UseTurnstileReturn {
     staleTime: 10 * 60 * 1000,
   });
 
+  const backendDisabled = turnstileConfig?.enabled === false;
   const siteKey =
     process.env.NEXT_PUBLIC_CLOUDFLARE_SITE_KEY ||
-    turnstileConfig?.siteKey ||
-    '1x00000000000000000000AA';
+    (backendDisabled ? '' : turnstileConfig?.siteKey || '1x00000000000000000000AA');
 
-  const showTurnstile = Boolean(siteKey && siteKey !== 'disabled' && siteKey !== 'none');
+  const showTurnstile =
+    !backendDisabled &&
+    Boolean(siteKey && siteKey !== 'disabled' && siteKey !== 'none');
   const isReady = !showTurnstile || Boolean(token);
 
   const reset = useCallback(() => {

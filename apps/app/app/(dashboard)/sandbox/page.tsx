@@ -477,6 +477,16 @@ export default function SandboxPage() {
   }, [activeJobId, subscribeToSSE, handleJobCompleted, handleJobFailed]);
 
   React.useEffect(() => {
+    if (typeof window === "undefined" || agentsList.length === 0) return;
+    const requestedAgent = new URLSearchParams(window.location.search).get("agent");
+    if (!requestedAgent) return;
+    const matched = agentsList.find((a) => a.id === requestedAgent || a.name === requestedAgent);
+    if (matched) {
+      form.setValue("agentId", matched.name);
+    }
+  }, [agentsList, form]);
+
+  React.useEffect(() => {
     if (keysList.length > 0) {
       const currentPrefix = form.getValues("keyPrefix");
       if (
@@ -1085,23 +1095,22 @@ export default function SandboxPage() {
                       {tokenStats.input + tokenStats.output} tokens
                     </Badge>
                   )}
-                  {!executionOutput ||
-                    (isExecuting && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="h-7 px-2.5 text-xs gap-1.5 border-slate-800 hover:border-slate-700"
-                        onClick={handleCopyOutput}
-                        disabled={!executionOutput || isExecuting}
-                      >
-                        {copied ? (
-                          <CheckIcon className="h-3.5 w-3.5 text-emerald-700 dark:text-emerald-400" />
-                        ) : (
-                          <CopyIcon className="h-3.5 w-3.5 text-primary" />
-                        )}
-                        <span>{copied ? "Copied!" : "Copy Result"}</span>
-                      </Button>
-                    ))}
+                  {Boolean(executionOutput) && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-7 px-2.5 text-xs gap-1.5 border-slate-800 hover:border-slate-700"
+                      onClick={handleCopyOutput}
+                      disabled={isExecuting}
+                    >
+                      {copied ? (
+                        <CheckIcon className="h-3.5 w-3.5 text-emerald-700 dark:text-emerald-400" />
+                      ) : (
+                        <CopyIcon className="h-3.5 w-3.5 text-primary" />
+                      )}
+                      <span>{copied ? "Copied!" : "Copy Result"}</span>
+                    </Button>
+                  )}
                 </div>
               </div>
             </CardHeader>

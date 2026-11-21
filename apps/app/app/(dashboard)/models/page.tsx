@@ -14,6 +14,11 @@ import { ErrorState, EmptyState } from '@/components/molecules/StateAlerts';
 import { Layers, Zap, Code2, Eye, Cpu, Search, CheckCircle2, ShieldCheck, Activity } from 'lucide-react';
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/molecules/Select';
 
+function normalizeScorePct(score?: number, fallback = 85): number {
+  if (score == null || Number.isNaN(score)) return fallback;
+  return score <= 1 ? Math.round(score * 100) : Math.round(score);
+}
+
 export default function ModelsPage() {
   const { data, isLoading, isError, refetch } = useModelsListQuery();
   const { data: providers } = useProvidersQuery();
@@ -48,7 +53,7 @@ export default function ModelsPage() {
   const avgQuality =
     allModels.length > 0
       ? Math.round(
-          allModels.reduce((acc, m) => acc + (m.qualityScore ?? 85), 0) /
+          allModels.reduce((acc, m) => acc + normalizeScorePct(m.qualityScore, 85), 0) /
             allModels.length
         )
       : 0;
@@ -124,14 +129,14 @@ export default function ModelsPage() {
       render: (_, record) => (
         <div className="flex gap-1.5 flex-wrap items-center">
           <Badge variant="violet" className="font-mono text-[10px] gap-0.5 px-1.5 py-0.5">
-            <ShieldCheck className="h-2.5 w-2.5" /> Q: {record.qualityScore != null ? `${record.qualityScore}%` : '92%'}
+            <ShieldCheck className="h-2.5 w-2.5" /> Q: {normalizeScorePct(record.qualityScore, 92)}%
           </Badge>
           <Badge variant="info" className="font-mono text-[10px] gap-0.5 px-1.5 py-0.5">
-            <Zap className="h-2.5 w-2.5" /> S: {record.speedScore != null ? `${record.speedScore}%` : '95%'}
+            <Zap className="h-2.5 w-2.5" /> S: {normalizeScorePct(record.speedScore, 95)}%
           </Badge>
           {record.codingScore != null && (
             <Badge variant="outline" className="font-mono text-[10px] gap-0.5 px-1.5 py-0.5">
-              <Code2 className="h-2.5 w-2.5" /> Code: {record.codingScore}%
+              <Code2 className="h-2.5 w-2.5" /> Code: {normalizeScorePct(record.codingScore, 0)}%
             </Badge>
           )}
         </div>
@@ -183,7 +188,7 @@ export default function ModelsPage() {
             System & Provider Managed Model Catalog
           </p>
           <p className="text-muted-foreground leading-relaxed">
-            All models are synchronized directly from system configurations and connected AI provider adapters (OpenAI, Anthropic, Google Vertex, OpenCode, DeepSeek, Ollama). Models cannot be manually altered to maintain gateway routing integrity.
+            Models are synchronized from configured upstream provider adapters and system defaults, with live pricing and routing benchmark scores used during smart routing decisions.
           </p>
         </div>
       </div>

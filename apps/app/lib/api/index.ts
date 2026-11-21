@@ -24,3 +24,4 @@ export * from './audit';
 export * from './billing';
 export * from './quotas';
 export * from './organizations';
+export * from './workspaces';

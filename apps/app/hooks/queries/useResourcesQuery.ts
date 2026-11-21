@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { apiGetResources } from '@/lib/api';
+import { apiGetResource, apiGetResources } from '@/lib/api';
 export {
   useCreateResourceMutation as useCreateResource,
   useUpdateResourceMutation as useUpdateResource,
@@ -11,5 +11,13 @@ export function useResourcesQuery() {
   return useQuery({
     queryKey: ['resources'],
     queryFn: apiGetResources,
+  });
+}
+
+export function useResourceDetailQuery(resourceId?: string) {
+  return useQuery({
+    queryKey: ['resources', resourceId],
+    queryFn: () => apiGetResource(resourceId!),
+    enabled: Boolean(resourceId),
   });
 }

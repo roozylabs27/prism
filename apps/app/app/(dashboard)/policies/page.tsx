@@ -7,8 +7,19 @@ import { Card, CardContent } from '@/components/molecules/Card';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/molecules/Tabs';
 import { Button } from '@/components/atoms/Button';
 import { Badge } from '@/components/atoms/Badge';
-import { usePoliciesQuery, useUpdatePolicy, useDeletePolicy, useSetDefaultPolicy } from '@/hooks/queries/usePoliciesQuery';
+import {
+  usePoliciesQuery,
+  useUpdatePolicy,
+  useDeletePolicy,
+  useSetDefaultPolicy,
+  useRoutingRulesQuery,
+  useCreateRoutingRuleMutation,
+  useDeleteRoutingRuleMutation,
+} from '@/hooks/queries/usePoliciesQuery';
+import { useProvidersQuery } from '@/hooks/queries/useProvidersQuery';
 import { ApiRoutingPolicy } from '@/lib/api';
+import { Input } from '@/components/atoms/Input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/molecules/Select';
 import { ErrorState, EmptyState } from '@/components/molecules/StateAlerts';
 import { Plus, Star, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -21,12 +32,39 @@ import { PolicyTuner } from './_components/PolicyTuner';
 
 export default function PoliciesPage() {
   const { data: policies, isLoading, isError, refetch } = usePoliciesQuery();
+  const { data: routingRules = [] } = useRoutingRulesQuery();
+  const { data: providersData = [] } = useProvidersQuery();
+  const providersList = Array.isArray(providersData) ? providersData : [];
   const updateMutation = useUpdatePolicy();
   const deleteMutation = useDeletePolicy();
   const setDefaultMutation = useSetDefaultPolicy();
+  const createRuleMutation = useCreateRoutingRuleMutation();
+  const deleteRuleMutation = useDeleteRoutingRuleMutation();
 
   const [selectedPolicyId, setSelectedPolicyId] = useState<string>('');
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [rulePattern, setRulePattern] = useState('');
+  const [ruleProviderId, setRuleProviderId] = useState('');
+  const [rulePriority, setRulePriority] = useState('10');
+
+  const handleCreateRule = () => {
+    if (!rulePattern.trim()) return;
+    createRuleMutation.mutate(
+      {
+        modelPattern: rulePattern.trim(),
+        providerId: ruleProviderId || undefined,
+        priority: Number(rulePriority) || 10,
+        enabled: true,
+      },
+      {
+        onSuccess: () => {
+          toast.success(`Routing rule "${rulePattern.trim()}" created`);
+          setRulePattern('');
+        },
+        onError: (err) => toast.error(`Rule failed: ${getErrorMessage(err)}`),
+      }
+    );
+  };
 
   const activePolicyId =
     (selectedPolicyId && policies?.some((p) => p.id === selectedPolicyId) ? selectedPolicyId : '') ||
@@ -102,6 +140,7 @@ export default function PoliciesPage() {
           <TabsList>
             <TabsTrigger value="tuner">Policy Weight Tuner</TabsTrigger>
             <TabsTrigger value="active">Active Policies</TabsTrigger>
+            <TabsTrigger value="rules">Model Routing Rules ({routingRules.length})</TabsTrigger>
           </TabsList>
 
           <TabsContent value="tuner">
@@ -180,6 +219,79 @@ export default function PoliciesPage() {
                 </Card>
               ))}
             </div>
+          </TabsContent>
+
+          <TabsContent value="rules" className="space-y-4">
+            <Card>
+              <CardContent className="pt-6 space-y-4">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Input
+                    placeholder="Model glob pattern (e.g., claude-*)"
+                    value={rulePattern}
+                    onChange={(e) => setRulePattern(e.target.value)}
+                    className="h-8 text-xs font-mono flex-1 min-w-[180px]"
+                  />
+                  <Select value={ruleProviderId} onValueChange={setRuleProviderId}>
+                    <SelectTrigger className="h-8 w-[180px] text-xs">
+                      <SelectValue placeholder="Pin provider..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {providersList.map((p) => (
+                        <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Input
+                    type="number"
+                    placeholder="Priority"
+                    value={rulePriority}
+                    onChange={(e) => setRulePriority(e.target.value)}
+                    className="h-8 w-[90px] text-xs font-mono"
+                  />
+                  <Button
+                    size="sm"
+                    variant="prismViolet"
+                    className="h-8 gap-1 text-xs"
+                    disabled={!rulePattern.trim() || createRuleMutation.isPending}
+                    onClick={handleCreateRule}
+                  >
+                    <Plus className="h-3.5 w-3.5" /> Add Rule
+                  </Button>
+                </div>
+
+                {routingRules.length === 0 ? (
+                  <p className="text-xs text-muted-foreground">No model routing rules defined yet.</p>
+                ) : (
+                  <div className="space-y-2">
+                    {routingRules.map((r) => (
+                      <div key={r.id} className="flex items-center justify-between gap-2 rounded-md border border-border px-3 py-2 text-xs">
+                        <div className="flex items-center gap-2 font-mono">
+                          <Badge variant="outline">P{r.priority}</Badge>
+                          <span className="font-semibold text-foreground">{r.modelPattern}</span>
+                          {r.providerName && <span className="text-muted-foreground">-&gt; {r.providerName}</span>}
+                        </div>
+                        <ConfirmDialog
+                          title="Delete Routing Rule"
+                          description={`Delete routing rule for "${r.modelPattern}"?`}
+                          confirmText="Delete"
+                          onConfirm={() =>
+                            deleteRuleMutation.mutate(r.id, {
+                              onSuccess: () => toast.success('Routing rule deleted'),
+                              onError: (err) => toast.error(`Delete failed: ${getErrorMessage(err)}`),
+                            })
+                          }
+                          trigger={
+                            <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive">
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
+                          }
+                        />
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
           </TabsContent>
         </Tabs>
       )}

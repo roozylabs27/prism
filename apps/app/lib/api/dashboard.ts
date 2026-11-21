@@ -4,6 +4,7 @@ import {
   ApiUsagePoint,
   ApiProviderHealth,
   ApiActiveStreams,
+  ApiPilotOutcomesReport,
 } from './types/dashboard';
 
 export async function apiGetDashboardStats(params?: { days?: number; startDate?: string; endDate?: string }): Promise<ApiDashboardStats> {
@@ -23,5 +24,20 @@ export async function apiGetDashboardHealth(): Promise<ApiProviderHealth[]> {
 
 export async function apiGetActiveStreams(): Promise<ApiActiveStreams> {
   const response = await api.get<ApiActiveStreams>('/dashboard/active-streams');
+  return response.data;
+}
+
+export async function apiGetPilotOutcomes(days = 30): Promise<ApiPilotOutcomesReport> {
+  const response = await api.get<ApiPilotOutcomesReport>('/analytics/pilot-outcomes', {
+    params: { days },
+  });
+  return response.data;
+}
+
+export async function apiExportPilotOutcomes(format: 'csv' | 'json' = 'csv', days = 30): Promise<Blob> {
+  const response = await api.get('/analytics/pilot-outcomes/export', {
+    params: { format, days },
+    responseType: 'blob',
+  });
   return response.data;
 }

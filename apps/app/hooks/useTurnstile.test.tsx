@@ -33,6 +33,15 @@ describe('useTurnstile', () => {
     await expect(result.current.getTokenOrWait()).resolves.toBe('bypass');
   });
 
+  it('respects backend enabled=false even when siteKey is empty', async () => {
+    apiGetTurnstileConfig.mockResolvedValue({ enabled: false, siteKey: '' });
+    const { result } = renderHook(() => useTurnstile(), { wrapper });
+
+    await waitFor(() => expect(result.current.showTurnstile).toBe(false));
+    expect(result.current.isReady).toBe(true);
+    await expect(result.current.getTokenOrWait()).resolves.toBe('bypass');
+  });
+
   it('waits for the widget token and hands it to the caller', async () => {
     apiGetTurnstileConfig.mockResolvedValue({ siteKey: '1x00000000000000000000AA' });
     const { result } = renderHook(() => useTurnstile(), { wrapper });
