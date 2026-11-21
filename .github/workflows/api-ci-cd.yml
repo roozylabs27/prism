@@ -19,6 +19,9 @@ on:
       - '.github/workflows/api-ci-cd.yml'
       # Checked here, but not on push: a script change alone redeploys nothing.
       - 'scripts/**'
+  schedule:
+    # Weekly automated backup & restore drill + non-superuser RLS verification (Sundays 04:17 UTC)
+    - cron: '17 4 * * 0'
   workflow_dispatch:
 
 # Pull requests run lint, tests and builds only; image push and deploy are
@@ -131,6 +134,68 @@ jobs:
           name: api-coverage
           path: apps/api/coverage.out
           retention-days: 14
+
+  backup-restore-drill:
+    name: Backup, Restore & Non-Superuser RLS Drill
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_DB: prism_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgrespassword
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: 'apps/api/go.mod'
+          cache-dependency-path: 'apps/api/go.sum'
+
+      - name: Install PostgreSQL client tools
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+
+      - name: Run database migrations
+        working-directory: apps/api
+        env:
+          APP_ENV: test
+          DATABASE_URL: "postgres://postgres:postgrespassword@localhost:5432/prism_test?sslmode=disable"
+          ENCRYPTION_KEY: "test-encryption-key-32-bytes!!"
+          RUN_MIGRATIONS: "true"
+        run: go run ./cmd/server --migrate-only
+
+      - name: Execute backup and scratch restore drill
+        env:
+          BACKUP_LOCAL: "1"
+          BACKUP_LOCAL_ONLY: "1"
+          BACKUP_MIN_BYTES: "512"
+          BACKUP_DIR: "/tmp/prism-backups"
+          PGHOST: "localhost"
+          PGPORT: "5432"
+          PGUSER: "postgres"
+          PGPASSWORD: "postgrespassword"
+          PGDATABASE: "prism_test"
+        run: |
+          mkdir -p /tmp/prism-backups
+          bash scripts/backup/pg-backup.sh
+          bash scripts/backup/pg-restore-test.sh
+
+      - name: Verify Go RLS isolation suite against PostgreSQL
+        working-directory: apps/api
+        env:
+          DATABASE_URL: "postgres://postgres:postgrespassword@localhost:5432/prism_test?sslmode=disable"
+        run: go test -v ./internal/database -run "TestRLS"
 
   build-and-push:
     name: Build & Push API Docker Image to GHCR

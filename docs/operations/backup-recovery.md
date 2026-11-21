@@ -35,9 +35,14 @@ BACKUP_ALERT_WEBHOOK=https://hooks.slack.com/services/...
 
 Run both once by hand after setting them up and check that a dump appears in the remote.
 
-## 2. Restore test
+## 2. Restore test & CI Verification Drill
 
-`scripts/backup/pg-restore-test.sh [dump]` restores the newest dump (or the one given) into a scratch database `prism_restore_check_*` in the same PostgreSQL instance, checks `schema_migrations` is clean and the schema has its tables, and drops the scratch database. It alerts like the backup script.
+`scripts/backup/pg-restore-test.sh [dump]` restores the newest dump (or the one given) into a scratch database `prism_restore_check_*` in the same PostgreSQL instance, checks `schema_migrations` is clean and the schema has its tables, validates Row-Level Security (`relrowsecurity = true`) on critical tenant tables, compares row counts on reference/migration tables (`schema_migrations`, `providers`, `models`, `permissions`, `roles`), verifies multi-tenant isolation under a `NOSUPERUSER NOBYPASSRLS` role (`prism_app_verify`), and drops the scratch database. It alerts like the backup script.
+
+In CI (`.github/workflows/api-ci-cd.yml`), the `backup-restore-drill` job runs on PRs modifying backend/deploy scripts and on a weekly Sunday schedule (`04:17 UTC`):
+- Applies all migrations cleanly with `cmd/server --migrate-only`.
+- Executes `scripts/backup/pg-backup.sh` -> `scripts/backup/pg-restore-test.sh` end-to-end against `postgres:15-alpine`.
+- Runs `TestRLS_NonSuperuserRoleIsolation` (`apps/api/internal/database/rls_role_verification_test.go`) confirming RPO/RTO drill readiness (< 5 minutes CI restore verification latency on schema + seed data).
 
 ## 3. Restoring production
 

@@ -1,0 +1,26 @@
+global:
+  resolve_timeout: 5m
+
+route:
+  group_by: ['alertname', 'severity']
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+  receiver: 'prism-default'
+  routes:
+    - matchers:
+        - severity = "critical"
+      receiver: 'prism-critical'
+
+receivers:
+  - name: 'prism-default'
+    # Configure ALERTMANAGER_WEBHOOK_URL or Slack/PagerDuty integration before production enablement.
+  - name: 'prism-critical'
+    # Configure critical PagerDuty/Opsgenie/Slack webhook receiver here.
+
+inhibit_rules:
+  - source_matchers:
+      - alertname = "PrismApiDown"
+    target_matchers:
+      - severity = "warning"
+    equal: ['job']

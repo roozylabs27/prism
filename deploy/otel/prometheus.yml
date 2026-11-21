@@ -5,6 +5,11 @@ global:
 rule_files:
   - /etc/prometheus/prism-alerts.yml
 
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: ['alertmanager:9093']
+
 scrape_configs:
   # Both blue/green API containers, over the gateway's compose network. The
   # API's port is bound to the host's loopback only, so Prometheus must be on

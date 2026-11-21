@@ -5,12 +5,14 @@ groups:
   - name: prism-gateway
     rules:
       - alert: PrismApiDown
-        expr: up{job="prism-gateway"} == 0
+        # Blue/green deployment leaves the standby color stopped, so only alert
+        # when neither prism-api nor prism-api-green answers /metrics.
+        expr: max(up{job="prism-gateway"}) == 0
         for: 2m
         labels:
           severity: critical
         annotations:
-          summary: "Prism API target {{ $labels.instance }} is not answering /metrics"
+          summary: "All Prism API targets ({{ $labels.job }}) are unreachable on /metrics"
           runbook: docs/operations/health-readiness.md
 
       - alert: PrismHighErrorRate

@@ -27,7 +27,7 @@ case "$component" in
   app)
     blue_svc=app blue_port=3000 green_port=3005
     tag_var=APP_IMAGE_TAG image=ghcr.io/roozylabs/prism-app
-    health_path=/ health_codes='^(200|30[1278])$'
+    health_path=/api/health health_codes='^(200|30[1278])$'
     upstream=prism_app_backend ;;
   web)
     blue_svc=web blue_port=3001 green_port=3006
@@ -163,15 +163,15 @@ tag="$arg"
 export "$tag_var=$tag"
 echo "=== Deploying $image:$tag to $target (live: $live) ==="
 
-docker compose pull "$target"
+docker compose --profile green pull "$target"
 if [[ "$component" == "api" ]]; then
   # Schema changes run once, before the new colour starts.
   docker compose run --rm migrator
 fi
-docker compose up -d --no-deps "$target"
+docker compose --profile green up -d --no-deps "$target"
 
 if ! wait_healthy "$target"; then
-  docker compose stop "$target" || true
+  docker compose --profile green stop "$target" || true
   echo "=== Deploy failed; $live keeps serving ===" >&2
   exit 1
 fi
@@ -189,7 +189,7 @@ if [[ "$component" == "web" ]]; then
 fi
 
 if ! switch_nginx "$target"; then
-  docker compose stop "$target" || true
+  docker compose --profile green stop "$target" || true
   echo "=== Deploy failed; $live keeps serving ===" >&2
   exit 1
 fi
@@ -200,6 +200,6 @@ fi
 echo "$tag" > "$state_dir/$component.tag"
 
 echo "stopping $live (kept for rollback)"
-docker compose stop "$live"
+docker compose --profile green stop "$live"
 prune_images
 echo "=== $component is live on $target with $tag ==="

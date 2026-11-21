@@ -19,11 +19,13 @@ remove() { grep -vx "$1" "$f/running" > "$f/r.tmp" || true; mv "$f/r.tmp" "$f/ru
 case "$1" in
   ps) if [[ "${2:-}" == "-a" ]]; then cat "$f/running" "$f/stopped"; else cat "$f/running"; fi ;;
   compose)
-    case "$2" in
+    shift 1
+    if [[ "${1:-}" == "--profile" ]]; then shift 2; fi
+    case "$1" in
       pull) [[ -e "$f/pull_fails" ]] && exit 1; true ;;
       run) echo "migrator ran with API_IMAGE_TAG=${API_IMAGE_TAG:-}" >> "$f/calls" ;;
-      up) svc="${@: -1}"; echo "prism-$svc" >> "$f/running"; echo "up $svc with ${API_IMAGE_TAG:-}" >> "$f/calls" ;;
-      stop) svc="$3"; remove "prism-$svc"; echo "prism-$svc" >> "$f/stopped" ;;
+      up) svc="${@: -1}"; echo "prism-$svc" >> "$f/running"; echo "up $svc with ${API_IMAGE_TAG:-}${APP_IMAGE_TAG:-}" >> "$f/calls" ;;
+      stop) svc="$2"; remove "prism-$svc"; echo "prism-$svc" >> "$f/stopped" ;;
     esac ;;
   start) echo "$2" >> "$f/running" ;;
   stop) remove "$2"; echo "$2" >> "$f/stopped" ;;
@@ -94,6 +96,10 @@ check "rollback succeeds" '"$script" api --rollback > /dev/null'
 check "rollback restarts green and switches to it" '[[ "$(upstream)" == *"127.0.0.1:8085;"* ]] && running prism-api-green && ! running prism-api'
 check "rollback pulls nothing" '! grep -q "compose pull\|compose up" "$fake/calls"'
 check "rollback swaps the tags" '[[ "$(cat "$DEPLOY_STATE_DIR/api.tag")" == sha-aaa && "$(cat "$DEPLOY_STATE_DIR/api.previous")" == sha-bbb ]]'
+
+: > "$fake/stopped"; echo prism-app > "$fake/running"
+reset
+check "app deploy uses --profile green and /api/health" '"$script" app sha-app1 > /dev/null && grep -q "up app-green with sha-app1" "$fake/calls"'
 
 if ((fails > 0)); then echo "$fails check(s) failed"; exit 1; fi
 echo "all checks passed"
