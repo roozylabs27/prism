@@ -13,9 +13,9 @@ import { links } from '../../data/site';
 	intro="There are no paid hosted tiers enabled today. Deploy the stack on your own infrastructure, or run a guided staging pilot with us."
 	layout="stacked"
 >
-	<div class="grid gap-8 lg:grid-cols-2 lg:items-stretch">
+	<div class="grid grid-cols-1 gap-8 lg:grid-cols-2 lg:items-stretch">
 		<!-- Entry path 1: Self-host -->
-		<article class="border border-rule rounded-sm bg-raised/40 p-6 sm:p-7 flex flex-col">
+		<article class="min-w-0 border border-rule rounded-sm bg-raised/40 p-6 sm:p-7 flex flex-col">
 			<div class="flex flex-wrap items-baseline justify-between gap-2">
 				<h3 class="font-semibold text-xl">{selfHostOption.title}</h3>
 				<span class="font-mono text-xs text-muted">{selfHostOption.tag}</span>
@@ -62,7 +62,7 @@ import { links } from '../../data/site';
 		</article>
 
 		<!-- Entry path 2: Design-partner staging pilot -->
-		<article class="border border-rule rounded-sm bg-raised/40 p-6 sm:p-7 flex flex-col">
+		<article class="min-w-0 border border-rule rounded-sm bg-raised/40 p-6 sm:p-7 flex flex-col">
 			<div class="flex flex-wrap items-baseline justify-between gap-2">
 				<h3 class="font-semibold text-xl">{pilotOption.title}</h3>
 				<span class="font-mono text-xs text-muted">{pilotOption.tag}</span>

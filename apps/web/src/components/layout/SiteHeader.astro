@@ -6,16 +6,17 @@ import { nav, links, cta, site } from '../../data/site';
 <header
 	id="site-header"
 	data-scrolled="false"
+	data-menu-open="false"
 	class="sticky top-0 z-50 border-b border-transparent bg-transparent transition-[background-color,border-color,backdrop-filter] duration-200"
 >
-	<div class="mx-auto max-w-page px-5 sm:px-8 h-16 flex items-center justify-between gap-3">
+	<div class="relative z-50 mx-auto max-w-page px-5 sm:px-8 h-16 flex items-center justify-between gap-3">
 		<a href="/" class="flex items-center gap-2.5 min-h-[44px] shrink-0 no-underline" aria-label="Prism home">
 			<svg viewBox="0 0 24 24" class="h-6 w-6 text-accent" fill="none" stroke="currentColor" stroke-width="1.75" aria-hidden="true">
 				<path d="M12 3 21 19H3Z" />
 				<path d="M12 3v16" />
 			</svg>
 			<span class="font-semibold text-lg tracking-tight">{site.name}</span>
-			<span class="font-mono text-xs text-muted border border-rule rounded-sm px-1.5 py-0.5">v{site.version}</span>
+			<span class="font-mono text-xs text-muted border border-rule rounded-sm px-1.5 py-0.5">AI Gateway</span>
 		</a>
 
 		<nav aria-label="Primary" class="hidden lg:flex items-center gap-0.5 min-w-0">
@@ -57,44 +58,79 @@ import { nav, links, cta, site } from '../../data/site';
 			<button
 				type="button"
 				id="nav-toggle"
-				class="lg:hidden min-h-[44px] px-3 inline-flex items-center justify-center gap-2 rounded-sm border border-rule text-ink font-mono text-xs hover:border-ink transition-colors duration-150"
+				class="lg:hidden min-h-[44px] min-w-[84px] px-3 inline-flex items-center justify-center gap-2 rounded-sm border border-rule text-ink font-mono text-xs hover:border-ink transition-colors duration-150"
 				aria-expanded="false"
 				aria-controls="mobile-nav"
 				aria-label="Open menu"
 			>
-				<span data-icon-open><Icon name="menu" class="h-4 w-4" /></span>
-				<span data-icon-close class="hidden"><Icon name="close" class="h-4 w-4" /></span>
+				<span class="relative h-4 w-4 inline-flex items-center justify-center" aria-hidden="true">
+					<span
+						data-icon-open
+						class="absolute inset-0 inline-flex items-center justify-center transition-[transform,opacity] duration-200 ease-out opacity-100 rotate-0 scale-100"
+					>
+						<Icon name="menu" class="h-4 w-4" />
+					</span>
+					<span
+						data-icon-close
+						class="absolute inset-0 inline-flex items-center justify-center transition-[transform,opacity] duration-200 ease-out opacity-0 -rotate-90 scale-75"
+					>
+						<Icon name="close" class="h-4 w-4" />
+					</span>
+				</span>
 				<span data-menu-label>Menu</span>
 			</button>
 		</div>
 	</div>
 
-	<nav id="mobile-nav" aria-label="Mobile" class="hidden lg:hidden border-t border-rule bg-paper">
-		<ul class="mx-auto max-w-page px-5 sm:px-8 py-3">
-			{nav.map((item) => (
+	<!-- Backdrop overlay for mobile & tablet drawer -->
+	<div
+		id="mobile-nav-backdrop"
+		data-open="false"
+		aria-hidden="true"
+		class="lg:hidden fixed inset-x-0 top-16 bottom-0 z-40 bg-paper/65 backdrop-blur-[2px] opacity-0 pointer-events-none invisible transition-[opacity,visibility] duration-200 ease-out data-[open=true]:opacity-100 data-[open=true]:pointer-events-auto data-[open=true]:visible"
+	></div>
+
+	<!-- Animated mobile & tablet navigation drawer (grid-rows 0fr -> 1fr + smooth opacity/translate) -->
+	<nav
+		id="mobile-nav"
+		aria-label="Mobile"
+		aria-hidden="true"
+		inert
+		data-open="false"
+		class="lg:hidden absolute inset-x-0 top-full z-50 grid grid-rows-[0fr] opacity-0 pointer-events-none invisible border-b border-transparent bg-paper/95 backdrop-blur-md transition-[grid-template-rows,opacity,visibility,border-color] duration-250 ease-[cubic-bezier(0.22,1,0.36,1)] data-[open=true]:grid-rows-[1fr] data-[open=true]:opacity-100 data-[open=true]:pointer-events-auto data-[open=true]:visible data-[open=true]:border-rule"
+	>
+		<div class="overflow-hidden">
+			<ul
+				data-mobile-nav-list
+				class="mx-auto max-w-page px-5 sm:px-8 py-3 -translate-y-2 opacity-0 transition-[transform,opacity] duration-200 ease-out"
+			>
+				{nav.map((item) => (
+					<li>
+						<a href={item.href} class="flex items-center min-h-[48px] border-b border-rule text-ink hover:text-accent transition-colors duration-150">
+							{item.label}
+						</a>
+					</li>
+				))}
 				<li>
-					<a href={item.href} class="flex items-center min-h-[48px] border-b border-rule text-ink">{item.label}</a>
+					<a href={links.docs} target="_blank" rel="noopener noreferrer" class="flex items-center justify-between min-h-[48px] border-b border-rule text-ink hover:text-accent transition-colors duration-150">
+						Docs <Icon name="external" class="h-4 w-4 text-muted" />
+					</a>
 				</li>
-			))}
-			<li>
-				<a href={links.docs} target="_blank" rel="noopener noreferrer" class="flex items-center justify-between min-h-[48px] border-b border-rule text-ink">
-					Docs <Icon name="external" class="h-4 w-4 text-muted" />
-				</a>
-			</li>
-			<li>
-				<a href={links.repo} target="_blank" rel="noopener noreferrer" class="flex items-center justify-between min-h-[48px] border-b border-rule text-ink">
-					GitHub <Icon name="external" class="h-4 w-4 text-muted" />
-				</a>
-			</li>
-			<li class="pt-4 pb-2 flex flex-col gap-2.5">
-				<a href={cta.primary.href} target="_blank" rel="noopener noreferrer" class="flex items-center justify-center gap-2 min-h-[48px] rounded-sm bg-ink text-paper font-medium">
-					{cta.primary.label}
-					<Icon name="external" class="h-4 w-4" />
-				</a>
-				<a href={cta.secondary.href} class="flex items-center justify-center min-h-[48px] rounded-sm border border-rule text-ink font-medium">
-					{cta.secondary.label}
-				</a>
-			</li>
-		</ul>
+				<li>
+					<a href={links.repo} target="_blank" rel="noopener noreferrer" class="flex items-center justify-between min-h-[48px] border-b border-rule text-ink hover:text-accent transition-colors duration-150">
+						GitHub <Icon name="external" class="h-4 w-4 text-muted" />
+					</a>
+				</li>
+				<li class="pt-4 pb-2 flex flex-col sm:flex-row gap-2.5">
+					<a href={cta.primary.href} target="_blank" rel="noopener noreferrer" class="flex-1 flex items-center justify-center gap-2 min-h-[48px] px-4 rounded-sm bg-ink text-paper font-medium hover:bg-ink/85 transition-colors duration-150">
+						{cta.primary.label}
+						<Icon name="external" class="h-4 w-4" />
+					</a>
+					<a href={cta.secondary.href} class="flex-1 flex items-center justify-center min-h-[48px] px-4 rounded-sm border border-rule text-ink font-medium hover:border-ink transition-colors duration-150">
+						{cta.secondary.label}
+					</a>
+				</li>
+			</ul>
+		</div>
 	</nav>
 </header>

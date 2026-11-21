@@ -1,5 +1,5 @@
 export const governed = [
-  'Model inference sent to /v1/chat/completions (sync or SSE stream) and /v1/chat/completions/async (polled via /v1/jobs/:jobId)',
+  'Model inference sent to /v1/chat/completions (sync or SSE stream), /v1/messages (Anthropic format), and /v1/chat/completions/async (polled via /v1/jobs/:jobId)',
   'MCP tool discovery and execution sent through POST /v1/mcp (JSON-RPC 2.0 Streamable HTTP)',
   'Governed REST tool calls (/v1/tools/:name/execute) and data resource queries (/v1/resources/:name/query)',
   'Upstream provider credential selection, Retry-After cooldowns, and workspace or agent spend limits',
@@ -47,17 +47,17 @@ export const inference = [
   },
   {
     title: 'Failover across provider credentials',
-    body: 'When an upstream credential returns 429 or 5xx, Prism places it in a Redis cooldown honoring Retry-After and retries the next eligible credential. Only the final successful attempt is billed; if all candidates fail, the caller receives the error.',
+    body: 'When an upstream credential returns 429 or 5xx (or fails before the first token on an SSE stream), Prism places it in a Redis cooldown honoring Retry-After and retries the next eligible credential. Prism only records token spend for the final completed response; if all candidates fail, the caller receives the error.',
     ref: 'Retry-After · 50x circuit breaker',
   },
   {
-    title: 'Every response records what served it',
+    title: 'Response headers record what served the call',
     body: 'Responses include X-Request-ID, X-Prism-Model, and X-Prism-Provider. Requests routed via prism-auto also carry X-Prism-Routing-Policy, non-streaming completions report retries in X-Prism-Failovers, and budget warnings appear in X-Prism-Budget-Status.',
     ref: 'X-Prism-Model · X-Prism-Provider',
   },
   {
     title: 'Fail closed when Redis state is unavailable',
-    body: 'Spend reservations, quotas, and rate limits rely on Redis. Outside development, setting REDIS_FAIL_CLOSED refuses gateway calls when Redis is unreachable rather than letting spend go unchecked.',
+    body: 'Spend reservations, quotas, and rate limits rely on Redis. Outside development (REDIS_FAIL_CLOSED=true by default), Prism refuses gateway calls with 503 when Redis is unreachable rather than letting spend go unchecked.',
     ref: 'REDIS_FAIL_CLOSED',
   },
 ];
@@ -65,7 +65,7 @@ export const inference = [
 export const agentControls = [
   {
     term: 'Identity',
-    def: 'Bind an agentId directly to a gateway key so callers cannot omit or spoof it, or pass X-Prism-Agent-ID per request.',
+    def: 'Bind an agentId directly to a gateway key so callers cannot omit or spoof it, or pass X-Prism-Agent-ID per request for a registered agent.',
   },
   {
     term: 'Allowlists & !deny',
@@ -85,7 +85,7 @@ export const agentControls = [
   },
   {
     term: 'Audit records',
-    def: 'Every allowed and denied model, tool, and MCP execution is logged with agent identity, policy decision, and reason.',
+    def: 'Allowed and denied model, tool, and MCP executions are recorded with agent identity, policy decision, and reason.',
   },
 ];
 
@@ -99,16 +99,16 @@ export const agentPolicyExample = `{
 
 export const selfHostOption = {
   title: 'Self-host with Docker Compose',
-  tag: 'MIT Licensed · Local or VPS',
-  who: 'For engineering teams evaluating Prism on their own Docker host or infrastructure.',
+  tag: 'Self-hosted · Local Docker or VPS',
+  who: 'For engineering teams running Prism on their own infrastructure. No Prism software fee; you run the containers and pay your upstream AI providers directly for model usage.',
   prerequisites:
     'Docker and Docker Compose (or Go 1.25+, pnpm 9+, PostgreSQL 15, and Redis 7), plus at least one upstream provider API key.',
   command:
     'git clone https://github.com/roozylabs27/prism.git && cd prism && cp .env.example .env && docker compose up -d --build',
   steps: [
-    'Clone the repository, copy .env.example to .env, and set your database/encryption secrets.',
-    'Start the Go gateway (:8080), Next.js admin console (:3000), Postgres, and Redis with Docker Compose.',
-    'Add a provider credential in the console, mint a workspace-scoped prism_sk_* key, and point your client base URL at localhost:8080/v1.',
+    'Clone the repository, copy .env.example to .env, and set POSTGRES_PASSWORD, REDIS_PASSWORD, ENCRYPTION_KEY (32+ chars), and APP_ENV=development for local testing.',
+    'Start the Go gateway (127.0.0.1:8080), Next.js admin console (127.0.0.1:3000), Postgres, and Redis with docker compose up -d --build.',
+    'Sign up in the local console, add a provider credential, mint a prism_sk_* gateway key, and point your client base URL at http://localhost:8080/v1.',
   ],
   linkLabel: 'Self-host with Docker',
   expectAfterClick:
@@ -118,11 +118,11 @@ export const selfHostOption = {
 export const pilotOption = {
   title: 'Design-partner staging pilot',
   tag: 'Guided 14-day cohort · 3 to 5 agencies',
-  who: 'For AI automation agencies running 5 to 30 client accounts who want hands-on help setting up isolated workspaces, quotas, and agent policies.',
+  who: 'For AI automation agencies running 5 to 30 client accounts who want hands-on help setting up isolated workspaces, quotas, and agent policies on staging traffic.',
   prerequisites:
     '2 or more isolated client or project staging workflows (OpenAI SDK, n8n, LangGraph, CrewAI, or HTTP MCP client) ready to route through Prism for 7 to 14 days.',
   steps: [
-    'Open a short pilot request with your client count, model stack, and MCP tool setup.',
+    'Open a pilot request issue on GitHub with your client count, model stack, and MCP tool setup.',
     'Join a 30-minute onboarding session to configure client workspaces, pinned gateway keys, and hard quota caps.',
     'Run staging traffic for 7 to 14 days, test a hard budget/tool denial end-to-end, and review exported CSV/JSON cost outcomes together.',
   ],
@@ -135,5 +135,5 @@ export const pilotOption = {
   ],
   linkLabel: 'Apply for a design-partner pilot',
   expectAfterClick:
-    'Opens a pre-filled GitHub issue to share your workload profile, with the 1-page pilot charter linked below.',
+    'Opens a pre-filled GitHub issue template (requires a GitHub account) to share your workload profile, with the 1-page pilot charter linked below.',
 };

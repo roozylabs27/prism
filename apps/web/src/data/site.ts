@@ -1,11 +1,10 @@
 export const site = {
   name: 'Prism',
   org: 'RoozyLabs',
-  version: '0.4.0',
   url: 'https://prism.roozylabs.com',
-  title: 'Prism: the control layer between AI agents, models, and tools',
+  title: 'Prism: AI Gateway, Model Routing & MCP Tool Control',
   description:
-    'Prism is a self-hostable AI gateway that gives each workspace and project its own keys, spend quotas, model routing, and MCP tool permissions.',
+    'Prism is a self-hostable AI gateway for routing requests across supported model providers and MCP tool servers. Manage provider credentials, routing policies, agent permissions, and workspace spend controls from one place.',
 };
 
 const repo = 'https://github.com/roozylabs27/prism';

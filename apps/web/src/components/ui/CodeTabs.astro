@@ -3,7 +3,7 @@ import Icon from './Icon.astro';
 import { integrations } from '../../data/integrations';
 ---
 
-<div data-tabs class="border border-rule rounded-sm bg-raised">
+<div data-tabs class="min-w-0 max-w-full overflow-hidden border border-rule rounded-sm bg-raised">
 	<div class="flex items-stretch justify-between border-b border-rule min-w-0">
 		<div role="tablist" aria-label="Integration examples" class="flex flex-1 min-w-0 overflow-x-auto">
 			{integrations.map((item, i) => (
@@ -36,9 +36,25 @@ import { integrations } from '../../data/integrations';
 			aria-labelledby={`tab-${item.id}`}
 			hidden={i !== 0}
 			tabindex="0"
+			class="min-w-0"
 		>
-			<p class="px-4 pt-4 text-sm text-muted">{item.note}</p>
+			<div class="px-4 pt-4 space-y-1.5 min-w-0">
+				<p class="text-sm text-ink break-words">{item.note}</p>
+				<p class="text-xs font-mono text-muted break-words">
+					<span class="uppercase tracking-wider">Prerequisites: </span>{item.prerequisites}
+				</p>
+			</div>
 			<pre class="p-4 overflow-x-auto text-sm leading-relaxed"><code>{item.code}</code></pre>
+			<div class="px-4 py-3 border-t border-rule bg-paper/40 grid grid-cols-1 gap-2 sm:grid-cols-2 text-xs font-mono min-w-0">
+				<div class="min-w-0">
+					<span class="text-allow uppercase tracking-wider block">Expected response</span>
+					<span class="text-muted mt-0.5 block break-words">{item.expectedResponse}</span>
+				</div>
+				<div class="min-w-0">
+					<span class="text-deny uppercase tracking-wider block">Common failure cases</span>
+					<span class="text-muted mt-0.5 block break-words">{item.failureCases}</span>
+				</div>
+			</div>
 		</div>
 	))}
 	<p data-copy-status class="sr-only" aria-live="polite"></p>

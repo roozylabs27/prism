@@ -31,10 +31,12 @@ function setupHeaderScroll() {
 		const menuOpen = toggle?.getAttribute('aria-expanded') === 'true';
 		const scrolled = window.scrollY > 12 || menuOpen;
 		header.dataset.scrolled = String(scrolled);
+		header.dataset.menuOpen = String(menuOpen);
 		header.classList.toggle('border-transparent', !scrolled);
 		header.classList.toggle('bg-transparent', !scrolled);
 		header.classList.toggle('border-rule', scrolled);
-		header.classList.toggle('bg-paper/85', scrolled);
+		header.classList.toggle('bg-paper/95', menuOpen);
+		header.classList.toggle('bg-paper/85', scrolled && !menuOpen);
 		header.classList.toggle('backdrop-blur-md', scrolled);
 	};
 
@@ -46,15 +48,50 @@ function setupHeaderScroll() {
 function setupMobileNav(onMenuChange?: () => void) {
 	const toggle = document.getElementById('nav-toggle');
 	const panel = document.getElementById('mobile-nav');
+	const backdrop = document.getElementById('mobile-nav-backdrop');
 	if (!toggle || !panel) return;
-	const iconOpen = toggle.querySelector('[data-icon-open]');
-	const iconClose = toggle.querySelector('[data-icon-close]');
+	const iconOpen = toggle.querySelector<HTMLElement>('[data-icon-open]');
+	const iconClose = toggle.querySelector<HTMLElement>('[data-icon-close]');
 	const label = toggle.querySelector('[data-menu-label]');
+	const list = panel.querySelector<HTMLElement>('[data-mobile-nav-list]');
 
 	const setOpen = (open: boolean, returnFocus = false) => {
-		panel.classList.toggle('hidden', !open);
-		iconOpen?.classList.toggle('hidden', open);
-		iconClose?.classList.toggle('hidden', !open);
+		panel.dataset.open = String(open);
+		panel.setAttribute('aria-hidden', String(!open));
+		if (open) {
+			panel.removeAttribute('inert');
+		} else {
+			panel.setAttribute('inert', '');
+		}
+
+		if (backdrop) {
+			backdrop.dataset.open = String(open);
+		}
+
+		if (list) {
+			list.classList.toggle('-translate-y-2', !open);
+			list.classList.toggle('opacity-0', !open);
+			list.classList.toggle('translate-y-0', open);
+			list.classList.toggle('opacity-100', open);
+		}
+
+		if (iconOpen) {
+			iconOpen.classList.toggle('opacity-100', !open);
+			iconOpen.classList.toggle('rotate-0', !open);
+			iconOpen.classList.toggle('scale-100', !open);
+			iconOpen.classList.toggle('opacity-0', open);
+			iconOpen.classList.toggle('rotate-90', open);
+			iconOpen.classList.toggle('scale-75', open);
+		}
+		if (iconClose) {
+			iconClose.classList.toggle('opacity-0', !open);
+			iconClose.classList.toggle('-rotate-90', !open);
+			iconClose.classList.toggle('scale-75', !open);
+			iconClose.classList.toggle('opacity-100', open);
+			iconClose.classList.toggle('rotate-0', open);
+			iconClose.classList.toggle('scale-100', open);
+		}
+
 		if (label) label.textContent = open ? 'Close' : 'Menu';
 		toggle.setAttribute('aria-expanded', String(open));
 		toggle.setAttribute('aria-label', open ? 'Close menu' : 'Open menu');
@@ -64,6 +101,7 @@ function setupMobileNav(onMenuChange?: () => void) {
 	};
 
 	toggle.addEventListener('click', () => setOpen(toggle.getAttribute('aria-expanded') !== 'true'));
+	backdrop?.addEventListener('click', () => setOpen(false));
 	panel.querySelectorAll('a').forEach((a) => a.addEventListener('click', () => setOpen(false)));
 	document.addEventListener('keydown', (e) => {
 		if (e.key === 'Escape' && toggle.getAttribute('aria-expanded') === 'true') setOpen(false, true);
