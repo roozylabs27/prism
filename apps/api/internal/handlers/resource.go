@@ -19,16 +19,44 @@ import (
 	"github.com/roozylabs/prism/internal/utils"
 )
 
+type resourceStore interface {
+	ListByUserID(ctx context.Context, userID, workspaceID string) ([]models.Resource, error)
+	FindByID(ctx context.Context, id, userID string) (*models.Resource, error)
+	CreateWithBackendsTx(ctx context.Context, res *models.Resource, backends []models.ResourceBackend) error
+	Update(ctx context.Context, res *models.Resource) error
+	Delete(ctx context.Context, id, userID string) error
+	GetResourceWithBackendsByID(ctx context.Context, id, userID string) (*models.ResourceWithBackends, error)
+}
+
+type resourceBackendStore interface {
+	ListByResourceID(ctx context.Context, resourceID string) ([]models.ResourceBackend, error)
+	DeleteByResourceID(ctx context.Context, resourceID string) error
+	Create(ctx context.Context, b *models.ResourceBackend) error
+}
+
+var (
+	_ resourceStore        = (*repository.ResourceRepository)(nil)
+	_ resourceBackendStore = (*repository.ResourceBackendRepository)(nil)
+)
+
 type ResourceHandler struct {
-	resources       *repository.ResourceRepository
-	backends        *repository.ResourceBackendRepository
+	resources       resourceStore
+	backends        resourceBackendStore
 	gateway         proxy.ResourceGatewayExecutor
 	encKey          string
 	postgresEnabled bool
 }
 
 func NewResourceHandler(resources *repository.ResourceRepository, backends *repository.ResourceBackendRepository, gateway proxy.ResourceGatewayExecutor, encKey string) *ResourceHandler {
-	return &ResourceHandler{resources: resources, backends: backends, gateway: gateway, encKey: encKey}
+	var rStore resourceStore
+	if resources != nil {
+		rStore = resources
+	}
+	var bStore resourceBackendStore
+	if backends != nil {
+		bStore = backends
+	}
+	return &ResourceHandler{resources: rStore, backends: bStore, gateway: gateway, encKey: encKey}
 }
 
 // SetPostgresBackends allows backends of type "postgres". They open a
@@ -94,6 +122,7 @@ func getTenantContext(c *gin.Context) (orgID, wsID, userID string) {
 }
 
 type CreateResourceBackendRequest struct {
+	ID               string   `json:"id"`
 	Name             string   `json:"name" binding:"required"`
 	BackendType      string   `json:"backendType" binding:"required"`
 	EndpointURL      *string  `json:"endpointUrl"`
@@ -114,6 +143,14 @@ type CreateResourceRequest struct {
 	ParametersSchema json.RawMessage                `json:"parametersSchema"`
 	Enabled          *bool                          `json:"enabled"`
 	Backends         []CreateResourceBackendRequest `json:"backends"`
+}
+
+type UpdateResourceRequest struct {
+	DisplayName      *string                         `json:"displayName"`
+	Description      *string                         `json:"description"`
+	ParametersSchema json.RawMessage                 `json:"parametersSchema"`
+	Enabled          *bool                           `json:"enabled"`
+	Backends         *[]CreateResourceBackendRequest `json:"backends"`
 }
 
 func (h *ResourceHandler) List(c *gin.Context) {
@@ -234,18 +271,24 @@ func (h *ResourceHandler) Update(c *gin.Context) {
 		return
 	}
 
-	var req CreateResourceRequest
+	var req UpdateResourceRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		httputil.RespondBadRequest(c, "Invalid request payload", err, "INVALID_REQUEST_BODY")
 		return
 	}
-	if !h.backendsAllowed(c, req.Backends) {
+	if req.Backends != nil && !h.backendsAllowed(c, *req.Backends) {
 		return
 	}
 
-	existing.DisplayName = req.DisplayName
-	existing.Description = req.Description
-	existing.ParametersSchema = req.ParametersSchema
+	if req.DisplayName != nil {
+		existing.DisplayName = *req.DisplayName
+	}
+	if req.Description != nil {
+		existing.Description = *req.Description
+	}
+	if req.ParametersSchema != nil {
+		existing.ParametersSchema = req.ParametersSchema
+	}
 	if len(existing.ParametersSchema) == 0 {
 		existing.ParametersSchema = json.RawMessage(`{}`)
 	}
@@ -258,12 +301,18 @@ func (h *ResourceHandler) Update(c *gin.Context) {
 	}
 
 	if req.Backends != nil {
+		priorBackends, err := h.backends.ListByResourceID(c.Request.Context(), id)
+		if err != nil {
+			httputil.RespondInternalError(c, "Failed to load existing backends", err, "BACKENDS_LOAD_FAILED")
+			return
+		}
 		if err := h.backends.DeleteByResourceID(c.Request.Context(), id); err != nil {
 			httputil.RespondInternalError(c, "Failed to replace backends", err, "BACKENDS_REPLACE_FAILED")
 			return
 		}
-		for _, br := range req.Backends {
-			if err := h.createBackend(c.Request.Context(), id, br); err != nil {
+		for _, br := range *req.Backends {
+			prior := matchPriorResourceBackend(br, priorBackends)
+			if err := h.createBackendWithPrior(c.Request.Context(), id, br, prior); err != nil {
 				httputil.RespondInternalError(c, "Backend failed: "+br.Name, err, "RESOURCE_BACKEND_FAILED")
 				return
 			}
@@ -312,7 +361,28 @@ func (h *ResourceHandler) TestResource(c *gin.Context) {
 	c.JSON(http.StatusOK, result)
 }
 
-func (h *ResourceHandler) createBackend(ctx context.Context, resourceID string, br CreateResourceBackendRequest) error {
+func matchPriorResourceBackend(br CreateResourceBackendRequest, prior []models.ResourceBackend) *models.ResourceBackend {
+	if br.ID != "" {
+		for i := range prior {
+			if prior[i].ID == br.ID {
+				return &prior[i]
+			}
+		}
+	}
+	lowerName := strings.ToLower(strings.TrimSpace(br.Name))
+	var uniqueMatch *models.ResourceBackend
+	for i := range prior {
+		if strings.ToLower(strings.TrimSpace(prior[i].Name)) == lowerName {
+			if uniqueMatch != nil {
+				return nil
+			}
+			uniqueMatch = &prior[i]
+		}
+	}
+	return uniqueMatch
+}
+
+func (h *ResourceHandler) createBackendWithPrior(ctx context.Context, resourceID string, br CreateResourceBackendRequest, prior *models.ResourceBackend) error {
 	b := &models.ResourceBackend{
 		ResourceID:       resourceID,
 		Name:             br.Name,
@@ -334,7 +404,7 @@ func (h *ResourceHandler) createBackend(ctx context.Context, resourceID string, 
 	if br.Priority <= 0 {
 		b.Priority = 1
 	}
-	if br.HTTPMethod == "" {
+	if b.HTTPMethod == "" {
 		b.HTTPMethod = "POST"
 	}
 	if br.AuthToken != "" && h.encKey != "" {
@@ -343,6 +413,11 @@ func (h *ResourceHandler) createBackend(ctx context.Context, resourceID string, 
 			return err
 		}
 		b.AuthTokenEncrypted = &enc
+	} else if prior != nil && prior.AuthTokenEncrypted != nil {
+		encCopy := *prior.AuthTokenEncrypted
+		b.AuthTokenEncrypted = &encCopy
+		b.AuthHeaderName = prior.AuthHeaderName
+		b.AuthHeaderPrefix = prior.AuthHeaderPrefix
 	}
 	if br.ConnectionString != nil && *br.ConnectionString != "" && h.encKey != "" {
 		enc, err := utils.EncryptAES256GCM(*br.ConnectionString, h.encKey)
@@ -350,6 +425,9 @@ func (h *ResourceHandler) createBackend(ctx context.Context, resourceID string, 
 			return err
 		}
 		b.ConnectionStringEncrypted = &enc
+	} else if prior != nil && prior.ConnectionStringEncrypted != nil {
+		encCopy := *prior.ConnectionStringEncrypted
+		b.ConnectionStringEncrypted = &encCopy
 	}
 	return h.backends.Create(ctx, b)
 }

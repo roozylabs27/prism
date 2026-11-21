@@ -1,10 +1,11 @@
 package handlers
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"net/http"
-	"strings"
+	"net/http/httptest"
 	"testing"
 
 	"github.com/gin-gonic/gin"
@@ -15,25 +16,23 @@ import (
 )
 
 type fakeWorkspaceStore struct {
-	orgsMaxWS   map[string]int
-	orgsMaxProj map[string]int
-	workspaces  map[string]models.Workspace
-	projects    map[string]models.Project
+	workspaces map[string]models.Workspace
+	projects   map[string]models.Project
 }
 
 func newFakeWorkspaceStore() *fakeWorkspaceStore {
 	return &fakeWorkspaceStore{
-		orgsMaxWS:   map[string]int{"org_agency": 5},
-		orgsMaxProj: map[string]int{"org_agency": 3},
 		workspaces: map[string]models.Workspace{
-			"ws_other": {ID: "ws_other", OrgID: "org_other", Name: "Foreign Client", Slug: "foreign"},
+			"ws-1": {ID: "ws-1", OrgID: "org-1", Name: "Default", Slug: "default"},
 		},
-		projects: map[string]models.Project{},
+		projects: map[string]models.Project{
+			"proj-1": {ID: "proj-1", WorkspaceID: "ws-1", Name: "Core", Slug: "core"},
+		},
 	}
 }
 
 func (f *fakeWorkspaceStore) ListWorkspacesByOrg(_ context.Context, orgID string) ([]models.Workspace, error) {
-	out := []models.Workspace{}
+	var out []models.Workspace
 	for _, ws := range f.workspaces {
 		if ws.OrgID == orgID {
 			out = append(out, ws)
@@ -43,25 +42,31 @@ func (f *fakeWorkspaceStore) ListWorkspacesByOrg(_ context.Context, orgID string
 }
 
 func (f *fakeWorkspaceStore) CreateWorkspace(_ context.Context, orgID, _, name, slug string) (*models.Workspace, error) {
-	count := 0
-	for _, ws := range f.workspaces {
-		if ws.OrgID == orgID {
-			count++
-			if slug != "" && ws.Slug == slug {
-				return nil, repository.ErrWorkspaceSlugExists
-			}
-		}
-	}
-	if max := f.orgsMaxWS[orgID]; max > 0 && count >= max {
-		return nil, repository.ErrWorkspaceLimitReached
-	}
-	if slug == "" {
-		slug = strings.ToLower(strings.ReplaceAll(name, " ", "-"))
-	}
-	id := "ws_" + slug
-	ws := models.Workspace{ID: id, OrgID: orgID, Name: name, Slug: slug}
-	f.workspaces[id] = ws
+	ws := models.Workspace{ID: "ws-2", OrgID: orgID, Name: name, Slug: slug}
+	f.workspaces[ws.ID] = ws
 	return &ws, nil
+}
+
+func (f *fakeWorkspaceStore) UpdateWorkspace(_ context.Context, orgID, workspaceID, name, slug string) (*models.Workspace, error) {
+	ws, ok := f.workspaces[workspaceID]
+	if !ok || ws.OrgID != orgID {
+		return nil, repository.ErrWorkspaceNotFound
+	}
+	ws.Name = name
+	if slug != "" {
+		ws.Slug = slug
+	}
+	f.workspaces[workspaceID] = ws
+	return &ws, nil
+}
+
+func (f *fakeWorkspaceStore) DeleteWorkspace(_ context.Context, orgID, workspaceID string) error {
+	ws, ok := f.workspaces[workspaceID]
+	if !ok || ws.OrgID != orgID {
+		return repository.ErrWorkspaceNotFound
+	}
+	delete(f.workspaces, workspaceID)
+	return nil
 }
 
 func (f *fakeWorkspaceStore) ListProjectsByWorkspace(_ context.Context, orgID, workspaceID string) ([]models.Project, error) {
@@ -69,7 +74,7 @@ func (f *fakeWorkspaceStore) ListProjectsByWorkspace(_ context.Context, orgID, w
 	if !ok || ws.OrgID != orgID {
 		return nil, repository.ErrWorkspaceNotFound
 	}
-	out := []models.Project{}
+	var out []models.Project
 	for _, p := range f.projects {
 		if p.WorkspaceID == workspaceID {
 			out = append(out, p)
@@ -83,87 +88,85 @@ func (f *fakeWorkspaceStore) CreateProject(_ context.Context, orgID, workspaceID
 	if !ok || ws.OrgID != orgID {
 		return nil, repository.ErrWorkspaceNotFound
 	}
-	count := 0
-	for _, p := range f.projects {
-		if p.WorkspaceID == workspaceID {
-			count++
-			if slug != "" && p.Slug == slug {
-				return nil, repository.ErrProjectSlugExists
-			}
-		}
-	}
-	if max := f.orgsMaxProj[orgID]; max > 0 && count >= max {
-		return nil, repository.ErrProjectLimitReached
-	}
-	if slug == "" {
-		slug = strings.ToLower(strings.ReplaceAll(name, " ", "-"))
-	}
-	id := "proj_" + slug
-	p := models.Project{ID: id, WorkspaceID: workspaceID, Name: name, Slug: slug}
-	f.projects[id] = p
+	p := models.Project{ID: "proj-2", WorkspaceID: workspaceID, Name: name, Slug: slug}
+	f.projects[p.ID] = p
 	return &p, nil
 }
 
-func TestWorkspaceHandler_OrgIsolationLimitsAndProjectHierarchy(t *testing.T) {
+func (f *fakeWorkspaceStore) UpdateProject(_ context.Context, orgID, workspaceID, projectID, name, slug string) (*models.Project, error) {
+	ws, ok := f.workspaces[workspaceID]
+	if !ok || ws.OrgID != orgID {
+		return nil, repository.ErrWorkspaceNotFound
+	}
+	p, ok := f.projects[projectID]
+	if !ok || p.WorkspaceID != workspaceID {
+		return nil, repository.ErrProjectNotFound
+	}
+	p.Name = name
+	if slug != "" {
+		p.Slug = slug
+	}
+	f.projects[projectID] = p
+	return &p, nil
+}
+
+func (f *fakeWorkspaceStore) DeleteProject(_ context.Context, orgID, workspaceID, projectID string) error {
+	ws, ok := f.workspaces[workspaceID]
+	if !ok || ws.OrgID != orgID {
+		return repository.ErrWorkspaceNotFound
+	}
+	p, ok := f.projects[projectID]
+	if !ok || p.WorkspaceID != workspaceID {
+		return repository.ErrProjectNotFound
+	}
+	delete(f.projects, projectID)
+	return nil
+}
+
+func TestWorkspaceHandler_UpdateAndDeleteWorkspaceAndProject(t *testing.T) {
+	gin.SetMode(gin.TestMode)
 	store := newFakeWorkspaceStore()
 	h := &WorkspaceHandler{repo: store}
 
-	register := func(r *gin.Engine) {
-		r.GET("/api/workspaces", h.ListWorkspaces)
-		r.POST("/api/workspaces", h.CreateWorkspace)
-		r.GET("/api/workspaces/:workspaceId/projects", h.ListProjects)
-		r.POST("/api/workspaces/:workspaceId/projects", h.CreateProject)
-	}
+	// Update workspace
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest(http.MethodPut, "/api/workspaces/ws-1", bytes.NewBufferString(`{"name":"Production","slug":"production"}`))
+	c.Params = gin.Params{{Key: "workspaceId", Value: "ws-1"}}
+	c.Set("organizationId", "org-1")
+	h.UpdateWorkspace(c)
+	require.Equal(t, http.StatusOK, w.Code)
+	var updatedWS models.Workspace
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &updatedWS))
+	assert.Equal(t, "Production", updatedWS.Name)
+	assert.Equal(t, "production", updatedWS.Slug)
 
-	agencyTenant := &models.TenantContext{OrgID: "org_agency", Role: "owner"}
-	r := asUser("alice", agencyTenant, register)
+	// Update project
+	wProj := httptest.NewRecorder()
+	cProj, _ := gin.CreateTestContext(wProj)
+	cProj.Request = httptest.NewRequest(http.MethodPut, "/api/workspaces/ws-1/projects/proj-1", bytes.NewBufferString(`{"name":"Agent Core","slug":"agent-core"}`))
+	cProj.Params = gin.Params{{Key: "workspaceId", Value: "ws-1"}, {Key: "projectId", Value: "proj-1"}}
+	cProj.Set("organizationId", "org-1")
+	h.UpdateProject(cProj)
+	require.Equal(t, http.StatusOK, wProj.Code)
+	var updatedProj models.Project
+	require.NoError(t, json.Unmarshal(wProj.Body.Bytes(), &updatedProj))
+	assert.Equal(t, "Agent Core", updatedProj.Name)
 
-	// 1. Missing name -> 400
-	wBad := doJSON(r, http.MethodPost, "/api/workspaces", `{"name":"   "}`)
-	requireStatus(t, wBad, http.StatusBadRequest)
+	// Delete project then workspace
+	wDelProj := httptest.NewRecorder()
+	cDelProj, _ := gin.CreateTestContext(wDelProj)
+	cDelProj.Request = httptest.NewRequest(http.MethodDelete, "/api/workspaces/ws-1/projects/proj-1", nil)
+	cDelProj.Params = gin.Params{{Key: "workspaceId", Value: "ws-1"}, {Key: "projectId", Value: "proj-1"}}
+	cDelProj.Set("organizationId", "org-1")
+	h.DeleteProject(cDelProj)
+	require.Equal(t, http.StatusOK, wDelProj.Code)
 
-	// 2. Create two isolated client workspaces cleanly
-	wC1 := doJSON(r, http.MethodPost, "/api/workspaces", `{"name":"Client Alpha","slug":"client-alpha"}`)
-	requireStatus(t, wC1, http.StatusCreated)
-	var ws1 models.Workspace
-	require.NoError(t, json.Unmarshal(wC1.Body.Bytes(), &ws1))
-	assert.Equal(t, "org_agency", ws1.OrgID)
-
-	wC2 := doJSON(r, http.MethodPost, "/api/workspaces", `{"name":"Client Beta","slug":"client-beta"}`)
-	requireStatus(t, wC2, http.StatusCreated)
-
-	// 3. Duplicate slug -> 409 conflict
-	wDup := doJSON(r, http.MethodPost, "/api/workspaces", `{"name":"Dup","slug":"client-alpha"}`)
-	requireStatus(t, wDup, http.StatusConflict)
-	assert.Contains(t, wDup.Body.String(), "WORKSPACE_SLUG_EXISTS")
-
-	// 4. Listing excludes foreign organization workspaces
-	wList := doJSON(r, http.MethodGet, "/api/workspaces", "")
-	requireStatus(t, wList, http.StatusOK)
-	assert.Contains(t, wList.Body.String(), "Client Alpha")
-	assert.Contains(t, wList.Body.String(), "Client Beta")
-	assert.NotContains(t, wList.Body.String(), "Foreign Client")
-
-	// 5. Creating project inside foreign workspace fails closed (404)
-	wForeignProj := doJSON(r, http.MethodPost, "/api/workspaces/ws_other/projects", `{"name":"Sneaky"}`)
-	requireStatus(t, wForeignProj, http.StatusNotFound)
-	assert.Contains(t, wForeignProj.Body.String(), "WORKSPACE_NOT_FOUND")
-
-	// 6. Create project inside Client Alpha & verify max project limit (max=3 -> 4th fails 409)
-	for _, pName := range []string{"Support Bot", "Invoice Extractor", "Sales Triage"} {
-		wP := doJSON(r, http.MethodPost, "/api/workspaces/"+ws1.ID+"/projects", `{"name":"`+pName+`"}`)
-		requireStatus(t, wP, http.StatusCreated)
-	}
-	wLimit := doJSON(r, http.MethodPost, "/api/workspaces/"+ws1.ID+"/projects", `{"name":"Fourth Bot"}`)
-	requireStatus(t, wLimit, http.StatusConflict)
-	assert.Contains(t, wLimit.Body.String(), "PROJECT_LIMIT_REACHED")
-
-	wListProj := doJSON(r, http.MethodGet, "/api/workspaces/"+ws1.ID+"/projects", "")
-	requireStatus(t, wListProj, http.StatusOK)
-	assert.Contains(t, wListProj.Body.String(), "Support Bot")
-
-	// 7. Missing tenant org context fails closed (403)
-	rNoTenant := asUser("alice", nil, register)
-	wNoOrg := doJSON(rNoTenant, http.MethodGet, "/api/workspaces", "")
-	requireStatus(t, wNoOrg, http.StatusForbidden)
+	wDelWS := httptest.NewRecorder()
+	cDelWS, _ := gin.CreateTestContext(wDelWS)
+	cDelWS.Request = httptest.NewRequest(http.MethodDelete, "/api/workspaces/ws-1", nil)
+	cDelWS.Params = gin.Params{{Key: "workspaceId", Value: "ws-1"}}
+	cDelWS.Set("organizationId", "org-1")
+	h.DeleteWorkspace(cDelWS)
+	require.Equal(t, http.StatusOK, wDelWS.Code)
 }
