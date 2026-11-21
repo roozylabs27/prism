@@ -1,7 +1,7 @@
 export const governed = [
   'Model inference sent to /v1/chat/completions (sync or SSE stream), /v1/messages (Anthropic format), and /v1/chat/completions/async (polled via /v1/jobs/:jobId)',
   'MCP tool discovery and execution sent through POST /v1/mcp (JSON-RPC 2.0 Streamable HTTP)',
-  'Governed REST tool calls (/v1/tools/:name/execute) and data resource queries (/v1/resources/:name/query)',
+  'Governed REST tool calls (/v1/tools/:name/execute) and data resource queries (/v1/resources/:name/query) with SSRF dial-time guards blocking private and loopback hosts',
   'Upstream provider credential selection, Retry-After cooldowns, and workspace or agent spend limits',
 ];
 
@@ -14,12 +14,12 @@ export const notGoverned = [
 export const agencyRows = [
   {
     problem: 'Spend is hard to isolate per client or team',
-    prism: 'Create one workspace per client account and projects inside it. Every request is metered and attributed to its canonical workspace and project.',
-    where: 'Workspaces (/api/workspaces)',
+    prism: 'Create one workspace per client account and projects inside it. Every request is metered and attributed to its canonical workspace and project, with role-based member invitations.',
+    where: 'Workspaces, Members (/api/workspaces)',
   },
   {
     problem: 'Provider keys are scattered across runtimes',
-    prism: 'Store upstream provider API keys once in Prism, encrypted at rest with AES-256-GCM. Callers only receive Prism gateway keys (prism_sk_*) pinned to a workspace, project, or agent.',
+    prism: 'Store upstream provider API keys once in Prism, encrypted at rest with AES-256-GCM. Callers only receive Prism gateway keys (prism_sk_*) pinned to a workspace, project, or agent, and revocation drops keys from the gateway lookup cache immediately.',
     where: 'Credentials, Gateway keys',
   },
   {
@@ -33,17 +33,17 @@ export const agencyRows = [
     where: 'Agents (/api/agents)',
   },
   {
-    problem: 'Monthly client cost and reliability reports are manual',
-    prism: 'Export per-workspace token usage, model spend, error rates, and policy denials as CSV or JSON in one request.',
-    where: 'Pilot outcomes export',
+    problem: 'Client reporting and admin audit trails are fragmented',
+    prism: 'Export per-workspace token usage, model spend, and policy denials as CSV or JSON, while an admin audit log records key, credential, member, budget, and policy changes.',
+    where: 'Pilot outcomes, Audit trail',
   },
 ];
 
 export const inference = [
   {
-    title: 'Pin a model or delegate to prism-auto',
-    body: 'Send an explicit model slug and Prism routes to it (honoring any custom routing rules). Send model: "prism-auto" and Prism scores eligible models by prompt task, cost, latency, and provider health, constrained to the models the agent is allowed to call.',
-    ref: 'model: "prism-auto" · X-Routing-Policy',
+    title: 'Routing rules or prism-auto selection',
+    body: 'Pin model patterns (such as claude-* or gpt-4o*) to specific providers by priority with routing rules, or send model: "prism-auto" to score eligible models by prompt task, cost, latency, and credential health. Override the active routing policy per request with X-Routing-Policy (unknown or disabled policies return 404).',
+    ref: '/api/routing-rules · model: "prism-auto"',
   },
   {
     title: 'Failover across provider credentials',
@@ -51,14 +51,14 @@ export const inference = [
     ref: 'Retry-After · 50x circuit breaker',
   },
   {
-    title: 'Response headers record what served the call',
-    body: 'Responses include X-Request-ID, X-Prism-Model, and X-Prism-Provider. Requests routed via prism-auto also carry X-Prism-Routing-Policy, non-streaming completions report retries in X-Prism-Failovers, and budget warnings appear in X-Prism-Budget-Status.',
-    ref: 'X-Prism-Model · X-Prism-Provider',
+    title: 'Correlation headers, JSON logs, and Prometheus metrics',
+    body: 'Responses include X-Request-ID, X-Prism-Model, and X-Prism-Provider (plus X-Prism-Routing-Policy on prism-auto routes and X-Prism-Failovers on non-streaming completions). The gateway writes structured JSON logs with secret redaction and exposes Prometheus instruments at /metrics (guarded by METRICS_TOKEN).',
+    ref: 'X-Request-ID · X-Prism-Model · /metrics',
   },
   {
-    title: 'Fail closed when Redis state is unavailable',
-    body: 'Spend reservations, quotas, and rate limits rely on Redis. Outside development (REDIS_FAIL_CLOSED=true by default), Prism refuses gateway calls with 503 when Redis is unreachable rather than letting spend go unchecked.',
-    ref: 'REDIS_FAIL_CLOSED',
+    title: 'Fail closed on Redis state and startup secrets',
+    body: 'Spend reservations, quotas, and sliding-window rate limits run on Redis. Outside development, Prism refuses to start with empty or default secrets and rejects gateway calls with 503 when Redis is unreachable (REDIS_FAIL_CLOSED=true by default).',
+    ref: 'REDIS_FAIL_CLOSED · METRICS_TOKEN',
   },
 ];
 
@@ -84,8 +84,8 @@ export const agentControls = [
     def: 'The built-in delegate_ai_task MCP tool dispatches a routed model call through Prism and returns the chosen model, provider, and USD cost.',
   },
   {
-    term: 'Audit records',
-    def: 'Allowed and denied model, tool, and MCP executions are recorded with agent identity, policy decision, and reason.',
+    term: 'Audit & HMAC verification',
+    def: 'Allowed and denied model, tool, and MCP executions are logged with agent identity, policy decision, and HMAC signature verification (/api/audit-trail/:id/verify), alongside an admin audit log of configuration changes.',
   },
 ];
 
