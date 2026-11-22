@@ -23,6 +23,7 @@ import { ErrorState, EmptyState } from '@/components/molecules/StateAlerts';
 import { Wallet, Plus, Trash2, Pencil } from 'lucide-react';
 import { toast } from 'sonner';
 import { ConfirmDialog } from '@/components/molecules/ConfirmDialog';
+import { PermissionGuard } from '@/components/PermissionProvider';
 import { getErrorMessage } from '@/types/ui';
 import { BudgetFormSheet } from './_components/BudgetFormSheet';
 import { QuotaFormSheet } from './_components/QuotaFormSheet';
@@ -93,9 +94,11 @@ export default function BudgetsPage() {
       title: 'Actions',
       key: 'actions',
       render: (_, record) => (
-        <Button variant="ghost" size="sm" className="h-7 text-xs gap-1" onClick={() => openQuotaEdit(record)}>
-          <Pencil className="h-3 w-3" /> Edit Quota
-        </Button>
+        <PermissionGuard permission="quota:update" disabledTooltip="You do not have permission to edit quotas">
+          <Button variant="ghost" size="sm" className="h-7 text-xs gap-1" onClick={() => openQuotaEdit(record)}>
+            <Pencil className="h-3 w-3" /> Edit Quota
+          </Button>
+        </PermissionGuard>
       ),
     },
   ];
@@ -173,22 +176,24 @@ export default function BudgetsPage() {
       title: '',
       key: 'actions',
       render: (_, record) => (
-        <ConfirmDialog
-          title="Delete Budget"
-          description={`Delete budget "${record.name}"? This cannot be undone.`}
-          confirmText="Delete"
-          onConfirm={() => handleDelete(record)}
-          trigger={
-            <Button
-              variant="destructive"
-              size="sm"
-              className="gap-1.5 text-xs"
-              disabled={deleteMutation.isPending}
-            >
-              <Trash2 className="h-3.5 w-3.5" /> Delete
-            </Button>
-          }
-        />
+        <PermissionGuard permission="budget:delete" disabledTooltip="You do not have permission to delete budgets">
+          <ConfirmDialog
+            title="Delete Budget"
+            description={`Delete budget "${record.name}"? This cannot be undone.`}
+            confirmText="Delete"
+            onConfirm={() => handleDelete(record)}
+            trigger={
+              <Button
+                variant="destructive"
+                size="sm"
+                className="gap-1.5 text-xs"
+                disabled={deleteMutation.isPending}
+              >
+                <Trash2 className="h-3.5 w-3.5" /> Delete
+              </Button>
+            }
+          />
+        </PermissionGuard>
       ),
     },
   ];
@@ -199,9 +204,11 @@ export default function BudgetsPage() {
         title="Budgets & Multi-Tenant Quotas"
         description="Set spend caps, token rate limits, and threshold notifications across Organizations, Workspaces, Agents, and Users."
         extra={
-          <Button variant="prismViolet" size="sm" className="gap-1.5" onClick={() => setDrawerOpen(true)}>
-            <Plus className="h-4 w-4" /> Create Budget Limit
-          </Button>
+          <PermissionGuard permission="budget:create" disabledTooltip="You do not have permission to create budgets">
+            <Button variant="prismViolet" size="sm" className="gap-1.5" onClick={() => setDrawerOpen(true)}>
+              <Plus className="h-4 w-4" /> Create Budget Limit
+            </Button>
+          </PermissionGuard>
         }
       />
 
@@ -269,9 +276,11 @@ export default function BudgetsPage() {
                       title="No Budgets Configured"
                       description="Create a budget limit to start tracking spending."
                       action={
-                        <Button variant="prismViolet" size="sm" className="gap-1.5" onClick={() => setDrawerOpen(true)}>
-                          <Plus className="h-4 w-4" /> Create Budget Limit
-                        </Button>
+                        <PermissionGuard permission="budget:create" disabledTooltip="You do not have permission to create budgets">
+                          <Button variant="prismViolet" size="sm" className="gap-1.5" onClick={() => setDrawerOpen(true)}>
+                            <Plus className="h-4 w-4" /> Create Budget Limit
+                          </Button>
+                        </PermissionGuard>
                       }
                     />
                   ) : (
@@ -346,20 +355,22 @@ export default function BudgetsPage() {
                             Spent {toMoney(a.monthly_spent)} / {toMoney(a.monthly_limit)} ({Math.round(Number(a.usage_percent ?? 0))}%)
                           </div>
                         </div>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="h-7 text-xs"
-                          disabled={ackMutation.isPending}
-                          onClick={() =>
-                            ackMutation.mutate(a.id, {
-                              onSuccess: () => toast.success('Alert acknowledged'),
-                              onError: (err) => toast.error(`Acknowledge failed: ${getErrorMessage(err)}`),
-                            })
-                          }
-                        >
-                          Acknowledge
-                        </Button>
+                        <PermissionGuard permission="finops:manage_budget" disabledTooltip="You do not have permission to acknowledge budget alerts">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-7 text-xs"
+                            disabled={ackMutation.isPending}
+                            onClick={() =>
+                              ackMutation.mutate(a.id, {
+                                onSuccess: () => toast.success('Alert acknowledged'),
+                                onError: (err) => toast.error(`Acknowledge failed: ${getErrorMessage(err)}`),
+                              })
+                            }
+                          >
+                            Acknowledge
+                          </Button>
+                        </PermissionGuard>
                       </div>
                     ))}
                   </div>

@@ -25,6 +25,7 @@ import { Plus, Star, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { ConfirmDialog } from '@/components/molecules/ConfirmDialog';
+import { PermissionGuard } from '@/components/PermissionProvider';
 import { getErrorMessage } from '@/types/ui';
 import { toUiWeightPercents, type PolicyUiWeights } from '@/features/routing/utils/weights';
 import { PolicyFormDialog } from './_components/PolicyFormDialog';
@@ -111,14 +112,16 @@ export default function PoliciesPage() {
         title="Routing Policies"
         description="Configure dynamic multi-factor routing policies to balance quality, cost, and latency."
         extra={
-          <Button
-            variant="prismViolet"
-            size="sm"
-            className="gap-1.5"
-            onClick={() => setDrawerOpen(true)}
-          >
-            <Plus className="h-4 w-4" /> Create Custom Policy
-          </Button>
+          <PermissionGuard permission="routing:update" disabledTooltip="You do not have permission to create routing policies">
+            <Button
+              variant="prismViolet"
+              size="sm"
+              className="gap-1.5"
+              onClick={() => setDrawerOpen(true)}
+            >
+              <Plus className="h-4 w-4" /> Create Custom Policy
+            </Button>
+          </PermissionGuard>
         }
       />
 
@@ -133,7 +136,11 @@ export default function PoliciesPage() {
         <EmptyState
           title="No routing policies found"
           description="Create a routing policy to get started."
-          action={<Button variant="prismViolet" size="sm" onClick={() => setDrawerOpen(true)}>Create Policy</Button>}
+          action={
+            <PermissionGuard permission="routing:update" disabledTooltip="You do not have permission to create routing policies">
+              <Button variant="prismViolet" size="sm" onClick={() => setDrawerOpen(true)}>Create Policy</Button>
+            </PermissionGuard>
+          }
         />
       ) : (
         <Tabs defaultValue="tuner">
@@ -167,39 +174,43 @@ export default function PoliciesPage() {
                       </div>
                       <div className="flex items-center gap-1">
                         {!policy.isDefault && (
+                          <PermissionGuard permission="routing:update" disabledTooltip="You do not have permission to update routing policies">
+                            <ConfirmDialog
+                              title="Set Default Policy"
+                              description={`Set "${policy.name}" as the default routing policy for all gateway requests without explicit policy override?`}
+                              confirmText="Set Default"
+                              onConfirm={() => handleSetDefault(policy)}
+                              trigger={
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-7 px-2 gap-1 text-xs"
+                                  disabled={setDefaultMutation.isPending}
+                                >
+                                  <Star className="h-3 w-3" /> Set Default
+                                </Button>
+                              }
+                            />
+                          </PermissionGuard>
+                        )}
+                        <PermissionGuard permission="routing:update" disabledTooltip="You do not have permission to delete routing policies">
                           <ConfirmDialog
-                            title="Set Default Policy"
-                            description={`Set "${policy.name}" as the default routing policy for all gateway requests without explicit policy override?`}
-                            confirmText="Set Default"
-                            onConfirm={() => handleSetDefault(policy)}
+                            title="Delete Routing Policy"
+                            description={`Delete policy "${policy.name}"? This cannot be undone.`}
+                            confirmText="Delete"
+                            onConfirm={() => handleDelete(policy)}
                             trigger={
                               <Button
                                 variant="ghost"
                                 size="sm"
-                                className="h-7 px-2 gap-1 text-xs"
-                                disabled={setDefaultMutation.isPending}
+                                className="h-7 px-2 gap-1 text-xs text-destructive hover:text-destructive"
+                                disabled={deleteMutation.isPending}
                               >
-                                <Star className="h-3 w-3" /> Set Default
+                                <Trash2 className="h-3 w-3" /> Delete
                               </Button>
                             }
                           />
-                        )}
-                        <ConfirmDialog
-                          title="Delete Routing Policy"
-                          description={`Delete policy "${policy.name}"? This cannot be undone.`}
-                          confirmText="Delete"
-                          onConfirm={() => handleDelete(policy)}
-                          trigger={
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="h-7 px-2 gap-1 text-xs text-destructive hover:text-destructive"
-                              disabled={deleteMutation.isPending}
-                            >
-                              <Trash2 className="h-3 w-3" /> Delete
-                            </Button>
-                          }
-                        />
+                        </PermissionGuard>
                       </div>
                     </div>
                     <div className="flex flex-wrap gap-4 text-xs text-muted-foreground font-mono">
@@ -248,15 +259,17 @@ export default function PoliciesPage() {
                     onChange={(e) => setRulePriority(e.target.value)}
                     className="h-8 w-[90px] text-xs font-mono"
                   />
-                  <Button
-                    size="sm"
-                    variant="prismViolet"
-                    className="h-8 gap-1 text-xs"
-                    disabled={!rulePattern.trim() || createRuleMutation.isPending}
-                    onClick={handleCreateRule}
-                  >
-                    <Plus className="h-3.5 w-3.5" /> Add Rule
-                  </Button>
+                  <PermissionGuard permission="routing:update" disabledTooltip="You do not have permission to create routing rules">
+                    <Button
+                      size="sm"
+                      variant="prismViolet"
+                      className="h-8 gap-1 text-xs"
+                      disabled={!rulePattern.trim() || createRuleMutation.isPending}
+                      onClick={handleCreateRule}
+                    >
+                      <Plus className="h-3.5 w-3.5" /> Add Rule
+                    </Button>
+                  </PermissionGuard>
                 </div>
 
                 {routingRules.length === 0 ? (
@@ -270,22 +283,24 @@ export default function PoliciesPage() {
                           <span className="font-semibold text-foreground">{r.modelPattern}</span>
                           {r.providerName && <span className="text-muted-foreground">-&gt; {r.providerName}</span>}
                         </div>
-                        <ConfirmDialog
-                          title="Delete Routing Rule"
-                          description={`Delete routing rule for "${r.modelPattern}"?`}
-                          confirmText="Delete"
-                          onConfirm={() =>
-                            deleteRuleMutation.mutate(r.id, {
-                              onSuccess: () => toast.success('Routing rule deleted'),
-                              onError: (err) => toast.error(`Delete failed: ${getErrorMessage(err)}`),
-                            })
-                          }
-                          trigger={
-                            <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive">
-                              <Trash2 className="h-3.5 w-3.5" />
-                            </Button>
-                          }
-                        />
+                        <PermissionGuard permission="routing:update" disabledTooltip="You do not have permission to delete routing rules">
+                          <ConfirmDialog
+                            title="Delete Routing Rule"
+                            description={`Delete routing rule for "${r.modelPattern}"?`}
+                            confirmText="Delete"
+                            onConfirm={() =>
+                              deleteRuleMutation.mutate(r.id, {
+                                onSuccess: () => toast.success('Routing rule deleted'),
+                                onError: (err) => toast.error(`Delete failed: ${getErrorMessage(err)}`),
+                              })
+                            }
+                            trigger={
+                              <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive">
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </Button>
+                            }
+                          />
+                        </PermissionGuard>
                       </div>
                     ))}
                   </div>

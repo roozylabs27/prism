@@ -15,6 +15,7 @@ import {
 } from '@/hooks/mutations/useMemberMutations';
 import { ErrorState, EmptyState } from '@/components/molecules/StateAlerts';
 import { ConfirmDialog } from '@/components/molecules/ConfirmDialog';
+import { PermissionGuard } from '@/components/PermissionProvider';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/molecules/Select';
 import { Users, Shield, UserPlus, Mail, Calendar, Clock, X, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -61,9 +62,11 @@ export default function MembersPage() {
         title="Organization Team Members"
         description="Manage user access roles and team permissions."
         extra={
-          <Button variant="prismViolet" size="sm" className="gap-1.5" onClick={() => setDrawerOpen(true)}>
-            <UserPlus className="h-4 w-4" /> Invite Member
-          </Button>
+          <PermissionGuard permission="member:invite" disabledTooltip="You do not have permission to invite members">
+            <Button variant="prismViolet" size="sm" className="gap-1.5" onClick={() => setDrawerOpen(true)}>
+              <UserPlus className="h-4 w-4" /> Invite Member
+            </Button>
+          </PermissionGuard>
         }
       />
 
@@ -114,39 +117,43 @@ export default function MembersPage() {
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
-                      <Select
-                        value={member.role}
-                        onValueChange={(nextRole) => handleRoleChange(member.userId, nextRole)}
-                        disabled={updatingRole}
-                      >
-                        <SelectTrigger className="h-8 w-[155px] text-xs capitalize">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="owner">Owner</SelectItem>
-                          <SelectItem value="developer">Developer</SelectItem>
-                          <SelectItem value="agent_manager">Agent Manager</SelectItem>
-                          <SelectItem value="finops_manager">FinOps Manager</SelectItem>
-                          <SelectItem value="auditor">Security Auditor</SelectItem>
-                          <SelectItem value="viewer">Read-Only Viewer</SelectItem>
-                        </SelectContent>
-                      </Select>
-                      <ConfirmDialog
-                        title="Remove Organization Member"
-                        description={`Remove ${member.userName || member.userEmail || member.userId} from this organization?`}
-                        confirmText="Remove"
-                        onConfirm={() => handleRemoveMember(member.userId)}
-                        trigger={
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8 text-destructive hover:text-destructive"
-                            disabled={removingMember}
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </Button>
-                        }
-                      />
+                      <PermissionGuard permission="member:update" disabledTooltip="You do not have permission to update member roles">
+                        <Select
+                          value={member.role}
+                          onValueChange={(nextRole) => handleRoleChange(member.userId, nextRole)}
+                          disabled={updatingRole}
+                        >
+                          <SelectTrigger className="h-8 w-[155px] text-xs capitalize">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="owner">Owner</SelectItem>
+                            <SelectItem value="developer">Developer</SelectItem>
+                            <SelectItem value="agent_manager">Agent Manager</SelectItem>
+                            <SelectItem value="finops_manager">FinOps Manager</SelectItem>
+                            <SelectItem value="auditor">Security Auditor</SelectItem>
+                            <SelectItem value="viewer">Read-Only Viewer</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </PermissionGuard>
+                      <PermissionGuard permission="member:remove" disabledTooltip="You do not have permission to remove members">
+                        <ConfirmDialog
+                          title="Remove Organization Member"
+                          description={`Remove ${member.userName || member.userEmail || member.userId} from this organization?`}
+                          confirmText="Remove"
+                          onConfirm={() => handleRemoveMember(member.userId)}
+                          trigger={
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 text-destructive hover:text-destructive"
+                              disabled={removingMember}
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
+                          }
+                        />
+                      </PermissionGuard>
                     </div>
                   </div>
                 ))}
@@ -185,15 +192,17 @@ export default function MembersPage() {
                       </span>
                     </div>
                   </div>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="gap-1 shrink-0"
-                    disabled={revoking}
-                    onClick={() => handleRevoke(invite.id)}
-                  >
-                    <X className="h-3.5 w-3.5" /> Revoke
-                  </Button>
+                  <PermissionGuard permission="member:invite" disabledTooltip="You do not have permission to revoke invitations">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="gap-1 shrink-0"
+                      disabled={revoking}
+                      onClick={() => handleRevoke(invite.id)}
+                    >
+                      <X className="h-3.5 w-3.5" /> Revoke
+                    </Button>
+                  </PermissionGuard>
                 </div>
               ))}
             </div>

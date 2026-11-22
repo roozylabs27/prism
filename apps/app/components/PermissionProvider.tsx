@@ -96,8 +96,24 @@ export function PermissionGuard({
       <TooltipProvider>
         <Tooltip>
           <TooltipTrigger asChild>
-            <span className="cursor-not-allowed opacity-50 pointer-events-none inline-block">
-              {children}
+            <span
+              tabIndex={0}
+              aria-disabled="true"
+              onClickCapture={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+              }}
+              onKeyDownCapture={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  e.stopPropagation();
+                }
+              }}
+              className="cursor-not-allowed inline-flex focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              <span className="pointer-events-none opacity-50 inline-flex" aria-hidden="true">
+                {children}
+              </span>
             </span>
           </TooltipTrigger>
           <TooltipContent side="top">

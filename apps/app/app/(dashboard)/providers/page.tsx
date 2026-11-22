@@ -17,6 +17,7 @@ import { AppRoutes } from '@/constants/routes';
 import { Server, Plus, Trash2, KeyRound, Pencil } from 'lucide-react';
 import { toast } from 'sonner';
 import { ConfirmDialog } from '@/components/molecules/ConfirmDialog';
+import { PermissionGuard } from '@/components/PermissionProvider';
 import { getErrorMessage } from '@/types/ui';
 import { ProviderFormDialog } from './_components/ProviderFormDialog';
 
@@ -63,9 +64,11 @@ export default function ProvidersPage() {
         title="AI Model Providers"
         description="Manage connected AI provider adapters, rate limits, and health status."
         extra={
-          <Button variant="prismViolet" size="sm" className="gap-1.5" onClick={openCreateDialog}>
-            <Plus className="h-4 w-4" /> Connect Custom Provider
-          </Button>
+          <PermissionGuard permission="model:create" disabledTooltip="You do not have permission to add providers">
+            <Button variant="prismViolet" size="sm" className="gap-1.5" onClick={openCreateDialog}>
+              <Plus className="h-4 w-4" /> Connect Custom Provider
+            </Button>
+          </PermissionGuard>
         }
       />
 
@@ -82,9 +85,11 @@ export default function ProvidersPage() {
           title="No Connected Providers"
           description="There are no AI providers configured in this workspace."
           action={
-            <Button variant="prismViolet" size="sm" className="gap-1.5" onClick={openCreateDialog}>
-              <Plus className="h-4 w-4" /> Connect Custom Provider
-            </Button>
+            <PermissionGuard permission="model:create" disabledTooltip="You do not have permission to add providers">
+              <Button variant="prismViolet" size="sm" className="gap-1.5" onClick={openCreateDialog}>
+                <Plus className="h-4 w-4" /> Connect Custom Provider
+              </Button>
+            </PermissionGuard>
           }
         />
       ) : (
@@ -123,12 +128,14 @@ export default function ProvidersPage() {
                         {provider.enabled ? 'Enabled' : 'Disabled'}
                       </Badge>
                       {!isSystem && (
-                        <Switch
-                          checked={provider.enabled}
-                          onCheckedChange={(checked) => handleToggle(provider, checked)}
-                          disabled={updateMutation.isPending}
-                          aria-label={`Toggle ${provider.name}`}
-                        />
+                        <PermissionGuard permission="model:update" disabledTooltip="You do not have permission to update providers">
+                          <Switch
+                            checked={provider.enabled}
+                            onCheckedChange={(checked) => handleToggle(provider, checked)}
+                            disabled={updateMutation.isPending}
+                            aria-label={`Toggle ${provider.name}`}
+                          />
+                        </PermissionGuard>
                       )}
                     </div>
                   </div>
@@ -153,31 +160,35 @@ export default function ProvidersPage() {
 
                   {!isSystem && (
                     <>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="gap-1.5 text-xs shrink-0"
-                        onClick={() => openEditDialog(provider)}
-                        aria-label={`Edit ${provider.name}`}
-                      >
-                        <Pencil className="h-3.5 w-3.5" /> Edit
-                      </Button>
-                      <ConfirmDialog
-                        title="Remove Provider"
-                        description={`Remove custom provider "${provider.name}"? This cannot be undone.`}
-                        confirmText="Remove"
-                        onConfirm={() => handleDelete(provider)}
-                        trigger={
-                          <Button
-                            variant="destructive"
-                            size="sm"
-                            className="gap-1.5 text-xs shrink-0"
-                            disabled={deleteMutation.isPending}
-                          >
-                            <Trash2 className="h-3.5 w-3.5" /> Remove
-                          </Button>
-                        }
-                      />
+                      <PermissionGuard permission="model:update" disabledTooltip="You do not have permission to edit providers">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="gap-1.5 text-xs shrink-0"
+                          onClick={() => openEditDialog(provider)}
+                          aria-label={`Edit ${provider.name}`}
+                        >
+                          <Pencil className="h-3.5 w-3.5" /> Edit
+                        </Button>
+                      </PermissionGuard>
+                      <PermissionGuard permission="model:delete" disabledTooltip="You do not have permission to remove providers">
+                        <ConfirmDialog
+                          title="Remove Provider"
+                          description={`Remove custom provider "${provider.name}"? This cannot be undone.`}
+                          confirmText="Remove"
+                          onConfirm={() => handleDelete(provider)}
+                          trigger={
+                            <Button
+                              variant="destructive"
+                              size="sm"
+                              className="gap-1.5 text-xs shrink-0"
+                              disabled={deleteMutation.isPending}
+                            >
+                              <Trash2 className="h-3.5 w-3.5" /> Remove
+                            </Button>
+                          }
+                        />
+                      </PermissionGuard>
                     </>
                   )}
                 </CardFooter>

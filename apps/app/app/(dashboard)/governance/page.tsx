@@ -14,6 +14,7 @@ import {
 import type { ApiGovernancePolicy } from '@/lib/api';
 import { Plus, Shield, Pencil, Trash2 } from 'lucide-react';
 import { ConfirmDialog } from '@/components/molecules/ConfirmDialog';
+import { PermissionGuard } from '@/components/PermissionProvider';
 import { toast } from 'sonner';
 import { getErrorMessage } from '@/types/ui';
 import { GovernancePolicyForm } from './_components/GovernancePolicyForm';
@@ -82,20 +83,24 @@ export default function GovernancePage() {
       key: 'actions',
       render: (_val, record) => (
         <div className="flex items-center gap-1 justify-end">
-          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openEdit(record)}>
-            <Pencil className="h-3.5 w-3.5" />
-          </Button>
-          <ConfirmDialog
-            title="Delete Governance Policy"
-            description={`Delete policy "${record.name}"? This cannot be undone.`}
-            confirmText="Delete"
-            onConfirm={() => handleDelete(record)}
-            trigger={
-              <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive">
-                <Trash2 className="h-3.5 w-3.5" />
-              </Button>
-            }
-          />
+          <PermissionGuard permission="governance:update" disabledTooltip="You do not have permission to edit governance policies">
+            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openEdit(record)}>
+              <Pencil className="h-3.5 w-3.5" />
+            </Button>
+          </PermissionGuard>
+          <PermissionGuard permission="governance:delete" disabledTooltip="You do not have permission to delete governance policies">
+            <ConfirmDialog
+              title="Delete Governance Policy"
+              description={`Delete policy "${record.name}"? This cannot be undone.`}
+              confirmText="Delete"
+              onConfirm={() => handleDelete(record)}
+              trigger={
+                <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive">
+                  <Trash2 className="h-3.5 w-3.5" />
+                </Button>
+              }
+            />
+          </PermissionGuard>
         </div>
       ),
       className: 'w-[70px]',
@@ -108,9 +113,11 @@ export default function GovernancePage() {
         title="Governance & RBAC Permission Matrix"
         description="Configure fine-grained Role-Based Access Control (Owner, Admin, Developer, Viewer) permissions."
         extra={
-          <Button variant="prismViolet" size="sm" className="gap-1.5" onClick={openCreate}>
-            <Plus className="h-4 w-4" /> Create Governance Policy
-          </Button>
+          <PermissionGuard permission="governance:create" disabledTooltip="You do not have permission to create governance policies">
+            <Button variant="prismViolet" size="sm" className="gap-1.5" onClick={openCreate}>
+              <Plus className="h-4 w-4" /> Create Governance Policy
+            </Button>
+          </PermissionGuard>
         }
       />
 
@@ -126,9 +133,11 @@ export default function GovernancePage() {
           description="No RBAC policies have been configured yet. Create one to define access rules."
           icon={<Shield className="h-6 w-6" />}
           action={
-            <Button variant="prismViolet" size="sm" className="gap-1.5" onClick={openCreate}>
-              <Plus className="h-4 w-4" /> Create Governance Policy
-            </Button>
+            <PermissionGuard permission="governance:create" disabledTooltip="You do not have permission to create governance policies">
+              <Button variant="prismViolet" size="sm" className="gap-1.5" onClick={openCreate}>
+                <Plus className="h-4 w-4" /> Create Governance Policy
+              </Button>
+            </PermissionGuard>
           }
         />
       ) : (

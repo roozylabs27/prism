@@ -12,6 +12,7 @@ import { useToolsQuery } from "@/hooks/queries/useToolsQuery";
 import { ApiTool } from "@/lib/api";
 import { Wrench, Plus, Pencil, Trash2, Play } from "lucide-react";
 import { ConfirmDialog } from "@/components/molecules/ConfirmDialog";
+import { PermissionGuard } from "@/components/PermissionProvider";
 import { useDeleteToolMutation } from "@/hooks/mutations/useToolMutations";
 import { ToolFormDialog } from "./_components/ToolFormDialog";
 import { ToolTestModal } from "./_components/ToolTestModal";
@@ -81,14 +82,16 @@ export default function ToolsPage() {
         title="Tool Gateway & Function Registry"
         description="Register and manage dynamic function call schemas for AI agent execution."
         extra={
-          <Button
-            variant="prismViolet"
-            onClick={openCreateDrawer}
-            className="gap-2"
-          >
-            <Plus className="h-4 w-4" />
-            <span>Register Tool</span>
-          </Button>
+          <PermissionGuard permission="tool:create" disabledTooltip="You do not have permission to register tools">
+            <Button
+              variant="prismViolet"
+              onClick={openCreateDrawer}
+              className="gap-2"
+            >
+              <Plus className="h-4 w-4" />
+              <span>Register Tool</span>
+            </Button>
+          </PermissionGuard>
         }
       />
 
@@ -97,9 +100,11 @@ export default function ToolsPage() {
           title="No Tools Registered"
           description="Register custom tools and function calling schemas for AI agent execution."
           action={
-            <Button variant="prismViolet" onClick={openCreateDrawer}>
-              Register Tool
-            </Button>
+            <PermissionGuard permission="tool:create" disabledTooltip="You do not have permission to register tools">
+              <Button variant="prismViolet" onClick={openCreateDrawer}>
+                Register Tool
+              </Button>
+            </PermissionGuard>
           }
         />
       ) : (
@@ -145,39 +150,43 @@ export default function ToolsPage() {
                     <span>Test Tool</span>
                   </Button>
                   <div className="flex items-center gap-1">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-7 w-7 p-0 text-muted-foreground hover:text-foreground"
-                      onClick={() => openEditDrawer(tool)}
-                    >
-                      <Pencil className="h-3.5 w-3.5" />
-                    </Button>
-                    <ConfirmDialog
-                      title="Delete Tool"
-                      description={`Are you sure you want to delete tool "${tool.displayName || tool.name}"?`}
-                      confirmText="Delete"
-                      variant="destructive"
-                      onConfirm={() => {
-                        deleteMutation.mutate(tool.id, {
-                          onSuccess: () =>
-                            toast.success("Tool deleted successfully"),
-                          onError: (err) =>
-                            toast.error(
-                              `Delete failed: ${getErrorMessage(err)}`,
-                            ),
-                        });
-                      }}
-                      trigger={
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </Button>
-                      }
-                    />
+                    <PermissionGuard permission="tool:update" disabledTooltip="You do not have permission to edit tools">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 w-7 p-0 text-muted-foreground hover:text-foreground"
+                        onClick={() => openEditDrawer(tool)}
+                      >
+                        <Pencil className="h-3.5 w-3.5" />
+                      </Button>
+                    </PermissionGuard>
+                    <PermissionGuard permission="tool:delete" disabledTooltip="You do not have permission to delete tools">
+                      <ConfirmDialog
+                        title="Delete Tool"
+                        description={`Are you sure you want to delete tool "${tool.displayName || tool.name}"?`}
+                        confirmText="Delete"
+                        variant="destructive"
+                        onConfirm={() => {
+                          deleteMutation.mutate(tool.id, {
+                            onSuccess: () =>
+                              toast.success("Tool deleted successfully"),
+                            onError: (err) =>
+                              toast.error(
+                                `Delete failed: ${getErrorMessage(err)}`,
+                              ),
+                          });
+                        }}
+                        trigger={
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </Button>
+                        }
+                      />
+                    </PermissionGuard>
                   </div>
                 </div>
               </CardContent>

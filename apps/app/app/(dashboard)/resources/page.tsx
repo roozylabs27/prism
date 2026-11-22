@@ -15,6 +15,7 @@ import { ErrorState, EmptyState } from '@/components/molecules/StateAlerts';
 import { CardSkeletonGrid } from '@/components/molecules/CardSkeleton';
 import { Database, Plus, Pencil, Trash2 } from 'lucide-react';
 import { ConfirmDialog } from '@/components/molecules/ConfirmDialog';
+import { PermissionGuard } from '@/components/PermissionProvider';
 import { toast } from 'sonner';
 import { getErrorMessage } from '@/types/ui';
 import { ResourceFormDialog } from './_components/ResourceFormDialog';
@@ -51,9 +52,11 @@ export default function ResourcesPage() {
         title="Resource Gateway & Knowledge Sources"
         description="Connect document stores, vector databases, and static resources for workspace context injection."
         extra={
-          <Button variant="prismViolet" size="sm" className="gap-1.5" onClick={openCreateDrawer}>
-            <Plus className="h-4 w-4" /> Add Resource Source
-          </Button>
+          <PermissionGuard permission="resource:create" disabledTooltip="You do not have permission to create resources">
+            <Button variant="prismViolet" size="sm" className="gap-1.5" onClick={openCreateDrawer}>
+              <Plus className="h-4 w-4" /> Add Resource Source
+            </Button>
+          </PermissionGuard>
         }
       />
 
@@ -82,9 +85,11 @@ export default function ResourcesPage() {
           title="No Resources Configured"
           description="Connect a document store, vector database, or static resource for context injection."
           action={
-            <Button variant="prismViolet" size="sm" className="gap-1.5" onClick={openCreateDrawer}>
-              <Plus className="h-4 w-4" /> Add Resource Source
-            </Button>
+            <PermissionGuard permission="resource:create" disabledTooltip="You do not have permission to create resources">
+              <Button variant="prismViolet" size="sm" className="gap-1.5" onClick={openCreateDrawer}>
+                <Plus className="h-4 w-4" /> Add Resource Source
+              </Button>
+            </PermissionGuard>
           }
         />
       ) : (
@@ -119,30 +124,34 @@ export default function ResourcesPage() {
                 </div>
               </CardContent>
               <CardContent className="border-t border-border pt-3 flex gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="flex-1 gap-1.5 text-xs"
-                  onClick={() => openEditDrawer(resource)}
-                >
-                  <Pencil className="h-3.5 w-3.5" /> Edit
-                </Button>
-                <ConfirmDialog
-                  title="Delete Resource"
-                  description={`Delete resource "${resource.name}"? This cannot be undone.`}
-                  confirmText="Delete"
-                  onConfirm={() => handleDelete(resource)}
-                  trigger={
-                    <Button
-                      variant="destructive"
-                      size="sm"
-                      className="flex-1 gap-1.5 text-xs"
-                      disabled={deleteMutation.isPending}
-                    >
-                      <Trash2 className="h-3.5 w-3.5" /> Delete
-                    </Button>
-                  }
-                />
+                <PermissionGuard permission="resource:update" disabledTooltip="You do not have permission to edit resources">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="flex-1 gap-1.5 text-xs"
+                    onClick={() => openEditDrawer(resource)}
+                  >
+                    <Pencil className="h-3.5 w-3.5" /> Edit
+                  </Button>
+                </PermissionGuard>
+                <PermissionGuard permission="resource:delete" disabledTooltip="You do not have permission to delete resources">
+                  <ConfirmDialog
+                    title="Delete Resource"
+                    description={`Delete resource "${resource.name}"? This cannot be undone.`}
+                    confirmText="Delete"
+                    onConfirm={() => handleDelete(resource)}
+                    trigger={
+                      <Button
+                        variant="destructive"
+                        size="sm"
+                        className="flex-1 gap-1.5 text-xs"
+                        disabled={deleteMutation.isPending}
+                      >
+                        <Trash2 className="h-3.5 w-3.5" /> Delete
+                      </Button>
+                    }
+                  />
+                </PermissionGuard>
               </CardContent>
             </Card>
           ))}

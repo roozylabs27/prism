@@ -13,6 +13,7 @@ import { toast } from 'sonner';
 
 import { ConfirmDialog } from '@/components/molecules/ConfirmDialog';
 import { FeatureGate } from '@/components/molecules/FeatureGate';
+import { PermissionGuard } from '@/components/PermissionProvider';
 
 // Billing is a placeholder (nothing is stored or charged) and its API routes
 // exist only with FEATURE_FLAG_BILLING, so the page stays behind the flag.
@@ -106,21 +107,23 @@ function BillingContent() {
                       {isCurrent ? (
                         <Button variant="outline" className="w-full text-xs" disabled>Current Plan</Button>
                       ) : (
-                        <ConfirmDialog
-                          title="Upgrade Plan"
-                          description={`Upgrade your organization's subscription tier to "${plan.name}" for $${priceMonthlyUsd}/month?`}
-                          confirmText="Confirm Upgrade"
-                          onConfirm={() => handleUpgrade(plan.slug)}
-                          trigger={
-                            <Button
-                              variant="prismViolet"
-                              className="w-full text-xs"
-                              disabled={upgradeMutation.isPending}
-                            >
-                              {upgradeMutation.isPending ? 'Upgrading...' : `Upgrade to ${plan.name}`}
-                            </Button>
-                          }
-                        />
+                        <PermissionGuard permission="billing:manage" disabledTooltip="You do not have permission to manage billing">
+                          <ConfirmDialog
+                            title="Upgrade Plan"
+                            description={`Upgrade your organization's subscription tier to "${plan.name}" for $${priceMonthlyUsd}/month?`}
+                            confirmText="Confirm Upgrade"
+                            onConfirm={() => handleUpgrade(plan.slug)}
+                            trigger={
+                              <Button
+                                variant="prismViolet"
+                                className="w-full text-xs"
+                                disabled={upgradeMutation.isPending}
+                              >
+                                {upgradeMutation.isPending ? 'Upgrading...' : `Upgrade to ${plan.name}`}
+                              </Button>
+                            }
+                          />
+                        </PermissionGuard>
                       )}
                     </CardFooter>
                   </Card>

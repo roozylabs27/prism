@@ -15,6 +15,7 @@ import { toast } from 'sonner';
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/molecules/Select';
 import { useProvidersQuery } from '@/hooks/queries/useProvidersQuery';
 import { ConfirmDialog } from '@/components/molecules/ConfirmDialog';
+import { PermissionGuard } from '@/components/PermissionProvider';
 import { ProviderFilterId, getErrorMessage } from '@/types/ui';
 import {
   useTestCredentialMutation,
@@ -134,58 +135,64 @@ export default function CredentialsPage() {
       key: 'actions',
       render: (_val, record) => (
         <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-7 px-2 text-[11px] gap-1"
-            onClick={() => handleTestKey(record.providerId, record.id)}
-            disabled={testingId === record.id}
-          >
-            {testingId === record.id ? <RefreshCw className="h-3 w-3 animate-spin" /> : <Activity className="h-3 w-3" />}
-            <span>Test Health</span>
-          </Button>
+          <PermissionGuard permission="credential:update" disabledTooltip="You do not have permission to test credentials">
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 px-2 text-[11px] gap-1"
+              onClick={() => handleTestKey(record.providerId, record.id)}
+              disabled={testingId === record.id}
+            >
+              {testingId === record.id ? <RefreshCw className="h-3 w-3 animate-spin" /> : <Activity className="h-3 w-3" />}
+              <span>Test Health</span>
+            </Button>
+          </PermissionGuard>
           {(record.status === 'cooldown' || record.status === 'degraded') && (
+            <PermissionGuard permission="credential:update" disabledTooltip="You do not have permission to reset cooldowns">
+              <ConfirmDialog
+                title="Reset Cooldown"
+                description={`Reset the cooldown period for "${record.name}" and return it to the active routing pool?`}
+                confirmText="Reset Cooldown"
+                onConfirm={() => handleResetCooldown(record.providerId, record.id)}
+                trigger={
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-7 px-2 text-[11px] text-amber-500 hover:text-amber-600"
+                  >
+                    Reset Cooldown
+                  </Button>
+                }
+              />
+            </PermissionGuard>
+          )}
+          <PermissionGuard permission="credential:delete" disabledTooltip="You do not have permission to delete credentials">
             <ConfirmDialog
-              title="Reset Cooldown"
-              description={`Reset the cooldown period for "${record.name}" and return it to the active routing pool?`}
-              confirmText="Reset Cooldown"
-              onConfirm={() => handleResetCooldown(record.providerId, record.id)}
+              title="Delete Credential"
+              description={`Are you sure you want to delete "${record.name}"? Active failovers using this key will be updated.`}
+              confirmText="Delete"
+              variant="destructive"
+              onConfirm={() => {
+                deleteMutation.mutate(
+                  { providerId: record.providerId, credId: record.id },
+                  {
+                    onSuccess: () => {
+                      toast.success('Credential deleted successfully');
+                      refetch();
+                    },
+                    onError: (err) => {
+                      toast.error(`Delete failed: ${getErrorMessage(err)}`);
+                    },
+                  }
+                );
+              }}
               trigger={
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="h-7 px-2 text-[11px] text-amber-500 hover:text-amber-600"
-                >
-                  Reset Cooldown
+                <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive">
+                  <Trash2 className="h-3.5 w-3.5" />
                 </Button>
               }
             />
-          )}
-          <ConfirmDialog
-            title="Delete Credential"
-            description={`Are you sure you want to delete "${record.name}"? Active failovers using this key will be updated.`}
-            confirmText="Delete"
-            variant="destructive"
-            onConfirm={() => {
-              deleteMutation.mutate(
-                { providerId: record.providerId, credId: record.id },
-                {
-                  onSuccess: () => {
-                    toast.success('Credential deleted successfully');
-                    refetch();
-                  },
-                  onError: (err) => {
-                    toast.error(`Delete failed: ${getErrorMessage(err)}`);
-                  },
-                }
-              );
-            }}
-            trigger={
-              <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive">
-                <Trash2 className="h-3.5 w-3.5" />
-              </Button>
-            }
-          />
+          </PermissionGuard>
         </div>
       ),
     },
@@ -215,10 +222,12 @@ export default function CredentialsPage() {
         title="Provider Credentials"
         description="Manage API keys, OAuth credentials, and key health rotation per provider."
         extra={
-          <Button variant="prismViolet" onClick={() => setDrawerOpen(true)} className="gap-2">
-            <Plus className="h-4 w-4" />
-            <span>Add Credential</span>
-          </Button>
+          <PermissionGuard permission="credential:create" disabledTooltip="You do not have permission to add credentials">
+            <Button variant="prismViolet" onClick={() => setDrawerOpen(true)} className="gap-2">
+              <Plus className="h-4 w-4" />
+              <span>Add Credential</span>
+            </Button>
+          </PermissionGuard>
         }
       />
 
@@ -265,9 +274,11 @@ export default function CredentialsPage() {
                 title="No Credentials Found"
                 description="Add API keys for your AI providers to enable gateway routing."
                 action={
-                  <Button variant="prismViolet" onClick={() => setDrawerOpen(true)}>
-                    Add Credential
-                  </Button>
+                  <PermissionGuard permission="credential:create" disabledTooltip="You do not have permission to add credentials">
+                    <Button variant="prismViolet" onClick={() => setDrawerOpen(true)}>
+                      Add Credential
+                    </Button>
+                  </PermissionGuard>
                 }
               />
             )}

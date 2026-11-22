@@ -13,6 +13,7 @@ import { useProvidersQuery } from '@/hooks/queries/useProvidersQuery';
 import { useAgentsQuery } from '@/hooks/queries/useAgentsQuery';
 import type { ApiGatewayKey } from '@/lib/api';
 import { ConfirmDialog } from '@/components/molecules/ConfirmDialog';
+import { PermissionGuard } from '@/components/PermissionProvider';
 import { KeyRound, Plus, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { GatewayKeyFormDialog } from './_components/GatewayKeyFormDialog';
@@ -112,22 +113,24 @@ export default function GatewayKeysPage() {
       title: 'Actions',
       key: 'actions',
       render: (_, record) => (
-        <ConfirmDialog
-          title="Delete Gateway Key"
-          description={`Delete key "${record.name}"? This action cannot be undone.`}
-          confirmText="Delete"
-          onConfirm={() => handleDelete(record)}
-          trigger={
-            <Button
-              variant="ghost"
-              size="icon"
-              aria-label="Delete key"
-              className="h-7 w-7 text-muted-foreground hover:text-destructive"
-            >
-              <Trash2 className="h-3.5 w-3.5" />
-            </Button>
-          }
-        />
+        <PermissionGuard permission="api_key:revoke" disabledTooltip="You do not have permission to revoke gateway keys">
+          <ConfirmDialog
+            title="Delete Gateway Key"
+            description={`Delete key "${record.name}"? This action cannot be undone.`}
+            confirmText="Delete"
+            onConfirm={() => handleDelete(record)}
+            trigger={
+              <Button
+                variant="ghost"
+                size="icon"
+                aria-label="Delete key"
+                className="h-7 w-7 text-muted-foreground hover:text-destructive"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </Button>
+            }
+          />
+        </PermissionGuard>
       ),
     },
   ];
@@ -138,14 +141,16 @@ export default function GatewayKeysPage() {
         title="Gateway Keys"
         description="Create and manage API keys that authenticate requests through the Prism AI Gateway."
         extra={
-          <Button
-            variant="prismViolet"
-            size="sm"
-            className="gap-1.5"
-            onClick={() => setModalOpen(true)}
-          >
-            <Plus className="h-4 w-4" /> Create Key
-          </Button>
+          <PermissionGuard permission="api_key:create" disabledTooltip="You do not have permission to create gateway keys">
+            <Button
+              variant="prismViolet"
+              size="sm"
+              className="gap-1.5"
+              onClick={() => setModalOpen(true)}
+            >
+              <Plus className="h-4 w-4" /> Create Key
+            </Button>
+          </PermissionGuard>
         }
       />
 
@@ -157,9 +162,11 @@ export default function GatewayKeysPage() {
           description="Create your first API key to start routing requests through the gateway."
           icon={<KeyRound className="h-6 w-6" />}
           action={
-            <Button variant="prismViolet" size="sm" className="gap-1.5" onClick={() => setModalOpen(true)}>
-              <Plus className="h-4 w-4" /> Create Key
-            </Button>
+            <PermissionGuard permission="api_key:create" disabledTooltip="You do not have permission to create gateway keys">
+              <Button variant="prismViolet" size="sm" className="gap-1.5" onClick={() => setModalOpen(true)}>
+                <Plus className="h-4 w-4" /> Create Key
+              </Button>
+            </PermissionGuard>
           }
         />
       ) : (

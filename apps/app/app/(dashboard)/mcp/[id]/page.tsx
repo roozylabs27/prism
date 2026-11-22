@@ -17,6 +17,7 @@ import { Badge, StatusDot } from "@/components/atoms/Badge";
 import { Progress } from "@/components/atoms/Progress";
 import { MetricCard } from "@/components/atoms/MetricCard";
 import { ConfirmDialog } from "@/components/molecules/ConfirmDialog";
+import { PermissionGuard } from "@/components/PermissionProvider";
 import { ErrorState, EmptyState } from "@/components/molecules/StateAlerts";
 import { useMCPServersQuery, useMCPServerStatsQuery, useMCPServerToolsQuery } from "@/hooks/queries/useMCPServersQuery";
 import { useDeleteMCPServerMutation, useSyncMCPServerMutation } from "@/hooks/mutations/useMCPMutations";
@@ -437,35 +438,39 @@ export default function MCPServerDetailPage() {
                 <CardDescription>{formatNumber(tools.length)} tools exposed by this server.</CardDescription>
               </div>
               <div className="flex items-center gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="h-7 text-xs gap-1"
-                  onClick={() => {
-                    setSyncingId(server.id);
-                    syncMutation.mutate(server.id, {
-                      onSuccess: () => toast.success("MCP server tools synced"),
-                      onError: (err) => toast.error(`Sync failed: ${getErrorMessage(err)}`),
-                      onSettled: () => setSyncingId(null),
-                    });
-                  }}
-                  disabled={isSyncingThis}
-                >
-                  {isSyncingThis ? (
-                    <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />
-                  ) : (
-                    <RefreshCw className="h-3 w-3" />
-                  )}
-                  <span>Sync</span>
-                </Button>
+                <PermissionGuard permission="mcp:update" disabledTooltip="You do not have permission to sync MCP servers">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-7 text-xs gap-1"
+                    onClick={() => {
+                      setSyncingId(server.id);
+                      syncMutation.mutate(server.id, {
+                        onSuccess: () => toast.success("MCP server tools synced"),
+                        onError: (err) => toast.error(`Sync failed: ${getErrorMessage(err)}`),
+                        onSettled: () => setSyncingId(null),
+                      });
+                    }}
+                    disabled={isSyncingThis}
+                  >
+                    {isSyncingThis ? (
+                      <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />
+                    ) : (
+                      <RefreshCw className="h-3 w-3" />
+                    )}
+                    <span>Sync</span>
+                  </Button>
+                </PermissionGuard>
                 <Button variant="outline" size="sm" className="h-7 text-xs gap-1" onClick={() => setTestModalOpen(true)}>
                   <Play className="h-3 w-3 text-muted-foreground" />
                   <span>Test Tool</span>
                 </Button>
-                <Button variant="outline" size="sm" className="h-7 text-xs gap-1" onClick={openEdit}>
-                  <Pencil className="h-3 w-3" />
-                  <span>Edit</span>
-                </Button>
+                <PermissionGuard permission="mcp:update" disabledTooltip="You do not have permission to edit MCP servers">
+                  <Button variant="outline" size="sm" className="h-7 text-xs gap-1" onClick={openEdit}>
+                    <Pencil className="h-3 w-3" />
+                    <span>Edit</span>
+                  </Button>
+                </PermissionGuard>
               </div>
             </div>
           </CardHeader>
@@ -511,27 +516,29 @@ export default function MCPServerDetailPage() {
       <MCPTestModal open={testModalOpen} onOpenChange={setTestModalOpen} server={server} />
 
       <div className="mt-6 flex justify-end">
-        <ConfirmDialog
-          title="Delete MCP Server"
-          description={`Are you sure you want to unregister MCP server "${server.displayName || server.name}"? This also removes its usage history.`}
-          confirmText="Delete"
-          variant="destructive"
-          onConfirm={() => {
-            deleteMutation.mutate(server.id, {
-              onSuccess: () => {
-                toast.success("MCP server removed");
-                router.push(AppRoutes.MCP);
-              },
-              onError: (err) => toast.error(`Delete failed: ${getErrorMessage(err)}`),
-            });
-          }}
-          trigger={
-            <Button variant="destructive" size="sm" className="gap-1.5">
-              <Trash2 className="h-4 w-4" />
-              <span>Delete Server</span>
-            </Button>
-          }
-        />
+        <PermissionGuard permission="mcp:delete" disabledTooltip="You do not have permission to delete MCP servers">
+          <ConfirmDialog
+            title="Delete MCP Server"
+            description={`Are you sure you want to unregister MCP server "${server.displayName || server.name}"? This also removes its usage history.`}
+            confirmText="Delete"
+            variant="destructive"
+            onConfirm={() => {
+              deleteMutation.mutate(server.id, {
+                onSuccess: () => {
+                  toast.success("MCP server removed");
+                  router.push(AppRoutes.MCP);
+                },
+                onError: (err) => toast.error(`Delete failed: ${getErrorMessage(err)}`),
+              });
+            }}
+            trigger={
+              <Button variant="destructive" size="sm" className="gap-1.5">
+                <Trash2 className="h-4 w-4" />
+                <span>Delete Server</span>
+              </Button>
+            }
+          />
+        </PermissionGuard>
       </div>
     </AppLayout>
   );

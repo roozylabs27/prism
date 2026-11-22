@@ -17,6 +17,7 @@ import {
 import type { ApiApprovalRequest, ApiApprovalStatus } from '@/lib/api';
 import { getErrorMessage } from '@/types/ui';
 import { Check, ShieldCheck, X } from 'lucide-react';
+import { PermissionGuard } from '@/components/PermissionProvider';
 import { toast } from 'sonner';
 
 function statusBadgeVariant(status: ApiApprovalStatus) {
@@ -161,24 +162,28 @@ export default function ApprovalsPage() {
                         className="h-8 text-xs max-w-sm"
                         disabled={busy}
                       />
-                      <Button
-                        size="sm"
-                        variant="prismViolet"
-                        className="gap-1.5"
-                        disabled={busy}
-                        onClick={() => handleDecision(item, 'approve')}
-                      >
-                        <Check className="h-3.5 w-3.5" /> Approve
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="gap-1.5 text-destructive hover:text-destructive"
-                        disabled={busy}
-                        onClick={() => handleDecision(item, 'deny')}
-                      >
-                        <X className="h-3.5 w-3.5" /> Deny
-                      </Button>
+                      <PermissionGuard permission="governance:update" disabledTooltip="You do not have permission to approve requests">
+                        <Button
+                          size="sm"
+                          variant="prismViolet"
+                          className="gap-1.5"
+                          disabled={busy}
+                          onClick={() => handleDecision(item, 'approve')}
+                        >
+                          <Check className="h-3.5 w-3.5" /> Approve
+                        </Button>
+                      </PermissionGuard>
+                      <PermissionGuard permission="governance:update" disabledTooltip="You do not have permission to deny requests">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="gap-1.5 text-destructive hover:text-destructive"
+                          disabled={busy}
+                          onClick={() => handleDecision(item, 'deny')}
+                        >
+                          <X className="h-3.5 w-3.5" /> Deny
+                        </Button>
+                      </PermissionGuard>
                     </div>
                   ) : (
                     <div className="text-[11px] text-muted-foreground font-mono">

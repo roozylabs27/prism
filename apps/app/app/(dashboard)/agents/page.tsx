@@ -25,6 +25,7 @@ import { Bot, Plus, Settings, Trash2, ArrowUpRight, Eye } from "lucide-react";
 import { toast } from "sonner";
 import { getErrorMessage } from "@/types/ui";
 import { ConfirmDialog } from "@/components/molecules/ConfirmDialog";
+import { PermissionGuard } from "@/components/PermissionProvider";
 import { MultiSelectOption } from "@/components/molecules/MultiSelect";
 import { agentDetailRoute } from "@/constants/routes";
 import { AgentFormDialog } from "./_components/AgentFormDialog";
@@ -99,9 +100,11 @@ export default function AgentsPage() {
         title="Agent Gateway & Agent Catalog"
         description="Provision autonomous AI agent identities with bound system prompts, tool boundaries, and key quotas."
         extra={
-          <Button variant="prismViolet" size="sm" className="gap-1.5" onClick={openCreateDrawer}>
-            <Plus className="h-4 w-4" /> Instantiate New Agent
-          </Button>
+          <PermissionGuard permission="agent:create" disabledTooltip="You do not have permission to create agents">
+            <Button variant="prismViolet" size="sm" className="gap-1.5" onClick={openCreateDrawer}>
+              <Plus className="h-4 w-4" /> Instantiate New Agent
+            </Button>
+          </PermissionGuard>
         }
       />
 
@@ -126,9 +129,11 @@ export default function AgentsPage() {
           title="No Agents Configured"
           description="There are no AI agents provisioned in this workspace yet."
           action={
-            <Button variant="prismViolet" size="sm" className="gap-1.5" onClick={openCreateDrawer}>
-              <Plus className="h-4 w-4" /> Instantiate New Agent
-            </Button>
+            <PermissionGuard permission="agent:create" disabledTooltip="You do not have permission to create agents">
+              <Button variant="prismViolet" size="sm" className="gap-1.5" onClick={openCreateDrawer}>
+                <Plus className="h-4 w-4" /> Instantiate New Agent
+              </Button>
+            </PermissionGuard>
           }
         />
       ) : (
@@ -209,30 +214,34 @@ export default function AgentsPage() {
                     <Eye className="h-3.5 w-3.5" /> Inspect
                   </Link>
                 </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="flex-1 gap-1.5 text-xs"
-                  onClick={() => openEditDrawer(agent)}
-                >
-                  <Settings className="h-3.5 w-3.5" /> Edit
-                </Button>
-                <ConfirmDialog
-                  title="Delete Agent"
-                  description={`Delete agent "${agent.name}"? This cannot be undone.`}
-                  confirmText="Delete"
-                  onConfirm={() => handleDelete(agent)}
-                  trigger={
-                    <Button
-                      variant="destructive"
-                      size="sm"
-                      className="px-2.5 text-xs"
-                      disabled={isPending}
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </Button>
-                  }
-                />
+                <PermissionGuard permission="agent:update" disabledTooltip="You do not have permission to edit agents">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="flex-1 gap-1.5 text-xs"
+                    onClick={() => openEditDrawer(agent)}
+                  >
+                    <Settings className="h-3.5 w-3.5" /> Edit
+                  </Button>
+                </PermissionGuard>
+                <PermissionGuard permission="agent:delete" disabledTooltip="You do not have permission to delete agents">
+                  <ConfirmDialog
+                    title="Delete Agent"
+                    description={`Delete agent "${agent.name}"? This cannot be undone.`}
+                    confirmText="Delete"
+                    onConfirm={() => handleDelete(agent)}
+                    trigger={
+                      <Button
+                        variant="destructive"
+                        size="sm"
+                        className="px-2.5 text-xs"
+                        disabled={isPending}
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    }
+                  />
+                </PermissionGuard>
               </CardFooter>
             </Card>
           ))}
@@ -279,15 +288,17 @@ export default function AgentsPage() {
                     </div>
                   </CardContent>
                   <CardFooter className="border-t border-border pt-3">
-                    <Button
-                      variant="prismViolet"
-                      size="sm"
-                      className="w-full gap-1.5 text-xs"
-                      disabled={instantiateMutation.isPending}
-                      onClick={() => handleInstantiateTemplate(tmpl)}
-                    >
-                      <Plus className="h-3.5 w-3.5" /> Instantiate Agent
-                    </Button>
+                    <PermissionGuard permission="agent:create" disabledTooltip="You do not have permission to instantiate agents">
+                      <Button
+                        variant="prismViolet"
+                        size="sm"
+                        className="w-full gap-1.5 text-xs"
+                        disabled={instantiateMutation.isPending}
+                        onClick={() => handleInstantiateTemplate(tmpl)}
+                      >
+                        <Plus className="h-3.5 w-3.5" /> Instantiate Agent
+                      </Button>
+                    </PermissionGuard>
                   </CardFooter>
                 </Card>
               ))}

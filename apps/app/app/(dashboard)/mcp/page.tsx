@@ -15,6 +15,7 @@ import { Button } from "@/components/atoms/Button";
 import { Badge, StatusDot } from "@/components/atoms/Badge";
 import { Switch } from "@/components/atoms/Switch";
 import { ConfirmDialog } from "@/components/molecules/ConfirmDialog";
+import { PermissionGuard } from "@/components/PermissionProvider";
 import { ErrorState, EmptyState } from "@/components/molecules/StateAlerts";
 import { CardSkeletonGrid } from "@/components/molecules/CardSkeleton";
 import { useMCPServersQuery } from "@/hooks/queries/useMCPServersQuery";
@@ -126,10 +127,12 @@ export default function MCPPage() {
         title="MCP Gateway"
         description="Model Context Protocol servers providing external tools, prompts, and resources to agents."
         extra={
-          <Button variant="prismViolet" onClick={openCreate} className="gap-2">
-            <Plus className="h-4 w-4" />
-            <span>Register MCP Server</span>
-          </Button>
+          <PermissionGuard permission="mcp:create" disabledTooltip="You do not have permission to register MCP servers">
+            <Button variant="prismViolet" onClick={openCreate} className="gap-2">
+              <Plus className="h-4 w-4" />
+              <span>Register MCP Server</span>
+            </Button>
+          </PermissionGuard>
         }
       />
 
@@ -138,9 +141,11 @@ export default function MCPPage() {
           title="No MCP Servers Registered"
           description="Connect Model Context Protocol (MCP) endpoints to expand agent capabilities."
           action={
-            <Button variant="prismViolet" onClick={openCreate}>
-              Register MCP Server
-            </Button>
+            <PermissionGuard permission="mcp:create" disabledTooltip="You do not have permission to register MCP servers">
+              <Button variant="prismViolet" onClick={openCreate}>
+                Register MCP Server
+              </Button>
+            </PermissionGuard>
           }
         />
       ) : (
@@ -214,26 +219,28 @@ export default function MCPPage() {
                     </span>
                     <span className="flex items-center gap-1.5">
                       <span>Enabled</span>
-                      <Switch
-                        checked={s.enabled}
-                        onCheckedChange={(checked) => {
-                          updateMutation.mutate(
-                            { id: s.id, data: { enabled: checked } },
-                            {
-                              onSuccess: () =>
-                                toast.success(
-                                  `MCP server ${checked ? "enabled" : "disabled"}`,
-                                ),
-                              onError: (err) =>
-                                toast.error(
-                                  `Update failed: ${getErrorMessage(err)}`,
-                                ),
-                            },
-                          );
-                        }}
-                        disabled={updateMutation.isPending}
-                        aria-label="Toggle MCP server enabled"
-                      />
+                      <PermissionGuard permission="mcp:update" disabledTooltip="You do not have permission to update MCP servers">
+                        <Switch
+                          checked={s.enabled}
+                          onCheckedChange={(checked) => {
+                            updateMutation.mutate(
+                              { id: s.id, data: { enabled: checked } },
+                              {
+                                onSuccess: () =>
+                                  toast.success(
+                                    `MCP server ${checked ? "enabled" : "disabled"}`,
+                                  ),
+                                onError: (err) =>
+                                  toast.error(
+                                    `Update failed: ${getErrorMessage(err)}`,
+                                  ),
+                              },
+                            );
+                          }}
+                          disabled={updateMutation.isPending}
+                          aria-label="Toggle MCP server enabled"
+                        />
+                      </PermissionGuard>
                     </span>
                   </div>
                 </CardContent>
@@ -259,61 +266,67 @@ export default function MCPPage() {
                       <Play className="h-3 w-3 text-muted-foreground" />
                       <span>Test</span>
                     </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="h-7 text-xs gap-1"
-                      onClick={() => {
-                        setSyncingId(s.id);
-                        syncMutation.mutate(s.id, {
-                          onSuccess: () =>
-                            toast.success("MCP server tools synced"),
-                          onError: (err) =>
-                            toast.error(`Sync failed: ${getErrorMessage(err)}`),
-                          onSettled: () => setSyncingId(null),
-                        });
-                      }}
-                      disabled={isSyncingThis}
-                    >
-                      {isSyncingThis ? (
-                        <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />
-                      ) : (
-                        <RefreshCw className="h-3 w-3" />
-                      )}
-                      <span>Sync</span>
-                    </Button>
+                    <PermissionGuard permission="mcp:update" disabledTooltip="You do not have permission to sync MCP servers">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-7 text-xs gap-1"
+                        onClick={() => {
+                          setSyncingId(s.id);
+                          syncMutation.mutate(s.id, {
+                            onSuccess: () =>
+                              toast.success("MCP server tools synced"),
+                            onError: (err) =>
+                              toast.error(`Sync failed: ${getErrorMessage(err)}`),
+                            onSettled: () => setSyncingId(null),
+                          });
+                        }}
+                        disabled={isSyncingThis}
+                      >
+                        {isSyncingThis ? (
+                          <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />
+                        ) : (
+                          <RefreshCw className="h-3 w-3" />
+                        )}
+                        <span>Sync</span>
+                      </Button>
+                    </PermissionGuard>
                   </div>
                   <div className="flex items-center gap-1">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-7 w-7 p-0 text-muted-foreground hover:text-foreground"
-                      onClick={() => openEdit(s)}
-                    >
-                      <Pencil className="h-3.5 w-3.5" />
-                    </Button>
-                    <ConfirmDialog
-                      title="Delete MCP Server"
-                      description={`Are you sure you want to unregister MCP server "${s.displayName || s.name}"?`}
-                      confirmText="Delete"
-                      variant="destructive"
-                      onConfirm={() => {
-                        deleteMutation.mutate(s.id, {
-                          onSuccess: () => toast.success("MCP server removed"),
-                          onError: (err) =>
-                            toast.error(`Delete failed: ${getErrorMessage(err)}`),
-                        });
-                      }}
-                      trigger={
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </Button>
-                      }
-                    />
+                    <PermissionGuard permission="mcp:update" disabledTooltip="You do not have permission to edit MCP servers">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 w-7 p-0 text-muted-foreground hover:text-foreground"
+                        onClick={() => openEdit(s)}
+                      >
+                        <Pencil className="h-3.5 w-3.5" />
+                      </Button>
+                    </PermissionGuard>
+                    <PermissionGuard permission="mcp:delete" disabledTooltip="You do not have permission to delete MCP servers">
+                      <ConfirmDialog
+                        title="Delete MCP Server"
+                        description={`Are you sure you want to unregister MCP server "${s.displayName || s.name}"?`}
+                        confirmText="Delete"
+                        variant="destructive"
+                        onConfirm={() => {
+                          deleteMutation.mutate(s.id, {
+                            onSuccess: () => toast.success("MCP server removed"),
+                            onError: (err) =>
+                              toast.error(`Delete failed: ${getErrorMessage(err)}`),
+                          });
+                        }}
+                        trigger={
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </Button>
+                        }
+                      />
+                    </PermissionGuard>
                   </div>
                 </CardFooter>
               </Card>

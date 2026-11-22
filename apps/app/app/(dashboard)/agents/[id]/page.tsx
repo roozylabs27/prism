@@ -16,6 +16,7 @@ import { Button } from "@/components/atoms/Button";
 import { Badge, StatusDot } from "@/components/atoms/Badge";
 import { MetricCard } from "@/components/atoms/MetricCard";
 import { ConfirmDialog } from "@/components/molecules/ConfirmDialog";
+import { PermissionGuard } from "@/components/PermissionProvider";
 import { ErrorState, EmptyState } from "@/components/molecules/StateAlerts";
 import { DataTable, Column } from "@/components/organisms/DataTable";
 import {
@@ -354,10 +355,12 @@ export default function AgentDetailPage() {
                 <span>Open in Sandbox</span>
               </Link>
             </Button>
-            <Button variant="outline" size="sm" className="gap-1.5" onClick={() => setModalOpen(true)}>
-              <Settings className="h-3.5 w-3.5" />
-              <span>Edit Agent</span>
-            </Button>
+            <PermissionGuard permission="agent:update" disabledTooltip="You do not have permission to edit agents">
+              <Button variant="outline" size="sm" className="gap-1.5" onClick={() => setModalOpen(true)}>
+                <Settings className="h-3.5 w-3.5" />
+                <span>Edit Agent</span>
+              </Button>
+            </PermissionGuard>
           </div>
         }
       />
@@ -639,18 +642,20 @@ export default function AgentDetailPage() {
 
       {/* Delete Agent Footer Action */}
       <div className="mt-8 flex justify-end">
-        <ConfirmDialog
-          title="Delete Agent Identity"
-          description={`Are you sure you want to permanently delete agent "${agent.displayName || agent.name}"? This action cannot be undone.`}
-          confirmText="Delete Agent"
-          onConfirm={handleDelete}
-          trigger={
-            <Button variant="destructive" size="sm" className="gap-1.5" disabled={deleteMutation.isPending}>
-              <Trash2 className="h-4 w-4" />
-              <span>Delete Agent</span>
-            </Button>
-          }
-        />
+        <PermissionGuard permission="agent:delete" disabledTooltip="You do not have permission to delete agents">
+          <ConfirmDialog
+            title="Delete Agent Identity"
+            description={`Are you sure you want to permanently delete agent "${agent.displayName || agent.name}"? This action cannot be undone.`}
+            confirmText="Delete Agent"
+            onConfirm={handleDelete}
+            trigger={
+              <Button variant="destructive" size="sm" className="gap-1.5" disabled={deleteMutation.isPending}>
+                <Trash2 className="h-4 w-4" />
+                <span>Delete Agent</span>
+              </Button>
+            }
+          />
+        </PermissionGuard>
       </div>
 
       {/* Edit Agent Dialog */}
