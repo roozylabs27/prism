@@ -68,12 +68,12 @@ leaked_rows="$(pg psql -At -d "$scratch" -v ON_ERROR_STOP=1 -c "
   END \$\$;
   GRANT USAGE ON SCHEMA public TO prism_app_verify;
   GRANT SELECT ON ALL TABLES IN SCHEMA public TO prism_app_verify;
-  INSERT INTO users (id, email, name, password_hash)
-    VALUES ('rls_verify_u1', 'rls-verify-u1@example.invalid', 'RLS Verify U1', 'x')
+  INSERT INTO "user" (id, email, name)
+    VALUES ('rls_verify_u1', 'rls-verify-u1@example.invalid', 'RLS Verify U1')
     ON CONFLICT DO NOTHING;
-  INSERT INTO organizations (id, name, slug, owner_id)
-    VALUES ('rls_verify_org_a', 'RLS Verify Org A', 'rls-verify-org-a', 'rls_verify_u1'),
-           ('rls_verify_org_b', 'RLS Verify Org B', 'rls-verify-org-b', 'rls_verify_u1')
+  INSERT INTO organizations (id, name, slug)
+    VALUES ('rls_verify_org_a', 'RLS Verify Org A', 'rls-verify-org-a'),
+           ('rls_verify_org_b', 'RLS Verify Org B', 'rls-verify-org-b')
     ON CONFLICT DO NOTHING;
   INSERT INTO agents (id, user_id, org_id, name, display_name)
     VALUES ('rls_verify_agent_a', 'rls_verify_u1', 'rls_verify_org_a', 'verify_a', 'Verify A'),
@@ -81,12 +81,18 @@ leaked_rows="$(pg psql -At -d "$scratch" -v ON_ERROR_STOP=1 -c "
     ON CONFLICT DO NOTHING;
   BEGIN;
   SET LOCAL ROLE prism_app_verify;
+  SELECT set_config('app.current_user_id', '', true);
+  SELECT set_config('app.current_org_id', '', true);
+  SELECT set_config('app.rls_bypass', '', true);
+  CREATE TEMP TABLE _rls_empty_check AS
+    SELECT id FROM agents WHERE id IN ('rls_verify_agent_a', 'rls_verify_agent_b');
   SELECT set_config('app.current_user_id', 'rls_verify_u1', true);
   SELECT set_config('app.current_org_id', 'rls_verify_org_a', true);
   CREATE TEMP TABLE _rls_leak_check AS
     SELECT id FROM agents WHERE id IN ('rls_verify_agent_a', 'rls_verify_agent_b');
   RESET ROLE;
-  SELECT count(*) FROM _rls_leak_check WHERE id = 'rls_verify_agent_b';
+  SELECT (SELECT count(*) FROM _rls_leak_check WHERE id = 'rls_verify_agent_b')
+       + (SELECT count(*) FROM _rls_empty_check);
   COMMIT;
 " | tail -n 1)"
 if [[ "${leaked_rows:-1}" != 0 ]]; then

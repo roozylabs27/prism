@@ -10,7 +10,7 @@ import (
 	"github.com/lib/pq"
 )
 
-const setRLSConfigSQL = "SELECT set_config('app.current_user_id', $1, false), set_config('app.current_org_id', $2, false)"
+const setRLSConfigSQL = "SELECT set_config('app.current_user_id', $1, false), set_config('app.current_org_id', $2, false), set_config('app.rls_bypass', $3, false)"
 
 // OpenRLSPostgres opens a PostgreSQL *sqlx.DB backed by pq.NewConnector wrapped
 // in NewRLSConnector so pooled connections synchronize RLS session settings.
@@ -50,34 +50,42 @@ type rlsConn struct {
 	appliedValid  bool
 	appliedUserID string
 	appliedOrgID  string
+	appliedBypass string
 	inTx          bool
 }
 
 func (c *rlsConn) ensureRLS(ctx context.Context) error {
 	target := TenantContextFrom(ctx)
+	bypassVal := ""
+	if target.BypassRLS {
+		bypassVal = "on"
+	}
 
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	if c.appliedValid && c.appliedUserID == target.UserID && c.appliedOrgID == target.OrgID {
+	if c.appliedValid && c.appliedUserID == target.UserID && c.appliedOrgID == target.OrgID && c.appliedBypass == bypassVal {
 		return nil
 	}
 
 	args := []driver.NamedValue{
 		{Ordinal: 1, Value: target.UserID},
 		{Ordinal: 2, Value: target.OrgID},
+		{Ordinal: 3, Value: bypassVal},
 	}
 	if err := execOnInner(ctx, c.inner, setRLSConfigSQL, args); err != nil {
 		// Invalidate cached state so the next query does not trust stale session GUCs.
 		c.appliedValid = false
 		c.appliedUserID = ""
 		c.appliedOrgID = ""
+		c.appliedBypass = ""
 		return err
 	}
 
 	c.appliedValid = true
 	c.appliedUserID = target.UserID
 	c.appliedOrgID = target.OrgID
+	c.appliedBypass = bypassVal
 	return nil
 }
 
@@ -218,6 +226,7 @@ func (c *rlsConn) ResetSession(ctx context.Context) error {
 			c.appliedValid = false
 			c.appliedUserID = ""
 			c.appliedOrgID = ""
+			c.appliedBypass = ""
 			c.inTx = false
 			c.mu.Unlock()
 			return err
@@ -254,10 +263,16 @@ func (s *rlsStmt) NumInput() int {
 }
 
 func (s *rlsStmt) Exec(args []driver.Value) (driver.Result, error) {
+	if err := s.conn.ensureRLS(context.Background()); err != nil {
+		return nil, err
+	}
 	return s.inner.Exec(args) //nolint:staticcheck // delegated legacy driver.Stmt method
 }
 
 func (s *rlsStmt) Query(args []driver.Value) (driver.Rows, error) {
+	if err := s.conn.ensureRLS(context.Background()); err != nil {
+		return nil, err
+	}
 	return s.inner.Query(args) //nolint:staticcheck // delegated legacy driver.Stmt method
 }
 

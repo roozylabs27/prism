@@ -33,9 +33,11 @@ services:
       OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
       OTEL_SERVICE_NAME: ${OTEL_SERVICE_NAME:-}
       OTEL_SAMPLING_RATE: ${OTEL_SAMPLING_RATE:-}
-      DATABASE_URL: postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set to a generated secret}@postgres:5432/${POSTGRES_DB:-prism}?sslmode=disable
+      DATABASE_URL: postgres://${POSTGRES_APP_USER:-${POSTGRES_USER:-postgres}}:${POSTGRES_APP_PASSWORD:-${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set to a generated secret}}@postgres:5432/${POSTGRES_DB:-prism}?sslmode=disable
       REDIS_URL: redis://:${REDIS_PASSWORD:?REDIS_PASSWORD must be set to a generated secret}@redis:6379
       ENCRYPTION_KEY: "${ENCRYPTION_KEY:?ENCRYPTION_KEY must be set (generate with: openssl rand -hex 32)}"
+      AUDIT_HMAC_KEY: ${AUDIT_HMAC_KEY:-}
+      REDIS_FAIL_CLOSED: ${REDIS_FAIL_CLOSED:-}
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
       GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
       GITHUB_CLIENT_ID: ${GITHUB_CLIENT_ID:-}
@@ -58,8 +60,9 @@ services:
       NEXT_PUBLIC_CLOUDFLARE_SITE_KEY: ${NEXT_PUBLIC_CLOUDFLARE_SITE_KEY:-}
       CLOUDFLARE_SITE_KEY: ${NEXT_PUBLIC_CLOUDFLARE_SITE_KEY:-}
       ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-https://app.prism.roozylabs.com,https://prism.roozylabs.com,https://api.prism.roozylabs.com}
-      # Member invitations: links point at the dashboard; emailed when SMTP is set.
+      # Member invitations & OAuth redirect URI: links point at the dashboard; emailed when SMTP is set.
       APP_PUBLIC_URL: ${APP_PUBLIC_URL:-https://app.prism.roozylabs.com}
+      PUBLIC_URL: ${PUBLIC_URL:-${APP_PUBLIC_URL:-https://app.prism.roozylabs.com}}
       SMTP_HOST: ${SMTP_HOST:-}
       SMTP_PORT: ${SMTP_PORT:-587}
       SMTP_USERNAME: ${SMTP_USERNAME:-}
@@ -124,9 +127,11 @@ services:
       OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
       OTEL_SERVICE_NAME: ${OTEL_SERVICE_NAME:-}
       OTEL_SAMPLING_RATE: ${OTEL_SAMPLING_RATE:-}
-      DATABASE_URL: postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set to a generated secret}@postgres:5432/${POSTGRES_DB:-prism}?sslmode=disable
+      DATABASE_URL: postgres://${POSTGRES_APP_USER:-${POSTGRES_USER:-postgres}}:${POSTGRES_APP_PASSWORD:-${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set to a generated secret}}@postgres:5432/${POSTGRES_DB:-prism}?sslmode=disable
       REDIS_URL: redis://:${REDIS_PASSWORD:?REDIS_PASSWORD must be set to a generated secret}@redis:6379
       ENCRYPTION_KEY: "${ENCRYPTION_KEY:?ENCRYPTION_KEY must be set (generate with: openssl rand -hex 32)}"
+      AUDIT_HMAC_KEY: ${AUDIT_HMAC_KEY:-}
+      REDIS_FAIL_CLOSED: ${REDIS_FAIL_CLOSED:-}
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
       GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
       GITHUB_CLIENT_ID: ${GITHUB_CLIENT_ID:-}
@@ -149,8 +154,9 @@ services:
       NEXT_PUBLIC_CLOUDFLARE_SITE_KEY: ${NEXT_PUBLIC_CLOUDFLARE_SITE_KEY:-}
       CLOUDFLARE_SITE_KEY: ${NEXT_PUBLIC_CLOUDFLARE_SITE_KEY:-}
       ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-https://app.prism.roozylabs.com,https://prism.roozylabs.com,https://api.prism.roozylabs.com}
-      # Member invitations: links point at the dashboard; emailed when SMTP is set.
+      # Member invitations & OAuth redirect URI: links point at the dashboard; emailed when SMTP is set.
       APP_PUBLIC_URL: ${APP_PUBLIC_URL:-https://app.prism.roozylabs.com}
+      PUBLIC_URL: ${PUBLIC_URL:-${APP_PUBLIC_URL:-https://app.prism.roozylabs.com}}
       SMTP_HOST: ${SMTP_HOST:-}
       SMTP_PORT: ${SMTP_PORT:-587}
       SMTP_USERNAME: ${SMTP_USERNAME:-}

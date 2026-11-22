@@ -177,7 +177,15 @@ func TestRLSConnector_PoolReuseAndReset(t *testing.T) {
 	if _, err := db.ExecContext(context.Background(), "SELECT 4"); err != nil {
 		t.Fatalf("background exec: %v", err)
 	}
-	// 5. Transaction rollback invalidates cached GUC state so next query re-applies cleanly.
+	// 5. System bypass context enables explicit app.rls_bypass='on'.
+	if _, err := db.ExecContext(WithSystemBypassRLS(context.Background()), "SELECT 4.5"); err != nil {
+		t.Fatalf("system bypass exec: %v", err)
+	}
+	// 6. Subsequent tenant query resets bypass back to ''.
+	if _, err := db.ExecContext(aliceCtx, "SELECT 4.75"); err != nil {
+		t.Fatalf("alice post-bypass exec: %v", err)
+	}
+	// 7. Transaction rollback invalidates cached GUC state so next query re-applies cleanly.
 	tx, err := db.BeginTx(aliceCtx, nil)
 	if err != nil {
 		t.Fatalf("begin tx: %v", err)
@@ -190,17 +198,20 @@ func TestRLSConnector_PoolReuseAndReset(t *testing.T) {
 	}
 
 	want := []recordedOp{
-		{kind: "exec", query: setRLSConfigSQL, args: []any{"u_alice", "org_a"}},
+		{kind: "exec", query: setRLSConfigSQL, args: []any{"u_alice", "org_a", ""}},
 		{kind: "exec", query: "SELECT 1", args: []any{}},
 		{kind: "exec", query: "SELECT 2", args: []any{}},
-		{kind: "exec", query: setRLSConfigSQL, args: []any{"u_bob", "org_b"}},
+		{kind: "exec", query: setRLSConfigSQL, args: []any{"u_bob", "org_b", ""}},
 		{kind: "exec", query: "SELECT 3", args: []any{}},
-		{kind: "exec", query: setRLSConfigSQL, args: []any{"", ""}},
+		{kind: "exec", query: setRLSConfigSQL, args: []any{"", "", ""}},
 		{kind: "exec", query: "SELECT 4", args: []any{}},
-		{kind: "exec", query: setRLSConfigSQL, args: []any{"u_alice", "org_a"}},
+		{kind: "exec", query: setRLSConfigSQL, args: []any{"", "", "on"}},
+		{kind: "exec", query: "SELECT 4.5", args: []any{}},
+		{kind: "exec", query: setRLSConfigSQL, args: []any{"u_alice", "org_a", ""}},
+		{kind: "exec", query: "SELECT 4.75", args: []any{}},
 		{kind: "begin_tx"},
 		{kind: "rollback"},
-		{kind: "exec", query: setRLSConfigSQL, args: []any{"u_alice", "org_a"}},
+		{kind: "exec", query: setRLSConfigSQL, args: []any{"u_alice", "org_a", ""}},
 		{kind: "exec", query: "SELECT 5", args: []any{}},
 	}
 
@@ -223,7 +234,7 @@ func TestRLSConnector_PreparedStmtFallback(t *testing.T) {
 
 	got := drv.snapshot()
 	want := []recordedOp{
-		{kind: "stmt_exec", query: setRLSConfigSQL, args: []any{"u_stmt", "org_stmt"}},
+		{kind: "stmt_exec", query: setRLSConfigSQL, args: []any{"u_stmt", "org_stmt", ""}},
 		{kind: "stmt_exec", query: "UPDATE foo SET bar = $1", args: []any{"baz"}},
 	}
 	if !reflect.DeepEqual(got, want) {
@@ -247,22 +258,26 @@ func TestRLSLivePostgresPoolIsolation(t *testing.T) {
 	defer db.Close()
 	db.SetMaxOpenConns(1)
 
-	readGUCs := func(ctx context.Context) (string, string) {
+	readGUCs := func(ctx context.Context) (string, string, string) {
 		t.Helper()
-		var uid, oid sql.NullString
-		err := db.QueryRowContext(ctx, "SELECT current_setting('app.current_user_id', true), current_setting('app.current_org_id', true)").Scan(&uid, &oid)
+		var uid, oid, bypass sql.NullString
+		err := db.QueryRowContext(ctx, "SELECT current_setting('app.current_user_id', true), current_setting('app.current_org_id', true), current_setting('app.rls_bypass', true)").Scan(&uid, &oid, &bypass)
 		if err != nil {
 			t.Fatalf("query current_setting: %v", err)
 		}
-		return uid.String, oid.String
+		return uid.String, oid.String, bypass.String
 	}
 
-	u, o := readGUCs(WithTenantContext(context.Background(), TenantDBContext{UserID: "u_1", OrgID: "org_1"}))
-	if u != "u_1" || o != "org_1" {
-		t.Fatalf("expected (u_1, org_1), got (%q, %q)", u, o)
+	u, o, b := readGUCs(WithTenantContext(context.Background(), TenantDBContext{UserID: "u_1", OrgID: "org_1"}))
+	if u != "u_1" || o != "org_1" || b != "" {
+		t.Fatalf("expected (u_1, org_1, ''), got (%q, %q, %q)", u, o, b)
 	}
-	u, o = readGUCs(context.Background())
-	if u != "" || o != "" {
-		t.Fatalf("expected reset GUCs ('', ''), got (%q, %q)", u, o)
+	u, o, b = readGUCs(WithSystemBypassRLS(context.Background()))
+	if u != "" || o != "" || b != "on" {
+		t.Fatalf("expected ('', '', 'on'), got (%q, %q, %q)", u, o, b)
+	}
+	u, o, b = readGUCs(context.Background())
+	if u != "" || o != "" || b != "" {
+		t.Fatalf("expected reset GUCs ('', '', ''), got (%q, %q, %q)", u, o, b)
 	}
 }

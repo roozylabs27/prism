@@ -20,8 +20,11 @@ func TestRLS_MigrationCoverageOffline(t *testing.T) {
 	require.NoError(t, err)
 	mig114, err := os.ReadFile(filepath.Join("..", "..", "migrations", "114_create_approval_requests_and_tool_approval.up.sql"))
 	require.NoError(t, err)
+	mig115, err := os.ReadFile(filepath.Join("..", "..", "migrations", "115_harden_rls_and_app_role.up.sql"))
+	require.NoError(t, err)
 
 	m111Str := string(mig111)
+	m115Str := string(mig115)
 	expectedTables := []string{
 		"providers",
 		"credentials",
@@ -43,10 +46,15 @@ func TestRLS_MigrationCoverageOffline(t *testing.T) {
 	}
 	for _, tbl := range expectedTables {
 		assert.Contains(t, m111Str, "'"+tbl+"'", "migration 111 must include tenant table %s", tbl)
+		assert.Contains(t, m115Str, "'"+tbl+"'", "migration 115 must harden fail-closed policy for %s", tbl)
 	}
 	assert.Contains(t, m111Str, "ENABLE ROW LEVEL SECURITY")
 	assert.Contains(t, string(mig114), "ALTER TABLE approval_requests ENABLE ROW LEVEL SECURITY;")
 	assert.Contains(t, string(mig114), "CREATE POLICY approval_requests_tenant_policy")
+	assert.Contains(t, m115Str, "app.rls_bypass")
+	assert.Contains(t, m115Str, "prism_app")
+	assert.Contains(t, m115Str, "workspace_members")
+	assert.Contains(t, m115Str, "tenant_quotas")
 }
 
 // TestRLS_NonSuperuserRoleIsolation verifies that a NOSUPERUSER NOBYPASSRLS role
@@ -89,11 +97,11 @@ func TestRLS_NonSuperuserRoleIsolation(t *testing.T) {
 		END $$;
 		GRANT USAGE ON SCHEMA public TO prism_rls_test_role;
 		GRANT SELECT ON agents TO prism_rls_test_role;
-		INSERT INTO users (id, email, name, password_hash)
-		VALUES ('rls_go_u1', 'rls-go-u1@example.invalid', 'RLS Go U1', 'x') ON CONFLICT DO NOTHING;
-		INSERT INTO organizations (id, name, slug, owner_id)
-		VALUES ('rls_go_org_a', 'RLS Go A', 'rls-go-org-a', 'rls_go_u1'),
-		       ('rls_go_org_b', 'RLS Go B', 'rls-go-org-b', 'rls_go_u1') ON CONFLICT DO NOTHING;
+		INSERT INTO "user" (id, email, name)
+		VALUES ('rls_go_u1', 'rls-go-u1@example.invalid', 'RLS Go U1') ON CONFLICT DO NOTHING;
+		INSERT INTO organizations (id, name, slug)
+		VALUES ('rls_go_org_a', 'RLS Go A', 'rls-go-org-a'),
+		       ('rls_go_org_b', 'RLS Go B', 'rls-go-org-b') ON CONFLICT DO NOTHING;
 		INSERT INTO agents (id, user_id, org_id, name, display_name)
 		VALUES ('rls_go_agent_a', 'rls_go_u1', 'rls_go_org_a', 'rls_go_a', 'RLS Go A'),
 		       ('rls_go_agent_b', 'rls_go_u1', 'rls_go_org_b', 'rls_go_b', 'RLS Go B') ON CONFLICT DO NOTHING;
@@ -103,7 +111,7 @@ func TestRLS_NonSuperuserRoleIsolation(t *testing.T) {
 		_, _ = adminDB.ExecContext(context.Background(), `
 			DELETE FROM agents WHERE id IN ('rls_go_agent_a', 'rls_go_agent_b');
 			DELETE FROM organizations WHERE id IN ('rls_go_org_a', 'rls_go_org_b');
-			DELETE FROM users WHERE id = 'rls_go_u1';
+			DELETE FROM "user" WHERE id = 'rls_go_u1';
 		`)
 	}()
 
@@ -113,7 +121,23 @@ func TestRLS_NonSuperuserRoleIsolation(t *testing.T) {
 
 	_, err = tx.ExecContext(ctx, `SET LOCAL ROLE prism_rls_test_role`)
 	require.NoError(t, err)
-	_, err = tx.ExecContext(ctx, `SELECT set_config('app.current_user_id', 'rls_go_u1', true), set_config('app.current_org_id', 'rls_go_org_a', true)`)
+
+	// Verify fail-closed behavior when GUCs are empty and app.rls_bypass != 'on'.
+	_, err = tx.ExecContext(ctx, `SELECT set_config('app.current_user_id', '', true), set_config('app.current_org_id', '', true), set_config('app.rls_bypass', '', true)`)
+	require.NoError(t, err)
+	emptyRows, err := tx.QueryContext(ctx, `SELECT id FROM agents WHERE id IN ('rls_go_agent_a', 'rls_go_agent_b')`)
+	require.NoError(t, err)
+	var emptySeen []string
+	for emptyRows.Next() {
+		var id string
+		require.NoError(t, emptyRows.Scan(&id))
+		emptySeen = append(emptySeen, strings.TrimSpace(id))
+	}
+	require.NoError(t, emptyRows.Err())
+	_ = emptyRows.Close()
+	assert.Empty(t, emptySeen, "empty GUCs without explicit app.rls_bypass must fail closed and see 0 rows")
+
+	_, err = tx.ExecContext(ctx, `SELECT set_config('app.current_user_id', 'rls_go_u1', true), set_config('app.current_org_id', 'rls_go_org_a', true), set_config('app.rls_bypass', '', true)`)
 	require.NoError(t, err)
 
 	rows, err := tx.QueryContext(ctx, `SELECT id FROM agents WHERE id IN ('rls_go_agent_a', 'rls_go_agent_b') ORDER BY id`)
