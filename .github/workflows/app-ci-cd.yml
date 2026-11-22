@@ -77,9 +77,40 @@ jobs:
     name: Run Playwright E2E Smoke Suite
     needs: [lint-and-build-check]
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_DB: prism_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgrespassword
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: 'apps/api/go.mod'
+          cache-dependency-path: 'apps/api/go.sum'
 
       - name: Install pnpm
         uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
@@ -101,11 +132,81 @@ jobs:
         working-directory: apps/app
         run: npx playwright install --with-deps chromium
 
+      - name: Build Go API binary
+        working-directory: apps/api
+        run: go build -o /tmp/prism-api ./cmd/server
+
+      - name: Run database migrations
+        env:
+          APP_ENV: development
+          DATABASE_URL: "postgres://postgres:postgrespassword@127.0.0.1:5432/prism_test?sslmode=disable"
+          REDIS_URL: "redis://127.0.0.1:6379"
+          ENCRYPTION_KEY: "ci-test-encryption-key-32-bytes!!"
+          AUDIT_HMAC_KEY: "ci-test-audit-hmac-key-32-bytes!"
+          REDIS_FAIL_CLOSED: "true"
+          TURNSTILE_DISABLED: "true"
+          RUN_MIGRATIONS: "true"
+        run: /tmp/prism-api --migrate-only
+
+      - name: Start ephemeral Go API server
+        env:
+          APP_ENV: development
+          SERVER_PORT: "8080"
+          DATABASE_URL: "postgres://postgres:postgrespassword@127.0.0.1:5432/prism_test?sslmode=disable"
+          REDIS_URL: "redis://127.0.0.1:6379"
+          ENCRYPTION_KEY: "ci-test-encryption-key-32-bytes!!"
+          AUDIT_HMAC_KEY: "ci-test-audit-hmac-key-32-bytes!"
+          REDIS_FAIL_CLOSED: "true"
+          TURNSTILE_DISABLED: "true"
+          RUN_MIGRATIONS: "false"
+          ALLOWED_ORIGINS: "http://127.0.0.1:3000,http://localhost:3000"
+          APP_PUBLIC_URL: "http://127.0.0.1:3000"
+          PUBLIC_URL: "http://127.0.0.1:3000"
+        run: |
+          nohup /tmp/prism-api > /tmp/prism-api.log 2>&1 &
+          for i in $(seq 1 30); do
+            if curl -sf http://127.0.0.1:8080/ready; then
+              exit 0
+            fi
+            sleep 1
+          done
+          cat /tmp/prism-api.log
+          exit 1
+
+      - name: Build & start Next.js dashboard server
+        working-directory: apps/app
+        env:
+          API_URL: "http://127.0.0.1:8080"
+          APP_PUBLIC_URL: "http://127.0.0.1:3000"
+          PUBLIC_URL: "http://127.0.0.1:3000"
+          NEXT_PUBLIC_BETTER_AUTH_URL: "http://127.0.0.1:3000"
+        run: |
+          pnpm build
+          nohup pnpm exec next start -H 127.0.0.1 -p 3000 > /tmp/prism-app.log 2>&1 &
+          for i in $(seq 1 30); do
+            if curl -sf http://127.0.0.1:3000/api/health; then
+              exit 0
+            fi
+            sleep 1
+          done
+          cat /tmp/prism-app.log
+          exit 1
+
       - name: Run Playwright E2E tests
         working-directory: apps/app
         env:
           CI: "true"
+          PLAYWRIGHT_LIVE_E2E: "1"
+          PLAYWRIGHT_BASE_URL: "http://127.0.0.1:3000"
         run: pnpm test:e2e
+
+      - name: Print ephemeral service logs on failure
+        if: failure()
+        run: |
+          echo "=== /tmp/prism-api.log ==="
+          cat /tmp/prism-api.log || true
+          echo "=== /tmp/prism-app.log ==="
+          cat /tmp/prism-app.log || true
 
   build-and-push:
     name: Build & Push App Docker Image to GHCR
