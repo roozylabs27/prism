@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { UseFormReturn } from 'react-hook-form';
 import {
   Card,
@@ -30,6 +31,7 @@ import {
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/atoms/Tooltip';
 import { PermissionGuard } from '@/components/PermissionProvider';
 import { FormTooltipLabel } from './FormattedSandboxOutput';
+import { AppRoutes } from '@/constants/routes';
 import type { SandboxFormValues } from '@/features/sandbox/schemas/sandbox.schema';
 import type { ApiAgent, ApiGatewayKey, ApiModel, ApiRoutingPolicy } from '@/lib/api';
 import {
@@ -37,6 +39,7 @@ import {
   HelpCircle as HelpCircleIcon,
   Play as PlayIcon,
   RefreshCw as RefreshCwIcon,
+  KeyRound as KeyRoundIcon,
 } from 'lucide-react';
 
 interface SandboxControlsFormProps {
@@ -99,11 +102,13 @@ export function SandboxControlsForm({
                           placeholder="Select target model"
                           searchPlaceholder="Search models..."
                           options={[
-                            { value: 'prism-auto', label: 'prism-auto (Auto Selection)' },
-                            ...modelsList.map((m: ApiModel) => ({
-                              value: m.slug,
-                              label: `${m.displayName || m.name} (${m.providerName || m.slug})`,
-                            })),
+                            { value: 'prism-auto', label: 'prism-auto (Smart Routing / Auto Selection)' },
+                            ...modelsList
+                              .filter((m: ApiModel) => m.slug !== 'prism-auto' && m.id !== 'prism-auto' && m.name !== 'prism-auto')
+                              .map((m: ApiModel) => ({
+                                value: m.slug,
+                                label: `${m.displayName || m.name} (${m.providerName || m.slug})`,
+                              })),
                           ]}
                         />
                       </FormControl>
@@ -161,21 +166,49 @@ export function SandboxControlsForm({
                         tooltip="Your organization's API Key used to evaluate quota limits, budget policies, and access rights."
                       />
                       <FormControl>
-                        <Select value={field.value} onValueChange={field.onChange} disabled={isExecuting}>
+                        <Select
+                          value={field.value}
+                          onValueChange={field.onChange}
+                          disabled={isExecuting || keysList.length === 0}
+                        >
                           <SelectTrigger className="w-full min-w-0">
-                            <SelectValue placeholder="Select API key" />
+                            <SelectValue
+                              placeholder={
+                                keysList.length === 0
+                                  ? 'No gateway keys available'
+                                  : 'Select API key'
+                              }
+                            />
                           </SelectTrigger>
                           <SelectContent>
-                            {keysList.map((k) => (
-                              <SelectItem key={k.id} value={k.keyPrefix}>
-                                <span className="truncate block max-w-[220px]">
-                                  {k.name} ({k.keyPrefix}...)
-                                </span>
+                            {keysList.length > 0 ? (
+                              keysList.map((k) => (
+                                <SelectItem key={k.id} value={k.keyPrefix}>
+                                  <span className="truncate block max-w-[220px]">
+                                    {k.name} ({k.keyPrefix}...)
+                                  </span>
+                                </SelectItem>
+                              ))
+                            ) : (
+                              <SelectItem value="__none__" disabled>
+                                No gateway keys found
                               </SelectItem>
-                            ))}
+                            )}
                           </SelectContent>
                         </Select>
                       </FormControl>
+                      {keysList.length === 0 && (
+                        <div className="flex items-center gap-1.5 pt-1 text-[11px] text-amber-500">
+                          <KeyRoundIcon className="h-3 w-3 shrink-0" />
+                          <span>No keys found.</span>
+                          <Link
+                            href={AppRoutes.GATEWAY_KEYS}
+                            className="underline font-medium hover:text-amber-400"
+                          >
+                            Create a Gateway API key &rarr;
+                          </Link>
+                        </div>
+                      )}
                       <FormMessage />
                     </FormItem>
                   )}
@@ -313,13 +346,17 @@ export function SandboxControlsForm({
 
             <PermissionGuard
               permission="playground:execute"
-              disabledTooltip="Playground execution permission required to run sandbox inference"
+              disabledTooltip={
+                keysList.length === 0
+                  ? 'A Gateway API Key is required to run the sandbox container'
+                  : 'Playground execution permission required to run sandbox inference'
+              }
             >
               <Button
                 type="submit"
                 variant="prismViolet"
                 className="w-full gap-2 mt-4 py-2.5 font-semibold text-xs shadow-md transition-all duration-200"
-                disabled={isExecuting}
+                disabled={isExecuting || keysList.length === 0}
               >
                 {isExecuting ? (
                   <RefreshCwIcon className="h-4 w-4 animate-spin text-white" />

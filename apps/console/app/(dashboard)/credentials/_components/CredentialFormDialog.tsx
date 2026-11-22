@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import Link from "next/link";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 
@@ -27,6 +28,7 @@ import { useProvidersQuery } from "@/hooks/queries/useProvidersQuery";
 import { useCreateCredentialMutation } from "@/hooks/mutations/useCredentialMutations";
 import { toast } from "sonner";
 import { getErrorMessage } from "@/types/ui";
+import { AppRoutes } from "@/constants/routes";
 
 import { credentialSchema, CredentialFormValues } from "@/features/credentials/schemas/credential.schema";
 
@@ -96,20 +98,40 @@ export function CredentialFormDialog({ open, onOpenChange }: CredentialFormDialo
                     <Select
                       value={field.value}
                       onValueChange={field.onChange}
-                      disabled={createMutation.isPending}
+                      disabled={createMutation.isPending || !providers || providers.length === 0}
                     >
                       <SelectTrigger>
-                        <SelectValue placeholder="Select Provider" />
+                        <SelectValue
+                          placeholder={
+                            providers && providers.length > 0
+                              ? "Select Provider"
+                              : "No providers available"
+                          }
+                        />
                       </SelectTrigger>
                       <SelectContent>
-                        {providers.map((p) => (
-                          <SelectItem key={p.id} value={p.id}>
-                            {p.name} ({p.type})
+                        {providers && providers.length > 0 ? (
+                          providers.map((p) => (
+                            <SelectItem key={p.id} value={p.id}>
+                              {p.name} ({p.type})
+                            </SelectItem>
+                          ))
+                        ) : (
+                          <SelectItem value="__none__" disabled>
+                            No providers available
                           </SelectItem>
-                        ))}
+                        )}
                       </SelectContent>
                     </Select>
                   </FormControl>
+                  {(!providers || providers.length === 0) && (
+                    <p className="text-[11px] text-amber-500">
+                      No upstream providers found.{" "}
+                      <Link href={AppRoutes.PROVIDERS} className="underline hover:text-amber-400">
+                        Configure a provider first &rarr;
+                      </Link>
+                    </p>
+                  )}
                   <FormMessage />
                 </FormItem>
               )}

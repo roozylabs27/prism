@@ -81,7 +81,7 @@ export function GatewayKeyFormDialog({
     createMutation.mutate(
       {
         name: values.name.trim(),
-        providerId: values.providerId,
+        providerId: values.providerId === "global" ? "" : values.providerId,
         rateLimit: Number(values.rateLimit) || undefined,
         ...(values.agentId?.trim() ? { agentId: values.agentId.trim() } : {}),
       },
@@ -142,7 +142,7 @@ export function GatewayKeyFormDialog({
               name="providerId"
               render={({ field }) => (
                 <FormItem className="space-y-2">
-                  <FormLabel>Provider</FormLabel>
+                  <FormLabel required>Provider / Routing Scope</FormLabel>
                   <FormControl>
                     <Select
                       value={field.value}
@@ -150,17 +150,25 @@ export function GatewayKeyFormDialog({
                       disabled={createMutation.isPending}
                     >
                       <SelectTrigger>
-                        <SelectValue placeholder="Select a provider" />
+                        <SelectValue placeholder="Select a provider scope" />
                       </SelectTrigger>
                       <SelectContent>
-                        {providers?.map((p) => (
-                          <SelectItem key={p.id} value={p.id}>
-                            {p.name}
-                          </SelectItem>
-                        ))}
+                        <SelectItem value="global">
+                          All Providers (Universal / prism-auto Smart Router)
+                        </SelectItem>
+                        {providers && providers.length > 0 && (
+                          providers.map((p) => (
+                            <SelectItem key={p.id} value={p.id}>
+                              {p.name}
+                            </SelectItem>
+                          ))
+                        )}
                       </SelectContent>
                     </Select>
                   </FormControl>
+                  <p className="text-[11px] text-muted-foreground">
+                    Select <strong>All Providers</strong> for automatic multi-model routing via <code>prism-auto</code>, or pick a specific provider to pin this key.
+                  </p>
                   <FormMessage />
                 </FormItem>
               )}

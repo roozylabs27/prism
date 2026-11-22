@@ -244,12 +244,24 @@ export default function PoliciesPage() {
                   />
                   <Select value={ruleProviderId} onValueChange={setRuleProviderId}>
                     <SelectTrigger className="h-8 w-[180px] text-xs">
-                      <SelectValue placeholder="Pin provider..." />
+                      <SelectValue
+                        placeholder={
+                          providersList && providersList.length > 0
+                            ? "Pin provider..."
+                            : "No providers"
+                        }
+                      />
                     </SelectTrigger>
                     <SelectContent>
-                      {providersList.map((p) => (
-                        <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
-                      ))}
+                      {providersList && providersList.length > 0 ? (
+                        providersList.map((p) => (
+                          <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                        ))
+                      ) : (
+                        <SelectItem value="__none__" disabled>
+                          No providers configured
+                        </SelectItem>
+                      )}
                     </SelectContent>
                   </Select>
                   <Input

@@ -106,11 +106,13 @@ export default function PlaygroundPage() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="prism-auto">prism-auto (Smart Routing)</SelectItem>
-                    {models.map((m: { id: string; slug: string; displayName: string }) => (
-                      <SelectItem key={m.id} value={m.slug}>
-                        {m.displayName}
-                      </SelectItem>
-                    ))}
+                    {models
+                      .filter((m: { id: string; slug: string }) => m.slug !== 'prism-auto' && m.id !== 'prism-auto')
+                      .map((m: { id: string; slug: string; displayName: string }) => (
+                        <SelectItem key={m.id} value={m.slug}>
+                          {m.displayName}
+                        </SelectItem>
+                      ))}
                   </SelectContent>
                 </Select>
               </div>

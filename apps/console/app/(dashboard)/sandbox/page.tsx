@@ -100,6 +100,13 @@ export default function SandboxPage() {
     form.setValue('routingPolicy', preferred.id);
   }, [policiesList, form]);
 
+  useEffect(() => {
+    if (keysList.length === 0) return;
+    const current = form.getValues('keyPrefix');
+    if (keysList.some((k) => k.keyPrefix === current)) return;
+    form.setValue('keyPrefix', keysList[0].keyPrefix);
+  }, [keysList, form]);
+
   const handleJobCompleted = useCallback(
     (jobId: string, result: Record<string, unknown> | null | undefined, model?: string, startTime?: number) => {
       if (completedJobRef.current === jobId) return;
