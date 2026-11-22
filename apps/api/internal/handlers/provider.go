@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/roozylabs/prism/internal/httputil"
@@ -94,6 +95,10 @@ func (h *ProviderHandler) Create(c *gin.Context) {
 	}
 	p := buildProviderFromCreate(req, c.GetString("userId"))
 	p.OrgID = middleware.GetTenantContext(c).OrgID
+	if !isValidProviderType(p.Type) {
+		httputil.RespondBadRequest(c, "Unsupported provider type", nil, "INVALID_PROVIDER_TYPE")
+		return
+	}
 	if !baseURLAllowed(c, p.BaseURL) {
 		return
 	}
@@ -130,6 +135,10 @@ func (h *ProviderHandler) Update(c *gin.Context) {
 		return
 	}
 	if req.BaseURL != nil && !baseURLAllowed(c, trimString(*req.BaseURL)) {
+		return
+	}
+	if req.Type != nil && strings.TrimSpace(*req.Type) != "" && !isValidProviderType(*req.Type) {
+		httputil.RespondBadRequest(c, "Unsupported provider type", nil, "INVALID_PROVIDER_TYPE")
 		return
 	}
 	priorOwner := existing.UserID

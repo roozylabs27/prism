@@ -110,3 +110,12 @@ func uniqueProviderSlug(name string) string {
 func trimString(s string) string {
 	return strings.TrimSpace(s)
 }
+
+func isValidProviderType(t string) bool {
+	switch strings.ToLower(strings.TrimSpace(t)) {
+	case "openai", "anthropic", "google", "openrouter", "opencode", "groq", "deepseek", "custom":
+		return true
+	default:
+		return false
+	}
+}

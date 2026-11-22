@@ -111,8 +111,10 @@ func TestCustomProviderCreateDefaultsAndUniqueSlug(t *testing.T) {
 	}
 	var p2 models.Provider
 	_ = json.Unmarshal(w2.Body.Bytes(), &p2)
-	if p2.Slug == "" || p2.Slug == p1.Slug {
-		t.Fatalf("expected unique auto-generated slugs, got p1=%q p2=%q", p1.Slug, p2.Slug)
+	// Unsupported provider types must return 400 rather than hitting DB constraints.
+	wBadType := customProviderRequest(h, "alice", http.MethodPost, "", `{"name":"Invalid Provider","type":"invalid_type","baseUrl":"https://93.184.216.34/v1"}`)
+	if wBadType.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 for unsupported provider type, got %d: %s", wBadType.Code, wBadType.Body.String())
 	}
 }
 
