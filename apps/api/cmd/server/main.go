@@ -178,6 +178,7 @@ func main() {
 	gatewayKeyHandler.SetScopeValidator(workspaceRepo)
 	gatewayKeyHandler.SetAgentValidator(agentRepo)
 	workspaceHandler := handlers.NewWorkspaceHandler(workspaceRepo)
+	workspaceHandler.SetAccessChecker(rbacRepo)
 	pilotOutcomesHandler := handlers.NewPilotOutcomesHandler(pilotOutcomesRepo)
 	admissionCtrl := proxy.NewAdmissionController(rbacEngine, agentGovernance, proxy.NewCachedQuotaEvaluator(quotaRepo, proxy.DefaultQuotaCacheTTL), budgetMgr)
 	admissionCtrl.SetAgentSpendFinder(requestLogRepo)

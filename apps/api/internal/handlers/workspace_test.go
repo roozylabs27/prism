@@ -18,6 +18,7 @@ import (
 type fakeWorkspaceStore struct {
 	workspaces map[string]models.Workspace
 	projects   map[string]models.Project
+	members    map[string]map[string]bool // workspaceID -> userID -> true
 }
 
 func newFakeWorkspaceStore() *fakeWorkspaceStore {
@@ -28,6 +29,7 @@ func newFakeWorkspaceStore() *fakeWorkspaceStore {
 		projects: map[string]models.Project{
 			"proj-1": {ID: "proj-1", WorkspaceID: "ws-1", Name: "Core", Slug: "core"},
 		},
+		members: map[string]map[string]bool{},
 	}
 }
 
@@ -35,6 +37,16 @@ func (f *fakeWorkspaceStore) ListWorkspacesByOrg(_ context.Context, orgID string
 	var out []models.Workspace
 	for _, ws := range f.workspaces {
 		if ws.OrgID == orgID {
+			out = append(out, ws)
+		}
+	}
+	return out, nil
+}
+
+func (f *fakeWorkspaceStore) ListWorkspacesForUser(_ context.Context, orgID, userID string) ([]models.Workspace, error) {
+	out := []models.Workspace{}
+	for _, ws := range f.workspaces {
+		if ws.OrgID == orgID && f.members[ws.ID][userID] {
 			out = append(out, ws)
 		}
 	}
@@ -169,4 +181,62 @@ func TestWorkspaceHandler_UpdateAndDeleteWorkspaceAndProject(t *testing.T) {
 	cDelWS.Set("organizationId", "org-1")
 	h.DeleteWorkspace(cDelWS)
 	require.Equal(t, http.StatusOK, wDelWS.Code)
+}
+
+type fakeWorkspacePermChecker struct {
+	perms map[string][]string // userID -> perms
+}
+
+func (f fakeWorkspacePermChecker) GetUserPermissions(_ context.Context, userID, _ string) ([]string, string, error) {
+	p, ok := f.perms[userID]
+	if !ok {
+		return nil, "", repository.ErrNotMember
+	}
+	return p, "", nil
+}
+
+func TestWorkspaceHandler_ListWorkspacesRespectsWorkspaceAdminAndMembership(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	store := newFakeWorkspaceStore()
+	store.workspaces["ws-2"] = models.Workspace{ID: "ws-2", OrgID: "org-1", Name: "Finance", Slug: "finance"}
+	store.members["ws-1"] = map[string]bool{"dev-1": true}
+
+	h := &WorkspaceHandler{
+		repo: store,
+		accessChecker: fakeWorkspacePermChecker{
+			perms: map[string][]string{
+				"owner-1": {"organization:read", "workspace:admin"},
+				"dev-1":   {"organization:read", "workspace:read"},
+			},
+		},
+	}
+
+	callList := func(userID string) (int, []models.Workspace) {
+		w := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(w)
+		c.Request = httptest.NewRequest(http.MethodGet, "/api/workspaces", nil)
+		c.Set("organizationId", "org-1")
+		c.Set("userId", userID)
+		h.ListWorkspaces(c)
+		var resp struct {
+			Data []models.Workspace `json:"data"`
+		}
+		_ = json.Unmarshal(w.Body.Bytes(), &resp)
+		return w.Code, resp.Data
+	}
+
+	// Owner with workspace:admin sees all org workspaces.
+	code, list := callList("owner-1")
+	require.Equal(t, http.StatusOK, code)
+	assert.Len(t, list, 2)
+
+	// Developer without workspace:admin sees only their member workspace.
+	code, list = callList("dev-1")
+	require.Equal(t, http.StatusOK, code)
+	require.Len(t, list, 1)
+	assert.Equal(t, "ws-1", list[0].ID)
+
+	// Unknown org member fails closed with 403.
+	code, _ = callList("outsider")
+	assert.Equal(t, http.StatusForbidden, code)
 }

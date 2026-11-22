@@ -581,6 +581,7 @@ func (r *RBACRepository) RevokeInvite(ctx context.Context, orgID, inviteID strin
 // PreviewInvite describes a pending invitation to its holder, before they
 // sign in: the address it was sent to, the role and the organization's name.
 func (r *RBACRepository) PreviewInvite(ctx context.Context, rawToken string) (*models.InvitePreview, error) {
+	ctx = database.WithSystemBypassRLS(ctx)
 	var p models.InvitePreview
 	err := r.db.QueryRowContext(ctx,
 		`SELECT i.email, COALESCE(r.slug, ''), COALESCE(o.name, ''), i.expires_at
@@ -605,6 +606,7 @@ func (r *RBACRepository) PreviewInvite(ctx context.Context, rawToken string) (*m
 // user's email must be the invited address. A user who is already a member
 // keeps their current role.
 func (r *RBACRepository) AcceptInvite(ctx context.Context, rawToken, userID, userEmail string) (*models.MemberInvite, error) {
+	ctx = database.WithSystemBypassRLS(ctx)
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
 		return nil, err

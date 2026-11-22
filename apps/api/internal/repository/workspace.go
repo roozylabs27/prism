@@ -67,6 +67,44 @@ func (r *WorkspaceRepository) ListWorkspacesByOrg(ctx context.Context, orgID str
 	return out, nil
 }
 
+// ListWorkspacesForUser returns workspaces in orgID that userID explicitly belongs to.
+func (r *WorkspaceRepository) ListWorkspacesForUser(ctx context.Context, orgID, userID string) ([]models.Workspace, error) {
+	if orgID == "" {
+		return nil, errors.New("organization ID is required")
+	}
+	if userID == "" {
+		return []models.Workspace{}, nil
+	}
+	rows, err := r.db.QueryContext(ctx,
+		`SELECT w.id, w.org_id, w.name, w.slug, w.created_at, w.updated_at
+		 FROM workspaces w
+		 INNER JOIN workspace_members wm ON wm.workspace_id = w.id
+		 WHERE w.org_id = $1 AND wm.user_id = $2
+		 ORDER BY w.created_at ASC, w.name ASC
+		 LIMIT 500`, orgID, userID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+
+	var out []models.Workspace
+	for rows.Next() {
+		var ws models.Workspace
+		if err := rows.Scan(&ws.ID, &ws.OrgID, &ws.Name, &ws.Slug, &ws.CreatedAt, &ws.UpdatedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, ws)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	if out == nil {
+		out = []models.Workspace{}
+	}
+	return out, nil
+}
+
 func (r *WorkspaceRepository) FindWorkspaceInOrg(ctx context.Context, orgID, workspaceID string) (*models.Workspace, error) {
 	if orgID == "" || workspaceID == "" {
 		return nil, ErrWorkspaceNotFound

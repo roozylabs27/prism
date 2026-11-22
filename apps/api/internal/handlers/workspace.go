@@ -24,9 +24,18 @@ type workspaceStore interface {
 	DeleteProject(ctx context.Context, orgID, workspaceID, projectID string) error
 }
 
+type userWorkspaceLister interface {
+	ListWorkspacesForUser(ctx context.Context, orgID, userID string) ([]models.Workspace, error)
+}
+
+type workspacePermChecker interface {
+	GetUserPermissions(ctx context.Context, userID, orgID string) ([]string, string, error)
+}
+
 type WorkspaceHandler struct {
-	repo  workspaceStore
-	audit *AdminAudit
+	repo          workspaceStore
+	accessChecker workspacePermChecker
+	audit         *AdminAudit
 }
 
 func NewWorkspaceHandler(repo *repository.WorkspaceRepository) *WorkspaceHandler {
@@ -35,6 +44,10 @@ func NewWorkspaceHandler(repo *repository.WorkspaceRepository) *WorkspaceHandler
 		store = repo
 	}
 	return &WorkspaceHandler{repo: store}
+}
+
+func (h *WorkspaceHandler) SetAccessChecker(checker workspacePermChecker) {
+	h.accessChecker = checker
 }
 
 func (h *WorkspaceHandler) SetAuditLog(a *AdminAudit) {
@@ -71,7 +84,43 @@ func (h *WorkspaceHandler) ListWorkspaces(c *gin.Context) {
 		httputil.RespondInternalError(c, "Workspace store unavailable", nil, "WORKSPACE_STORE_UNAVAILABLE")
 		return
 	}
-	workspaces, err := h.repo.ListWorkspacesByOrg(c.Request.Context(), orgID)
+
+	userID := c.GetString("userId")
+	if userID == "" {
+		userID = c.GetString("user_id")
+	}
+
+	useMemberFilter := false
+	if h.accessChecker != nil {
+		perms, _, err := h.accessChecker.GetUserPermissions(c.Request.Context(), userID, orgID)
+		if err != nil {
+			httputil.RespondForbidden(c, "Failed to verify organization permissions", err, "PERMISSION_DENIED")
+			return
+		}
+		hasWsAdmin := false
+		for _, perm := range perms {
+			clean := strings.ToLower(strings.TrimSpace(perm))
+			if clean == "workspace:admin" || clean == "workspace:*" {
+				hasWsAdmin = true
+				break
+			}
+		}
+		useMemberFilter = !hasWsAdmin
+	}
+
+	var (
+		workspaces []models.Workspace
+		err        error
+	)
+	if useMemberFilter {
+		if lister, ok := h.repo.(userWorkspaceLister); ok {
+			workspaces, err = lister.ListWorkspacesForUser(c.Request.Context(), orgID, userID)
+		} else {
+			workspaces, err = h.repo.ListWorkspacesByOrg(c.Request.Context(), orgID)
+		}
+	} else {
+		workspaces, err = h.repo.ListWorkspacesByOrg(c.Request.Context(), orgID)
+	}
 	if err != nil {
 		httputil.RespondInternalError(c, "Failed to list workspaces", err, "WORKSPACES_LIST_FAILED")
 		return
