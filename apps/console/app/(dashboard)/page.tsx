@@ -14,6 +14,7 @@ import {
 import { useLogsQuery, useLogAnalyticsQuery } from '@/hooks/queries/useLogsQuery';
 import { useWorkspacesQuery } from '@/hooks/queries/useWorkspacesQuery';
 import { useTenantStore } from '@/stores/useTenantStore';
+import { usePermission } from '@/components/PermissionProvider';
 import { ApiRequestLog } from '@/lib/api';
 import { ClientOnboardingModal } from '@/components/organisms/ClientOnboardingModal';
 import {
@@ -52,6 +53,8 @@ export default function DashboardPage() {
   const [onboardingOpen, setOnboardingOpen] = useState(false);
   const selectedDays = DATE_RANGE_OPTIONS.find((opt) => opt.value === dateRange)?.days ?? 30;
   const { selectedOrgId } = useTenantStore();
+  const { hasPermission, isLoading: isPermsLoading } = usePermission();
+  const canViewProviderHealth = !isPermsLoading && hasPermission('model:read');
   const { data: workspaces = [] } = useWorkspacesQuery(selectedOrgId);
 
   const {
@@ -199,7 +202,9 @@ export default function DashboardPage() {
     refetchStats();
     refetchUsage();
     refetchLogs();
-    refetchHealth();
+    if (canViewProviderHealth) {
+      refetchHealth();
+    }
     refetchAnalytics();
     refetchPilot();
     toast.info('Refreshing gateway telemetry');
@@ -314,6 +319,7 @@ export default function DashboardPage() {
           isHealthLoading={isHealthLoading}
           healthData={healthData}
           healthSignals={healthSignals}
+          canViewProviderHealth={canViewProviderHealth}
         />
 
         {pilotOutcomes && (

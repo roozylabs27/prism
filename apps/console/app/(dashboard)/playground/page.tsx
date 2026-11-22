@@ -73,7 +73,11 @@ export default function PlaygroundPage() {
         candidates: candidateList,
       });
 
-      toast.success(`Dry-run simulation completed! Selected candidate: ${decision.selectedModel}`);
+      if (decision.selectedModel) {
+        toast.success(`Dry-run simulation completed! Selected candidate: ${decision.selectedModel}`);
+      } else {
+        toast.info('Dry-run simulation completed: no eligible candidates found (configure a provider credential first).');
+      }
     } catch (error: unknown) {
       const errMsg = getErrorMessage(error);
       setSimulationError(errMsg);
@@ -175,7 +179,7 @@ export default function PlaygroundPage() {
               {decisionDetails && (
                 <Badge variant="violet" className="font-mono text-[10px] gap-1">
                   <Layers className="h-3 w-3" />
-                  {decisionDetails.selectedModel}
+                  {decisionDetails.selectedModel || 'No eligible candidate'}
                 </Badge>
               )}
             </div>
@@ -186,7 +190,7 @@ export default function PlaygroundPage() {
                 <div className="grid grid-cols-3 gap-2 p-3 rounded-md border border-border bg-muted/20 font-mono text-[11px]">
                   <div>
                     <span className="text-muted-foreground block text-[10px]">WINNING CANDIDATE</span>
-                    <span className="font-bold text-foreground">{decisionDetails.selectedModel}</span>
+                    <span className="font-bold text-foreground">{decisionDetails.selectedModel || 'No eligible candidate'}</span>
                   </div>
                   <div>
                     <span className="text-muted-foreground block text-[10px]">EVALUATED POLICY</span>

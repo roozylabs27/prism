@@ -8,10 +8,19 @@ import { Button } from '@/components/atoms/Button';
 interface SecretRevealProps {
   label: string;
   secret: string;
+  copyLabel?: string;
+  warningText?: string;
+  copyErrorText?: string;
 }
 
 /** Shows a secret the API returns only once, with a copy button and a warning. */
-export function SecretReveal({ label, secret }: SecretRevealProps) {
+export function SecretReveal({
+  label,
+  secret,
+  copyLabel = 'Copy Key',
+  warningText = 'Please copy your API key now and store it securely. For security reasons, you will not be able to view this full key again.',
+  copyErrorText = 'Could not copy; select the key and copy it manually.',
+}: SecretRevealProps) {
   const [copied, setCopied] = useState(false);
 
   const handleCopy = async () => {
@@ -21,7 +30,7 @@ export function SecretReveal({ label, secret }: SecretRevealProps) {
       toast.success('Copied to clipboard.');
       setTimeout(() => setCopied(false), 2000);
     } catch {
-      toast.error('Could not copy; select the key and copy it manually.');
+      toast.error(copyErrorText);
     }
   };
 
@@ -37,7 +46,7 @@ export function SecretReveal({ label, secret }: SecretRevealProps) {
           className="h-6 px-2 text-[11px] gap-1 cursor-pointer font-sans"
         >
           {copied ? <Check className="h-3 w-3 text-emerald-700 dark:text-emerald-400" /> : <Copy className="h-3 w-3" />}
-          <span>{copied ? 'Copied' : 'Copy Key'}</span>
+          <span>{copied ? 'Copied' : copyLabel}</span>
         </Button>
       </div>
       <p className="font-mono text-xs text-emerald-700 dark:text-emerald-400 bg-background/60 p-2.5 rounded-lg border border-border/60 break-all select-all">
@@ -45,10 +54,7 @@ export function SecretReveal({ label, secret }: SecretRevealProps) {
       </p>
       <div className="flex items-start gap-1.5 text-[11px] text-amber-700 dark:text-amber-400/90 font-sans mt-2 bg-amber-500/10 p-2 rounded-lg border border-amber-500/20">
         <ShieldAlert className="h-4 w-4 shrink-0 mt-0.5" />
-        <span>
-          Please copy your API key now and store it securely. For security reasons, you will not be able to view this
-          full key again.
-        </span>
+        <span>{warningText}</span>
       </div>
     </div>
   );

@@ -5,6 +5,7 @@ import {
   apiGetDashboardHealth,
   apiGetPilotOutcomes,
 } from '@/lib/api';
+import { usePermission } from '@/components/PermissionProvider';
 import { useTenantScopeKey } from './useTenantScopeKey';
 
 export function dateRangeToParams(dateRange?: string): { days?: number } | undefined {
@@ -36,9 +37,12 @@ export function useUsageChartQuery(dateRange?: string) {
 
 export function useDashboardHealthQuery() {
   const scope = useTenantScopeKey();
+  const { hasPermission, isLoading: isPermsLoading } = usePermission();
+  const canReadModels = !isPermsLoading && hasPermission('model:read');
   return useQuery({
     queryKey: ['dashboard-health', ...scope],
     queryFn: ({ signal }) => apiGetDashboardHealth(signal),
+    enabled: canReadModels,
   });
 }
 

@@ -184,4 +184,36 @@ describe('SSEProvider (HttpOnly session support)', () => {
     expect(invalidatedKeys).toContain('budget-alerts');
     expect(invalidatedKeys).toContain('cost-anomalies');
   });
+
+  it('does not connect SSE until user onboarding is complete (DEF-004)', async () => {
+    mockUseAuth.mockReturnValue({ isAuthenticated: true, user: { id: 'u1', isOnboarded: false } });
+    const qc = new QueryClient();
+
+    const { rerender } = render(
+      <QueryClientProvider client={qc}>
+        <SSEProvider>
+          <div />
+        </SSEProvider>
+      </QueryClientProvider>
+    );
+
+    await act(async () => {
+      vi.advanceTimersByTime(50);
+    });
+    expect(MockEventSource.instances).toHaveLength(0);
+
+    mockUseAuth.mockReturnValue({ isAuthenticated: true, user: { id: 'u1', isOnboarded: true } });
+    rerender(
+      <QueryClientProvider client={qc}>
+        <SSEProvider>
+          <div />
+        </SSEProvider>
+      </QueryClientProvider>
+    );
+
+    await act(async () => {
+      vi.advanceTimersByTime(10);
+    });
+    expect(MockEventSource.instances).toHaveLength(1);
+  });
 });

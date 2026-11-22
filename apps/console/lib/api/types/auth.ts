@@ -6,6 +6,7 @@ export interface User {
   image?: string;
   role?: string;
   orgId?: string;
+  isOnboarded?: boolean;
   createdAt: string;
 }
 

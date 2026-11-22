@@ -14,6 +14,7 @@ import { ApiAuditLogItem, ApiAIAuditTrail } from '@/lib/api';
 import { useExportAuditLogsMutation } from '@/hooks/mutations/useAuditLogMutations';
 import { getErrorMessage } from '@/types/ui';
 import { ErrorState, EmptyState } from '@/components/molecules/StateAlerts';
+import { PermissionGuard } from '@/components/PermissionProvider';
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -144,16 +145,18 @@ export default function AuditTrailPage() {
       title: 'Integrity Signature',
       key: 'signature',
       render: (_, record) => (
-        <Button
-          variant="outline"
-          size="sm"
-          className="h-7 text-xs gap-1 font-mono"
-          disabled={verifyMutation.isPending}
-          onClick={() => handleVerify(record.id)}
-        >
-          <ShieldCheck className="h-3.5 w-3.5 text-muted-foreground" />
-          Verify Hash
-        </Button>
+        <PermissionGuard permission="audit:verify" disabledTooltip="You do not have permission to verify audit signatures">
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-7 text-xs gap-1 font-mono"
+            disabled={verifyMutation.isPending}
+            onClick={() => handleVerify(record.id)}
+          >
+            <ShieldCheck className="h-3.5 w-3.5 text-muted-foreground" />
+            Verify Hash
+          </Button>
+        </PermissionGuard>
       ),
     },
   ];
@@ -202,21 +205,23 @@ export default function AuditTrailPage() {
         title="Audit Trail & Compliance Ledger"
         description="End-to-end cryptographic AI request audit trails with SHA-256 verification and administrative action logs."
         extra={
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="prismViolet" size="sm" className="gap-1.5">
-                <Download className="h-4 w-4" /> Export
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={handleExportCsv}>
-                <FileSpreadsheet className="h-4 w-4 mr-2" /> Export CSV
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={handleExportJson}>
-                <FileCode className="h-4 w-4 mr-2" /> Export JSON
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+          <PermissionGuard permission="audit:export" disabledTooltip="You do not have permission to export audit logs">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="prismViolet" size="sm" className="gap-1.5">
+                  <Download className="h-4 w-4" /> Export
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={handleExportCsv}>
+                  <FileSpreadsheet className="h-4 w-4 mr-2" /> Export CSV
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={handleExportJson}>
+                  <FileCode className="h-4 w-4 mr-2" /> Export JSON
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </PermissionGuard>
         }
       />
 

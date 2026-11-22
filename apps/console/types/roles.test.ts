@@ -20,5 +20,9 @@ describe('roles & permissions mapping', () => {
     expect(checkHasPermission(UserRole.DEVELOPER, backendPerms, 'governance:manage')).toBe(true);
     expect(checkHasPermission(UserRole.VIEWER, ['logs:read'], 'credential:create')).toBe(false);
     expect(checkHasPermission(UserRole.OWNER, [], 'credential:create')).toBe(true);
+    // DEF-012 & DEF-008: update does not grant create, and unseeded admin has no bypass.
+    expect(checkHasPermission(UserRole.DEVELOPER, ['model:update'], 'model:create')).toBe(false);
+    expect(checkHasPermission(UserRole.DEVELOPER, ['credential:update'], 'credential:create')).toBe(false);
+    expect(checkHasPermission(UserRole.ADMIN, [], 'credential:create')).toBe(false);
   });
 });

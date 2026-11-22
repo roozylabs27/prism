@@ -111,7 +111,7 @@ export default function GovernancePage() {
     <AppLayout>
       <PageHeader
         title="Governance & RBAC Permission Matrix"
-        description="Configure fine-grained Role-Based Access Control (Owner, Admin, Developer, Viewer) permissions."
+        description="Configure fine-grained Role-Based Access Control (Owner, Developer, Agent Manager, FinOps Manager, Auditor, Viewer) permissions."
         extra={
           <PermissionGuard permission="governance:create" disabledTooltip="You do not have permission to create governance policies">
             <Button variant="prismViolet" size="sm" className="gap-1.5" onClick={openCreate}>

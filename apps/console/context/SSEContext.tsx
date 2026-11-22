@@ -50,12 +50,16 @@ const EVENT_QUERY_KEY_MAP: Record<string, string[]> = {
 
 export const SSEProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const queryClient = useQueryClient();
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, user } = useAuth();
   const selectedOrgId = useTenantStore((s) => s.selectedOrgId);
   const [isConnected, setIsConnected] = useState(false);
   const [lastEvent, setLastEvent] = useState<SSEMessageEvent | null>(null);
   const listenersRef = React.useRef<Set<SSEListener>>(new Set());
   const lastEventIdRef = React.useRef<string>('');
+  const isOnboardingPath =
+    typeof window !== 'undefined' &&
+    (window.location.pathname.startsWith('/onboarding') || window.location.pathname.startsWith('/accept-invite'));
+  const shouldConnect = isAuthenticated && user?.isOnboarded !== false && !isOnboardingPath;
 
   const subscribeToSSE = React.useCallback((listener: SSEListener) => {
     listenersRef.current.add(listener);
@@ -65,7 +69,8 @@ export const SSEProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, []);
 
   useEffect(() => {
-    if (!isAuthenticated) {
+    if (!shouldConnect) {
+      setIsConnected(false);
       return;
     }
 
@@ -228,9 +233,9 @@ export const SSEProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         eventSource.close();
       }
     };
-  }, [queryClient, isAuthenticated, selectedOrgId]);
+  }, [queryClient, shouldConnect, selectedOrgId]);
 
-  const effectiveConnected = isAuthenticated && isConnected;
+  const effectiveConnected = shouldConnect && isConnected;
 
   return (
     <SSEContext.Provider value={{ isConnected: effectiveConnected, lastEvent, subscribeToSSE }}>

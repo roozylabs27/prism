@@ -42,7 +42,7 @@ describe('middleware', () => {
 
   it('lets anonymous visitors reach the auth pages, assets and proxied routes', async () => {
     globalThis.fetch = vi.fn();
-    for (const path of ['/signin', '/signup', '/_next/static/chunk.js', '/favicon.ico', '/api/auth/login', '/v1/chat/completions', '/health']) {
+    for (const path of ['/signin', '/signup', '/_next/static/chunk.js', '/favicon.ico', '/favicon.svg', '/api/auth/login', '/v1/chat/completions', '/health']) {
       const res = await middleware(request(path));
       expect(redirectTarget(res), path).toBeNull();
       expect(res.headers.get('x-middleware-next'), path).toBe('1');

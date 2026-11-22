@@ -32,6 +32,7 @@ interface DashboardOperationalBreakdownProps {
   isHealthLoading: boolean;
   healthData?: ApiProviderHealth[];
   healthSignals: DashboardHealthSignal[];
+  canViewProviderHealth?: boolean;
 }
 
 export function DashboardOperationalBreakdown({
@@ -42,6 +43,7 @@ export function DashboardOperationalBreakdown({
   isHealthLoading,
   healthData,
   healthSignals,
+  canViewProviderHealth = true,
 }: DashboardOperationalBreakdownProps) {
   return (
     <section className="grid gap-5 grid-cols-1 lg:grid-cols-3" aria-label="Operational breakdown">
@@ -120,7 +122,13 @@ export function DashboardOperationalBreakdown({
           </Link>
         </CardHeader>
         <CardContent className="space-y-2.5">
-          {isHealthLoading ? (
+          {!canViewProviderHealth ? (
+            <EmptyState
+              title="Provider availability restricted"
+              description="Your role does not include model:read access to inspect upstream provider pools."
+              className="p-6"
+            />
+          ) : isHealthLoading ? (
             <div className="space-y-2.5">
               {[1, 2, 3].map((i) => (
                 <div key={i} className="h-11 animate-pulse rounded-lg bg-muted/40" />

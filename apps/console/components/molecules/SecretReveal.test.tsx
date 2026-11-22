@@ -32,4 +32,19 @@ describe('SecretReveal', () => {
     await waitFor(() => expect(toast.error).toHaveBeenCalled());
     expect(screen.getByRole('button', { name: /copy key/i })).toBeInTheDocument();
   });
+
+  it('supports custom copyLabel and warningText for invitation links (DEF-006)', () => {
+    render(
+      <SecretReveal
+        label="Invitation link"
+        secret="https://app.example/accept-invite?token=abc"
+        copyLabel="Copy Link"
+        warningText="Share this invitation link securely with the invitee."
+      />
+    );
+
+    expect(screen.getByRole('button', { name: /copy link/i })).toBeInTheDocument();
+    expect(screen.getByText('Share this invitation link securely with the invitee.')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /copy key/i })).not.toBeInTheDocument();
+  });
 });

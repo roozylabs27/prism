@@ -25,20 +25,20 @@ export enum PermissionSlug {
 const PERMISSION_ALIASES: Record<string, string[]> = {
   'credential:read': ['credentials:read'],
   'credentials:read': ['credential:read'],
-  'credential:create': ['credentials:write', 'credential:update'],
-  'credentials:write': ['credential:create', 'credential:update'],
+  'credential:create': ['credentials:write'],
+  'credentials:write': ['credential:create'],
   'model:read': ['models:read'],
   'models:read': ['model:read'],
-  'model:create': ['models:write', 'model:update'],
-  'models:write': ['model:create', 'model:update'],
+  'model:create': ['models:write'],
+  'models:write': ['model:create'],
   'routing:read': ['policies:read'],
   'policies:read': ['routing:read'],
   'routing:update': ['policies:write'],
   'policies:write': ['routing:update'],
   'api_key:create': ['gateway_keys:write'],
   'gateway_keys:write': ['api_key:create'],
-  'governance:update': ['governance:manage', 'governance:create'],
-  'governance:manage': ['governance:update', 'governance:create'],
+  'governance:update': ['governance:manage'],
+  'governance:manage': ['governance:update'],
 };
 
 export function normalizeRoleSlug(rawRole?: string): UserRole {
@@ -63,7 +63,7 @@ export function normalizeRoleSlug(rawRole?: string): UserRole {
 }
 
 export function checkHasPermission(role: UserRole, permissions: string[], requested: string): boolean {
-  if (role === UserRole.OWNER || role === UserRole.ADMIN) return true;
+  if (role === UserRole.OWNER) return true;
   if (permissions.includes('*') || permissions.includes(requested)) return true;
   const aliases = PERMISSION_ALIASES[requested];
   return Boolean(aliases?.some((a) => permissions.includes(a)));

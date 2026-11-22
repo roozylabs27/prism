@@ -16,6 +16,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/molecules/DropdownMenu';
 import { useAuth } from '@/context/AuthContext';
+import { usePermission } from '@/components/PermissionProvider';
 import { useDashboardHealthQuery } from '@/hooks/queries/useDashboardQuery';
 import { useSidebarStore } from '@/stores/useSidebarStore';
 import { AppRoutes } from '@/constants/routes';
@@ -66,21 +67,24 @@ function getUserInitials(name?: string, email?: string): string {
 export function DashboardTopbar() {
   const pathname = usePathname();
   const { user, logout } = useAuth();
+  const { role: activeRole, hasPermission, isLoading: isPermsLoading } = usePermission();
+  const canReadModels = !isPermsLoading && hasPermission('model:read');
   const { data: healthData, isError: isHealthError } = useDashboardHealthQuery();
   const { toggleMobileOpen } = useSidebarStore();
 
   const isAnyProviderDegraded =
-    isHealthError ||
-    (Array.isArray(healthData) &&
-      healthData.length > 0 &&
-      healthData.some((p) => p.status === 'down'));
+    canReadModels &&
+    (isHealthError ||
+      (Array.isArray(healthData) &&
+        healthData.length > 0 &&
+        healthData.some((p) => p.status === 'down')));
 
   const systemStatus = isAnyProviderDegraded ? 'degraded' : 'operational';
   const systemStatusLabel = isAnyProviderDegraded ? 'System degraded' : 'System operational';
 
-  const displayName = user?.name || user?.email?.split('@')[0] || 'Prism Admin';
-  const email = user?.email || 'admin@prism.local';
-  const role = user?.role || 'Admin';
+  const displayName = user?.name || user?.email?.split('@')[0] || 'Prism User';
+  const email = user?.email || 'user@prism.local';
+  const role = !isPermsLoading && activeRole ? activeRole : user?.role || 'viewer';
   const initials = getUserInitials(user?.name, user?.email);
   const avatarSrc = user?.avatarUrl || user?.image;
   const routeLabel = getRouteLabel(pathname);
@@ -109,9 +113,11 @@ export function DashboardTopbar() {
       </div>
 
       <div className="flex items-center gap-2.5 sm:gap-3 shrink-0">
-        <div className="hidden md:flex items-center rounded-lg border border-border bg-card px-2.5 py-1.5">
-          <StatusDot status={systemStatus} label={systemStatusLabel} />
-        </div>
+        {canReadModels && (
+          <div className="hidden md:flex items-center rounded-lg border border-border bg-card px-2.5 py-1.5">
+            <StatusDot status={systemStatus} label={systemStatusLabel} />
+          </div>
+        )}
 
         <ThemeToggle />
 

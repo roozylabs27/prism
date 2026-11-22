@@ -97,7 +97,13 @@ export function InviteMemberSheet({ open, onOpenChange, onInviteSuccess }: Invit
               Email delivery is not configured on this server, so the link was not sent. Pass it to{" "}
               <span className="font-medium text-foreground">{inviteLink.email}</span> yourself; it is shown only now.
             </p>
-            <SecretReveal label="Invitation link" secret={inviteLink.url} />
+            <SecretReveal
+              label="Invitation link"
+              secret={inviteLink.url}
+              copyLabel="Copy Link"
+              copyErrorText="Could not copy; select the link and copy it manually."
+              warningText="Please copy this invitation link now and share it securely with the invitee. For security reasons, you will not be able to view this link again."
+            />
             <SheetFooter>
               <Button type="button" variant="prismViolet" onClick={() => onOpenChange(false)}>
                 Done

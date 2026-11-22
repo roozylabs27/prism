@@ -25,7 +25,8 @@ export async function middleware(request: NextRequest) {
   const inviteToken = request.nextUrl.searchParams.get('invite');
   const isStaticAsset =
     pathname.startsWith('/_next') ||
-    pathname.includes('favicon.ico');
+    pathname.includes('favicon.ico') ||
+    pathname.includes('favicon.svg');
   // Backend API and LLM inference reverse-proxies (/api/*, /v1/*) are authenticated
   // and authorized directly at the Go engine boundary (internal/middleware/auth.go).
   const isProxiedBackendRoute =
@@ -114,5 +115,5 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/((?!_next/static|_next/image|favicon.ico|api/).*)'],
+  matcher: ['/((?!_next/static|_next/image|favicon.ico|favicon.svg|api/).*)'],
 };
