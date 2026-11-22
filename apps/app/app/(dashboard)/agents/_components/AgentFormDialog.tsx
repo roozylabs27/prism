@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useForm } from "react-hook-form";
+import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 
 import { Button } from "@/components/atoms/Button";
@@ -75,25 +75,28 @@ export function AgentFormDialog({
 }: AgentFormDialogProps) {
   const createMutation = useCreateAgent();
   const updateMutation = useUpdateAgent();
-  const [nameLocked, setNameLocked] = useState(true);
+  const lockScopeKey = open ? (editingAgent?.id ?? "new") : "closed";
+  const defaultNameLocked =
+    !editingAgent || editingAgent.name === slugify(editingAgent.displayName || editingAgent.name);
+  const [nameLockOverride, setNameLockOverride] = useState<{ scope: string; locked: boolean } | null>(null);
+  const nameLocked =
+    nameLockOverride?.scope === lockScopeKey ? nameLockOverride.locked : defaultNameLocked;
 
   const form = useForm<AgentFormValues>({
     resolver: zodResolver(agentSchema),
     defaultValues,
   });
 
-  const { reset, watch } = form;
-  const formName = watch("name");
-  const formDisplayName = watch("displayName");
+  const { reset } = form;
+  const formName = useWatch({ control: form.control, name: "name" });
+  const formDisplayName = useWatch({ control: form.control, name: "displayName" });
 
   useEffect(() => {
     if (!open) return;
     if (!editingAgent) {
-      setNameLocked(true);
       reset(defaultValues);
       return;
     }
-    setNameLocked(editingAgent.name === slugify(editingAgent.displayName || editingAgent.name));
     reset({
       name: editingAgent.name,
       displayName: editingAgent.displayName,
@@ -117,7 +120,7 @@ export function AgentFormDialog({
   };
 
   const handleToggleNameLock = (locked: boolean) => {
-    setNameLocked(locked);
+    setNameLockOverride({ scope: lockScopeKey, locked });
     if (locked) {
       form.setValue("name", slugify(formDisplayName));
     }

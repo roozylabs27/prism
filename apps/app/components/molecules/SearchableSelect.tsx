@@ -45,6 +45,7 @@ function SearchableSelect({
   const [open, setOpen] = React.useState(false);
   const [search, setSearch] = React.useState('');
   const inputRef = React.useRef<HTMLInputElement>(null);
+  const listboxId = React.useId();
 
   let isFieldInvalid = false;
   try {
@@ -109,6 +110,7 @@ function SearchableSelect({
           type="button"
           role="combobox"
           aria-expanded={open}
+          aria-controls={listboxId}
           aria-invalid={isInvalid ? true : undefined}
           data-invalid={isInvalid ? 'true' : undefined}
           className={cn(
@@ -163,6 +165,8 @@ function SearchableSelect({
 
           {/* Scrollable Options List */}
           <div
+            id={listboxId}
+            role="listbox"
             className="overflow-y-auto p-1 custom-scrollbar"
             style={{ maxHeight }}
           >

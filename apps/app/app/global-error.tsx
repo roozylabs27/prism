@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect } from 'react';
+import Link from 'next/link';
 import { Shield, AlertOctagon, RefreshCw } from 'lucide-react';
 
 export default function GlobalError({
@@ -68,13 +69,12 @@ export default function GlobalError({
               <RefreshCw className="h-4 w-4" />
               Re-initialize Kernel UI
             </button>
-            <button
-              type="button"
-              onClick={() => window.location.assign('/')}
+            <Link
+              href="/"
               className="w-full flex items-center justify-center gap-2 rounded-lg border border-white/15 hover:bg-white/5 text-slate-200 py-2.5 px-4 text-xs font-semibold transition-colors cursor-pointer"
             >
               Reload Application Root
-            </button>
+            </Link>
           </div>
 
           <footer className="text-center text-[10px] font-mono text-slate-500 pt-2 border-t border-slate-800/80">

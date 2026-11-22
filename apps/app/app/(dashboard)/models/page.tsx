@@ -26,9 +26,13 @@ export default function ModelsPage() {
   const [selectedProviderId, setSelectedProviderId] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
 
-  const allModels: ApiModel[] = Array.isArray(data)
-    ? data
-    : (data as unknown as { data?: ApiModel[] })?.data ?? [];
+  const allModels = useMemo<ApiModel[]>(
+    () =>
+      Array.isArray(data)
+        ? data
+        : ((data as unknown as { data?: ApiModel[] })?.data ?? []),
+    [data]
+  );
 
   const providerOptions = Array.isArray(providers) ? providers : [];
 

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
-import { useForm, useFieldArray } from "react-hook-form";
+import { useForm, useFieldArray, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 
 import { Button } from "@/components/atoms/Button";
@@ -79,14 +79,14 @@ export function ToolFormDialog({
     defaultValues,
   });
 
-  const { reset, watch } = form;
+  const { reset } = form;
   const { fields, append, remove } = useFieldArray({
     control: form.control,
     name: "backends",
   });
 
-  const enabled = watch("enabled");
-  const requireApproval = watch("requireApproval");
+  const enabled = useWatch({ control: form.control, name: "enabled" });
+  const requireApproval = useWatch({ control: form.control, name: "requireApproval" });
 
   useEffect(() => {
     if (!open) return;

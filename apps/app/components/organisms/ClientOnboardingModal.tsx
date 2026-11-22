@@ -1,7 +1,7 @@
 'use client';
 
-import { useRef, useState } from 'react';
-import { useForm } from 'react-hook-form';
+import { useState } from 'react';
+import { useForm, useWatch } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useQueryClient } from '@tanstack/react-query';
 import {
@@ -70,24 +70,24 @@ export function ClientOnboardingModal({
   const [copiedKey, setCopiedKey] = useState(false);
   const [copiedSnippet, setCopiedSnippet] = useState(false);
   // Tracks partially created resources so retrying after a mid-flow error reuses them instead of duplicating
-  const progressRef = useRef<PartialStepProgress | null>(null);
+  const [partialProgress, setPartialProgress] = useState<PartialStepProgress | null>(null);
 
   const {
     register,
     handleSubmit,
     reset,
-    watch,
+    control,
     formState: { errors, isSubmitting },
   } = useForm<ClientOnboardingFormValues>({
     resolver: zodResolver(clientOnboardingSchema),
     defaultValues: DEFAULT_VALUES,
   });
 
-  const clientNameVal = watch('clientName');
+  const clientNameVal = useWatch({ control, name: 'clientName' });
 
   const resetForm = () => {
     reset(DEFAULT_VALUES);
-    progressRef.current = null;
+    setPartialProgress(null);
     setProvisioned(null);
     setCopiedKey(false);
     setCopiedSnippet(false);
@@ -102,15 +102,16 @@ export function ClientOnboardingModal({
 
   const onSubmit = async (values: ClientOnboardingFormValues) => {
     try {
-      if (!progressRef.current || progressRef.current.clientName !== values.clientName) {
-        progressRef.current = { clientName: values.clientName };
-      }
-      const progress = progressRef.current;
+      const progress: PartialStepProgress =
+        partialProgress && partialProgress.clientName === values.clientName
+          ? { ...partialProgress }
+          : { clientName: values.clientName };
 
       const ws =
         progress.workspace ??
         (await apiCreateWorkspace({ name: values.clientName }));
       progress.workspace = { id: ws.id, name: ws.name };
+      setPartialProgress({ ...progress });
 
       const proj =
         progress.project ??
@@ -118,6 +119,7 @@ export function ClientOnboardingModal({
           name: values.projectName || 'Default Workflow',
         }));
       progress.project = { id: proj.id, name: proj.name };
+      setPartialProgress({ ...progress });
 
       await apiUpdateQuota('workspace', ws.id, {
         monthlySpendLimitUsd: values.monthlyLimitUsd,
@@ -140,7 +142,7 @@ export function ClientOnboardingModal({
         queryClient.invalidateQueries({ queryKey: ['pilot-outcomes'] }),
       ]);
 
-      progressRef.current = null;
+      setPartialProgress(null);
       setProvisioned({
         workspaceId: ws.id,
         workspaceName: ws.name,

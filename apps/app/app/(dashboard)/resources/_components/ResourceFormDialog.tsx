@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
-import { useForm, useFieldArray } from "react-hook-form";
+import { useForm, useFieldArray, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 
 import { Button } from "@/components/atoms/Button";
@@ -84,7 +84,8 @@ export function ResourceFormDialog({
     defaultValues,
   });
 
-  const { reset, watch } = form;
+  const { reset } = form;
+  const watchedBackends = useWatch({ control: form.control, name: "backends" });
   const { fields, append, remove } = useFieldArray({
     control: form.control,
     name: "backends",
@@ -330,7 +331,7 @@ export function ResourceFormDialog({
                 ) : (
                   <div className="space-y-3">
                     {fields.map((item, index) => {
-                      const bType = watch(`backends.${index}.backendType`);
+                      const bType = watchedBackends?.[index]?.backendType ?? "http";
                       return (
                         <div
                           key={item.id}

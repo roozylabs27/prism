@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import {
@@ -129,14 +129,17 @@ export function DashboardSidebar() {
   const [commandOpen, setCommandOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
 
-  const isOn = (flag: FeatureFlagKey) => features?.flags?.[flag] ?? DEFAULT_FEATURE_FLAGS[flag] ?? false;
+  const isOn = useCallback(
+    (flag: FeatureFlagKey) => features?.flags?.[flag] ?? DEFAULT_FEATURE_FLAGS[flag] ?? false,
+    [features]
+  );
 
   const visibleItems = useMemo(
     () =>
       navGroups.flatMap((group) =>
         group.items.filter((item) => !item.flag || isOn(item.flag))
       ),
-    [features]
+    [isOn]
   );
 
   const filteredItems = useMemo(() => {

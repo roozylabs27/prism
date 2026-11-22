@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useForm } from "react-hook-form";
+import { useEffect } from "react";
+import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 
 import { Button } from "@/components/atoms/Button";
@@ -96,7 +96,7 @@ export function MCPServerFormDialog({
 }: MCPServerFormDialogProps) {
   const createMutation = useCreateMCPServerMutation();
   const updateMutation = useUpdateMCPServerMutation();
-  const [editingId, setEditingId] = useState("");
+  const editingId = open && editingServer ? editingServer.id : "";
 
   const editQuery = useMCPServerEditQuery(editingId);
   const isEditLoading = Boolean(editingId) && editQuery.isLoading;
@@ -106,16 +106,12 @@ export function MCPServerFormDialog({
     defaultValues,
   });
 
-  const { reset, watch } = form;
+  const { reset } = form;
 
   useEffect(() => {
-    if (!open) return;
-    if (!editingServer) {
-      setEditingId("");
+    if (open && !editingServer) {
       reset(defaultValues);
-      return;
     }
-    setEditingId(editingServer.id);
   }, [open, editingServer, reset]);
 
   useEffect(() => {
@@ -150,9 +146,10 @@ export function MCPServerFormDialog({
     });
   }, [editQuery.data, editingId, reset]);
 
-  const serverType = watch("type");
-  const headerRows = watch("headerRows");
-  const envRows = watch("envRows");
+  const serverType = useWatch({ control: form.control, name: "type" });
+  const headerRows = useWatch({ control: form.control, name: "headerRows" });
+  const envRows = useWatch({ control: form.control, name: "envRows" });
+  const enabledVal = useWatch({ control: form.control, name: "enabled" });
 
   const isSaving = createMutation.isPending || updateMutation.isPending;
 
@@ -589,7 +586,7 @@ export function MCPServerFormDialog({
               </div>
               <Switch
                 id="mcp-enabled"
-                checked={form.watch("enabled")}
+                checked={Boolean(enabledVal)}
                 onCheckedChange={(v) => form.setValue("enabled", v)}
                 disabled={isSaving || isEditLoading}
               />

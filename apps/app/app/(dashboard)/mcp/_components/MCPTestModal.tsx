@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { useForm } from "react-hook-form";
+import { useMemo, useState } from "react";
+import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 
@@ -325,7 +325,7 @@ export function MCPTestModal({
     null,
   );
   const [mode, setMode] = useState<InputMode>("guided");
-  const [guidedArgs, setGuidedArgs] = useState<JsonObject>({});
+  const [guidedOverrides, setGuidedOverrides] = useState<JsonObject>({});
   const [guidedErrors, setGuidedErrors] = useState<Record<string, string>>({});
 
   const form = useForm<TestFormValues>({
@@ -333,41 +333,38 @@ export function MCPTestModal({
     defaultValues: { toolName: "", argsJson: "{}" },
   });
 
-  const { reset, watch } = form;
-  const formToolName = watch("toolName");
+  const { reset } = form;
+  const formToolName = useWatch({ control: form.control, name: "toolName" });
 
   const selectedTool: ApiMCPTool | undefined = useMemo(
     () => tools.find((t) => t.name === formToolName),
     [tools, formToolName],
   );
 
-  const schema = (selectedTool?.inputSchema as JsonObject | undefined) ?? {};
+  const schema = useMemo<JsonObject>(
+    () => (selectedTool?.inputSchema as JsonObject | undefined) ?? {},
+    [selectedTool],
+  );
 
-  useEffect(() => {
-    if (!selectedTool || mode !== "guided") return;
-    const props = schemaProperties(schema);
+  const defaultGuidedArgs = useMemo<JsonObject>(() => {
+    if (!selectedTool || mode !== "guided") return {};
+    const propsMap = schemaProperties(schema);
     const next: JsonObject = {};
-    for (const [name, prop] of Object.entries(props)) {
+    for (const [name, prop] of Object.entries(propsMap)) {
       next[name] = defaultForProp(prop as JsonObject);
     }
-    setGuidedArgs(next);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedTool?.id, mode]);
+    return next;
+  }, [selectedTool, schema, mode]);
+
+  const guidedArgs = useMemo<JsonObject>(
+    () => ({ ...defaultGuidedArgs, ...guidedOverrides }),
+    [defaultGuidedArgs, guidedOverrides],
+  );
 
   const handleToolSelect = (toolName: string) => {
     form.setValue("toolName", toolName, { shouldValidate: true });
     setGuidedErrors({});
-    if (mode === "guided") {
-      const tool = tools.find((t) => t.name === toolName);
-      const props = schemaProperties(
-        tool?.inputSchema as JsonObject | undefined,
-      );
-      const next: JsonObject = {};
-      for (const [name, prop] of Object.entries(props)) {
-        next[name] = defaultForProp(prop as JsonObject);
-      }
-      setGuidedArgs(next);
-    }
+    setGuidedOverrides({});
   };
 
   const onSubmit = async (values: TestFormValues) => {
@@ -428,7 +425,7 @@ export function MCPTestModal({
       reset({ toolName: "", argsJson: "{}" });
       setTestResult(null);
       setMode("guided");
-      setGuidedArgs({});
+      setGuidedOverrides({});
       setGuidedErrors({});
     } else {
       setTestResult(null);
@@ -549,7 +546,7 @@ export function MCPTestModal({
                           prop={prop as JsonObject}
                           value={guidedArgs[name]}
                           onChange={(value) => {
-                            setGuidedArgs((prev) => ({
+                            setGuidedOverrides((prev) => ({
                               ...prev,
                               [name]: value,
                             }));
