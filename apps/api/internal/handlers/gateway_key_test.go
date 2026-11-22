@@ -87,4 +87,16 @@ func TestGatewayKeyHandlerIssuesListsAndRevokesKeys(t *testing.T) {
 	requireStatus(t, doJSON(alice, http.MethodDelete, "/api/gateway-keys/"+id, ""), http.StatusNotFound)
 	w = doJSON(alice, http.MethodGet, "/api/gateway-keys", "")
 	assert.Equal(t, 2.0, decodeBody(t, w)["total"])
+
+	// Stale workspaceId or projectId from a deleted workspace/project in client storage
+	// self-heals to nil when no scopeValidator rejected it, avoiding a 500 FK error (23503).
+	staleTenant := f.tenant
+	staleTenant.WorkspaceID = "ws_deleted_or_other_org"
+	staleTenant.ProjectID = "proj_deleted_or_other_org"
+	aliceStale := asUser("alice", &staleTenant, gatewayKeyRoutes(h))
+	w = doJSON(aliceStale, http.MethodPost, "/api/gateway-keys", `{"name":"self-healed"}`)
+	requireStatus(t, w, http.StatusCreated)
+	healed := decodeBody(t, w)
+	assert.Nil(t, healed["workspaceId"])
+	assert.Nil(t, healed["projectId"])
 }

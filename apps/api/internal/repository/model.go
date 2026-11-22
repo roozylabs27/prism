@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/roozylabs/prism/internal/database"
 	"github.com/roozylabs/prism/internal/models"
 )
 
@@ -139,12 +140,46 @@ func (r *ModelRepository) FindByID(ctx context.Context, id string) (*models.Mode
 	return m, nil
 }
 
+func modelProviderScopeClause(ctx context.Context, args []any) (string, []any, string) {
+	tc := database.TenantContextFrom(ctx)
+	if tc.BypassRLS && tc.OrgID == "" && tc.UserID == "" {
+		return "1=1", args, "m.created_at DESC"
+	}
+	const systemProvClause = "(p.user_id IS NULL AND (p.org_id IS NULL OR p.org_id = ''))"
+	if tc.OrgID == "" && tc.UserID == "" {
+		return systemProvClause, args, "m.created_at DESC"
+	}
+	if tc.OrgID != "" {
+		args = append(args, tc.OrgID, tc.UserID)
+		orgIdx, userIdx := len(args)-1, len(args)
+		clause := fmt.Sprintf(
+			"((p.org_id = $%d) OR ((p.org_id IS NULL OR p.org_id = '') AND p.user_id = $%d) OR %s)",
+			orgIdx, userIdx, systemProvClause,
+		)
+		order := fmt.Sprintf(
+			"CASE WHEN p.org_id = $%d THEN 0 WHEN p.user_id = $%d THEN 1 ELSE 2 END ASC, m.created_at DESC",
+			orgIdx, userIdx,
+		)
+		return clause, args, order
+	}
+	args = append(args, tc.UserID)
+	userIdx := len(args)
+	clause := fmt.Sprintf("(((p.org_id IS NULL OR p.org_id = '') AND p.user_id = $%d) OR %s)", userIdx, systemProvClause)
+	order := fmt.Sprintf("CASE WHEN p.user_id = $%d THEN 0 ELSE 1 END ASC, m.created_at DESC", userIdx)
+	return clause, args, order
+}
+
 func (r *ModelRepository) FindBySlug(ctx context.Context, slug string) (*models.Model, error) {
 	m := &models.Model{}
-	err := scanModel(r.db.QueryRowContext(ctx,
-		`SELECT `+modelSelectCols+`
-		 FROM models m LEFT JOIN providers p ON p.id = m.provider_id WHERE m.slug = $1`, slug,
-	), m)
+	scopeClause, args, orderClause := modelProviderScopeClause(ctx, []any{slug})
+	query := fmt.Sprintf(
+		`SELECT %s
+		 FROM models m LEFT JOIN providers p ON p.id = m.provider_id
+		 WHERE m.slug = $1 AND (%s)
+		 ORDER BY %s LIMIT 1`,
+		modelSelectCols, scopeClause, orderClause,
+	)
+	err := scanModel(r.db.QueryRowContext(ctx, query, args...), m)
 	if err != nil {
 		return nil, err
 	}
@@ -164,13 +199,17 @@ func (r *ModelRepository) FindBySlugAndProvider(ctx context.Context, slug, provi
 	return m, nil
 }
 
-// ListEnabled returns all enabled models with their capabilities (for semantic routing).
+// ListEnabled returns enabled models visible to the caller's tenant (plus shared system models).
 func (r *ModelRepository) ListEnabled(ctx context.Context) ([]models.Model, error) {
-	rows, err := r.db.QueryContext(ctx,
-		`SELECT `+modelSelectCols+`
+	scopeClause, args, _ := modelProviderScopeClause(ctx, nil)
+	query := fmt.Sprintf(
+		`SELECT %s
 		 FROM models m LEFT JOIN providers p ON p.id = m.provider_id
-		 WHERE m.enabled = true ORDER BY m.created_at DESC`,
+		 WHERE m.enabled = true AND (%s)
+		 ORDER BY m.created_at DESC`,
+		modelSelectCols, scopeClause,
 	)
+	rows, err := r.db.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}

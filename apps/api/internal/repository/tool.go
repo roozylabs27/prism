@@ -50,7 +50,7 @@ func (r *ToolRepository) ListByUserID(ctx context.Context, userID string) ([]mod
 
 func (r *ToolRepository) FindByID(ctx context.Context, id, userID string) (*models.Tool, error) {
 	var t models.Tool
-	ownerClause, args := tenantOwnerClause(ctx, "", userID, []any{id})
+	ownerClause, args := tenantOwnerAndWorkspaceClause(ctx, "", userID, []any{id})
 	err := scanTool(r.db.QueryRowContext(ctx,
 		`SELECT `+toolColumns+` FROM tools WHERE id = $1 AND (`+ownerClause+`)`, args...,
 	), &t)
@@ -62,7 +62,7 @@ func (r *ToolRepository) FindByID(ctx context.Context, id, userID string) (*mode
 
 func (r *ToolRepository) FindByUserAndName(ctx context.Context, userID, name string) (*models.Tool, error) {
 	var t models.Tool
-	ownerClause, args := tenantOwnerClause(ctx, "", userID, []any{name})
+	ownerClause, args := tenantOwnerAndWorkspaceClause(ctx, "", userID, []any{name})
 	err := scanTool(r.db.QueryRowContext(ctx,
 		`SELECT `+toolColumns+` FROM tools WHERE name = $1 AND (`+ownerClause+`)`, args...,
 	), &t)
@@ -148,7 +148,7 @@ func (r *ToolRepository) CreateWithBackendsTx(ctx context.Context, t *models.Too
 func (r *ToolRepository) Update(ctx context.Context, t *models.Tool) error {
 	t.UpdatedAt = time.Now()
 	args := []any{t.DisplayName, t.Description, []byte(t.InputSchema), t.Enabled, t.RequireApproval, t.UpdatedAt, t.ID}
-	ownerClause, args := tenantOwnerClause(ctx, "", t.UserID, args)
+	ownerClause, args := tenantOwnerAndWorkspaceClause(ctx, "", t.UserID, args)
 	_, err := r.db.ExecContext(ctx,
 		`UPDATE tools SET display_name=$1, description=$2, input_schema=$3, enabled=$4, require_approval=$5, updated_at=$6
 		 WHERE id=$7 AND (`+ownerClause+`)`,
@@ -157,7 +157,7 @@ func (r *ToolRepository) Update(ctx context.Context, t *models.Tool) error {
 }
 
 func (r *ToolRepository) Delete(ctx context.Context, id, userID string) error {
-	ownerClause, args := tenantOwnerClause(ctx, "", userID, []any{id})
+	ownerClause, args := tenantOwnerAndWorkspaceClause(ctx, "", userID, []any{id})
 	res, err := r.db.ExecContext(ctx, `DELETE FROM tools WHERE id = $1 AND (`+ownerClause+`)`, args...)
 	return requireOneRow(res, err)
 }

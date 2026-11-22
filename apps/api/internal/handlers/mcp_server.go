@@ -10,6 +10,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	"github.com/roozylabs/prism/internal/database"
 	"github.com/roozylabs/prism/internal/middleware"
 	"github.com/roozylabs/prism/internal/models"
 	"github.com/roozylabs/prism/internal/proxy"
@@ -819,8 +820,13 @@ func (h *MCPServerHandler) recordMCPAudit(ctx context.Context, reqID string, key
 	if serverName != "" {
 		servers = []string{serverName}
 	}
+	orgID := database.TenantContextFrom(ctx).OrgID
+	if orgID == "" && key.OrgID != nil {
+		orgID = *key.OrgID
+	}
 	trail := &models.AIAuditTrail{
 		RequestID:         reqID,
+		OrgID:             orgID,
 		UserID:            key.UserID,
 		GatewayKeyID:      &key.ID,
 		UserRole:          userRole,

@@ -59,7 +59,7 @@ func (r *AgentRepository) ListByUserID(ctx context.Context, userID string) ([]mo
 		args = wsArgs
 	}
 	rows, err := r.db.QueryContext(ctx,
-		`SELECT `+agentColumns+` FROM agents WHERE `+where+` ORDER BY created_at DESC`, args...)
+		`SELECT `+agentColumns+` FROM agents WHERE `+where+` ORDER BY created_at DESC LIMIT 500`, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -78,7 +78,7 @@ func (r *AgentRepository) ListByUserID(ctx context.Context, userID string) ([]mo
 
 func (r *AgentRepository) FindByID(ctx context.Context, id, userID string) (*models.Agent, error) {
 	var a models.Agent
-	ownerClause, args := tenantOwnerClause(ctx, "", userID, []any{id})
+	ownerClause, args := tenantOwnerAndWorkspaceClause(ctx, "", userID, []any{id})
 	err := scanAgent(r.db.QueryRowContext(ctx,
 		`SELECT `+agentColumns+` FROM agents WHERE id = $1 AND (`+ownerClause+`)`, args...), &a)
 	if err != nil {
@@ -184,7 +184,7 @@ func (r *AgentRepository) Update(ctx context.Context, a *models.Agent) error {
 		pq.Array(a.AllowedModels), pq.Array(a.AllowedTools), pq.Array(a.AllowedResources), pq.Array(a.AllowedMCPServers),
 		a.MaxBudgetCents, a.Status, a.Enabled, a.UpdatedAt, a.ID,
 	}
-	ownerClause, args := tenantOwnerClause(ctx, "", a.UserID, args)
+	ownerClause, args := tenantOwnerAndWorkspaceClause(ctx, "", a.UserID, args)
 	_, err := r.db.ExecContext(ctx,
 		`UPDATE agents SET display_name=$1, description=$2, agent_type=$3, system_prompt_override=$4, allowed_models=$5, allowed_tools=$6, allowed_resources=$7, allowed_mcp_servers=$8, max_budget_cents=$9, status=$10, enabled=$11, updated_at=$12
 		 WHERE id = $13 AND (`+ownerClause+`)`,
@@ -194,7 +194,7 @@ func (r *AgentRepository) Update(ctx context.Context, a *models.Agent) error {
 }
 
 func (r *AgentRepository) Delete(ctx context.Context, id, userID string) error {
-	ownerClause, args := tenantOwnerClause(ctx, "", userID, []any{id})
+	ownerClause, args := tenantOwnerAndWorkspaceClause(ctx, "", userID, []any{id})
 	res, err := r.db.ExecContext(ctx, `DELETE FROM agents WHERE id = $1 AND (`+ownerClause+`)`, args...)
 	return requireOneRow(res, err)
 }

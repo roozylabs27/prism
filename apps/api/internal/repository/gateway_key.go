@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/lib/pq"
+	"github.com/roozylabs/prism/internal/database"
 	"github.com/roozylabs/prism/internal/models"
 )
 
@@ -66,6 +67,50 @@ func (r *GatewayKeyRepository) Create(ctx context.Context, k *models.GatewayAPIK
 			k.OrgID = &orgID
 		}
 	}
+	// Defensive self-healing against stale client X-Prism-Workspace-ID / X-Prism-Project-ID headers
+	// that reference deleted or cross-org workspaces/projects so gateway key creation does not fail
+	// with a 500 foreign-key constraint violation (23503).
+	if k.ProjectID != nil && *k.ProjectID != "" {
+		var validProjID, parentWsID string
+		checkCtx := database.WithSystemBypassRLS(ctx)
+		var err error
+		if k.OrgID != nil && *k.OrgID != "" {
+			err = r.db.QueryRowContext(checkCtx,
+				`SELECT p.id, p.workspace_id FROM projects p INNER JOIN workspaces w ON w.id = p.workspace_id WHERE p.id = $1 AND w.org_id = $2`,
+				*k.ProjectID, *k.OrgID,
+			).Scan(&validProjID, &parentWsID)
+		} else {
+			err = r.db.QueryRowContext(checkCtx,
+				`SELECT id, workspace_id FROM projects WHERE id = $1`,
+				*k.ProjectID,
+			).Scan(&validProjID, &parentWsID)
+		}
+		if err != nil {
+			k.ProjectID = nil
+		} else if k.WorkspaceID == nil || *k.WorkspaceID == "" {
+			k.WorkspaceID = &parentWsID
+		}
+	}
+	if k.WorkspaceID != nil && *k.WorkspaceID != "" {
+		var validWsID string
+		checkCtx := database.WithSystemBypassRLS(ctx)
+		var err error
+		if k.OrgID != nil && *k.OrgID != "" {
+			err = r.db.QueryRowContext(checkCtx,
+				`SELECT id FROM workspaces WHERE id = $1 AND org_id = $2`,
+				*k.WorkspaceID, *k.OrgID,
+			).Scan(&validWsID)
+		} else {
+			err = r.db.QueryRowContext(checkCtx,
+				`SELECT id FROM workspaces WHERE id = $1`,
+				*k.WorkspaceID,
+			).Scan(&validWsID)
+		}
+		if err != nil {
+			k.WorkspaceID = nil
+			k.ProjectID = nil
+		}
+	}
 	now := time.Now()
 	k.CreatedAt = now
 	k.UpdatedAt = now
@@ -80,6 +125,7 @@ func (r *GatewayKeyRepository) Create(ctx context.Context, k *models.GatewayAPIK
 }
 
 func (r *GatewayKeyRepository) FindByKeyHash(ctx context.Context, keyHash string) (*models.GatewayAPIKey, error) {
+	ctx = database.WithSystemBypassRLS(ctx)
 	k := &models.GatewayAPIKey{}
 	row := r.db.QueryRowContext(ctx,
 		`SELECT `+gatewayKeySelectColumns+` FROM gateway_api_keys WHERE key_hash = $1 AND enabled = true`, keyHash,

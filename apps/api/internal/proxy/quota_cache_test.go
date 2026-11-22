@@ -93,23 +93,30 @@ func TestCachedQuotaEvaluator_ConcurrentMissesShareOneEvaluation(t *testing.T) {
 	src := &fakeQuotaSource{allowed: true, block: make(chan struct{})}
 	c, _ := newTestQuotaCache(src, 10*time.Second)
 
-	var wg sync.WaitGroup
-	for i := 0; i < 20; i++ {
-		wg.Add(1)
+	const n = 20
+	var wgReady sync.WaitGroup
+	var wgDone sync.WaitGroup
+	start := make(chan struct{})
+	wgReady.Add(n)
+	for i := 0; i < n; i++ {
+		wgDone.Add(1)
 		go func() {
-			defer wg.Done()
+			defer wgDone.Done()
+			wgReady.Done()
+			<-start
 			if res, err := c.EvaluateQuota(context.Background(), "organization", "org_a"); err != nil || !res.Allowed {
 				t.Errorf("unexpected result %+v, %v", res, err)
 			}
 		}()
 	}
-	// Let every goroutine reach the shared evaluation before releasing it.
+	wgReady.Wait()
+	close(start)
 	for src.calls.Load() == 0 {
 		time.Sleep(time.Millisecond)
 	}
 	time.Sleep(20 * time.Millisecond)
 	close(src.block)
-	wg.Wait()
+	wgDone.Wait()
 
 	if got := src.calls.Load(); got != 1 {
 		t.Errorf("concurrent misses should share one evaluation, got %d", got)

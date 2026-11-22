@@ -84,8 +84,12 @@ func (h *DashboardHandler) GetProviderHealth(c *gin.Context) {
 // maxDashboardDays bounds how far back dashboard queries scan request_logs.
 const maxDashboardDays = 365
 
-// parseDays reads a positive day count, clamped to maxDashboardDays.
+// parseDays reads a day count (0 means All Time when explicitly requested or as fallback),
+// clamped to maxDashboardDays.
 func parseDays(raw string, fallback int) int {
+	if raw == "0" {
+		return 0
+	}
 	n, err := strconv.Atoi(raw)
 	if err != nil || n <= 0 {
 		return fallback

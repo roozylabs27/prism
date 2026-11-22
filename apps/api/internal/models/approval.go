@@ -19,6 +19,7 @@ const (
 type ApprovalRequest struct {
 	ID            string          `json:"id" db:"id"`
 	OrgID         string          `json:"orgId,omitempty" db:"org_id"`
+	WorkspaceID   string          `json:"workspaceId,omitempty" db:"workspace_id"`
 	UserID        string          `json:"userId" db:"user_id"`
 	AgentID       string          `json:"agentId,omitempty" db:"agent_id"`
 	AgentName     string          `json:"agentName,omitempty" db:"agent_name"`

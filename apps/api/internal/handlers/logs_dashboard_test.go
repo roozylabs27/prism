@@ -136,6 +136,19 @@ func TestDashboardHandlerStatsUsageAndHealth(t *testing.T) {
 		assert.NotEqual(t, "bob-openai", p["name"], "bob's provider must not be listed")
 	}
 	require.NotNil(t, mine, "alice's provider missing from %v", health)
-	assert.Equal(t, "healthy", mine["status"])
+	assert.Equal(t, f.provAlice, mine["id"])
+	assert.Equal(t, "degraded", mine["status"], "enabled provider with 0 active credentials is degraded")
 	assert.Equal(t, float64(proxy.DefaultProviderHealthScore), mine["health_score"], "no health store means the default score")
+
+	// Once an active credential exists for the provider, status reports healthy.
+	_, err := f.db.Exec(`INSERT INTO credentials (provider_id, user_id, name, encrypted_key, key_prefix, priority, enabled, status)
+		VALUES ($1, 'alice', 'ops@example.com', 'enc', 'sk-', 1, true, 'active')`, f.provAlice)
+	require.NoError(t, err)
+	w = doJSON(alice, http.MethodGet, "/dashboard/health", "")
+	requireStatus(t, w, http.StatusOK)
+	for _, p := range decodeList(t, w) {
+		if p["name"] == "alice-openai" {
+			assert.Equal(t, "healthy", p["status"])
+		}
+	}
 }

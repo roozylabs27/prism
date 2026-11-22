@@ -6,6 +6,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/roozylabs/prism/internal/httputil"
+	"github.com/roozylabs/prism/internal/middleware"
 	"github.com/roozylabs/prism/internal/models"
 	"github.com/roozylabs/prism/internal/repository"
 )
@@ -39,7 +40,7 @@ func (h *QuotaHandler) resolveQuotaTarget(c *gin.Context) *models.TenantQuota {
 		httputil.RespondForbidden(c, "cannot access the quota of a different organization", nil, "QUOTA_ACCESS_DENIED")
 		return nil
 	}
-	target, err := h.repo.ResolveTarget(c.Request.Context(), orgID, targetType, targetID)
+	target, err := h.repo.ResolveTarget(middleware.ContextWithTenant(c), orgID, targetType, targetID)
 	if errors.Is(err, repository.ErrQuotaTargetNotFound) {
 		httputil.RespondNotFound(c, "Quota target not found in this organization", err, "QUOTA_TARGET_NOT_FOUND")
 		return nil
@@ -47,6 +48,16 @@ func (h *QuotaHandler) resolveQuotaTarget(c *gin.Context) *models.TenantQuota {
 	if err != nil {
 		httputil.RespondInternalError(c, "Failed to resolve quota target", err, "QUOTA_TARGET_RESOLVE_FAILED")
 		return nil
+	}
+	if callerWs := middleware.GetTenantContext(c).WorkspaceID; callerWs != "" {
+		if targetType == "workspace" && targetID != callerWs {
+			httputil.RespondForbidden(c, "cannot access the quota of a different workspace", nil, "QUOTA_ACCESS_DENIED")
+			return nil
+		}
+		if targetType == "project" && (target.WorkspaceID == nil || *target.WorkspaceID != callerWs) {
+			httputil.RespondForbidden(c, "cannot access a project quota outside the active workspace", nil, "QUOTA_ACCESS_DENIED")
+			return nil
+		}
 	}
 	return target
 }

@@ -124,6 +124,12 @@ func TestRequestLogStatsChartsAndHealth(t *testing.T) {
 	if len(points) != 2 || points[0].Model != "claude-3" || points[1].Model != "gpt-4o" || points[1].Requests != 2 || points[1].Tokens != 30 {
 		t.Fatalf("usage points = %+v", points)
 	}
+	if allPoints, err := f.logs.GetUsageChart(ctx, "alice", 0, "", ""); err != nil || len(allPoints) != 2 {
+		t.Fatalf("all-time usage points = %+v, %v", allPoints, err)
+	}
+	if hourlyPoints, err := f.logs.GetUsageChart(ctx, "alice", 1, "", ""); err != nil || len(hourlyPoints) != 2 || len(hourlyPoints[0].Date) != 16 {
+		t.Fatalf("hourly (days=1) usage points = %+v, %v", hourlyPoints, err)
+	}
 
 	health, err := f.logs.GetProviderHealth(ctx, "alice")
 	if err != nil {

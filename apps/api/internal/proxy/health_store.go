@@ -5,6 +5,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/roozylabs/prism/internal/database"
 	"github.com/roozylabs/prism/internal/repository"
 )
 
@@ -97,7 +98,7 @@ func NewProviderHealthStore(repo *repository.RequestLogRepository, ttl time.Dura
 }
 
 func (s *ProviderHealthStore) fetchFromRepo(ctx context.Context) (*providerHealthSnapshot, error) {
-	stats, err := s.repo.GetProviderHealthStats(ctx)
+	stats, err := s.repo.GetProviderHealthStats(database.WithSystemBypassRLS(ctx))
 	if err != nil {
 		return nil, err
 	}

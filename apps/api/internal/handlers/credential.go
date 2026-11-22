@@ -144,8 +144,8 @@ func providerAcceptsCredentialsFrom(prov *models.Provider, userID string, orgID 
 	if isSystemProvider(prov) {
 		return true
 	}
-	if len(orgID) > 0 && orgID[0] != "" && prov.OrgID != "" {
-		return prov.OrgID == orgID[0]
+	if prov.OrgID != "" {
+		return len(orgID) > 0 && orgID[0] != "" && prov.OrgID == orgID[0]
 	}
 	return prov.UserID == userID
 }
@@ -420,11 +420,14 @@ func (h *CredentialHandler) Delete(c *gin.Context) {
 		return
 	}
 
-	// 1. Guard against deleting credential with active in-flight streams
+	// 1. Guard against deleting credential with active in-flight streams in the current tenant
 	if h.cooldownStore != nil {
-		if summary, err := h.cooldownStore.GetActiveStreams(ctx, ""); err == nil {
-			maskedName := utils.MaskEmailName(cred.Name)
-			count := summary.ByCredential[maskedName]
+		if summary, err := h.cooldownStore.GetActiveStreams(ctx, userID); err == nil {
+			count := summary.ByCredentialID[cred.ID]
+			if count == 0 {
+				maskedName := utils.MaskEmailName(cred.Name)
+				count = summary.ByCredential[maskedName]
+			}
 			if count == 0 && cred.MaskedKey != "" {
 				count = summary.ByCredential[cred.MaskedKey]
 			}

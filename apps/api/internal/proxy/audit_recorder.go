@@ -11,25 +11,35 @@ import (
 	"strings"
 
 	"github.com/lib/pq"
+	"github.com/roozylabs/prism/internal/database"
 	"github.com/roozylabs/prism/internal/models"
 	"github.com/roozylabs/prism/internal/repository"
 )
 
 const AuditSignatureV2Prefix = "v2:"
 
+type auditTrailStore interface {
+	Create(ctx context.Context, a *models.AIAuditTrail) error
+	FindByID(ctx context.Context, id, userID string) (*models.AIAuditTrail, error)
+}
+
 type AuditRecorder struct {
-	repo    *repository.AuditTrailRepository
+	repo    auditTrailStore
 	hmacKey []byte
 }
 
 func NewAuditRecorder(repo *repository.AuditTrailRepository) *AuditRecorder {
-	return &AuditRecorder{repo: repo}
+	var writer auditTrailStore
+	if repo != nil {
+		writer = repo
+	}
+	return &AuditRecorder{repo: writer}
 }
 
 // NewAuditRecorderWithKey creates an AuditRecorder configured with a keyed
 // HMAC-SHA256 secret for tamper-evident v2 signatures.
 func NewAuditRecorderWithKey(repo *repository.AuditTrailRepository, hmacKey []byte) *AuditRecorder {
-	r := &AuditRecorder{repo: repo}
+	r := NewAuditRecorder(repo)
 	r.SetHMACKey(hmacKey)
 	return r
 }
@@ -199,6 +209,9 @@ func (r *AuditRecorder) Sign(trail *models.AIAuditTrail) {
 func (r *AuditRecorder) Record(ctx context.Context, trail *models.AIAuditTrail) error {
 	if trail == nil {
 		return fmt.Errorf("audit record: trail is nil")
+	}
+	if trail.OrgID == "" {
+		trail.OrgID = database.TenantContextFrom(ctx).OrgID
 	}
 	if trail.SignatureHash == "" {
 		r.Sign(trail)

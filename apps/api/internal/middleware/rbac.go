@@ -57,11 +57,12 @@ func RequirePermission(authzEngine *authz.AuthorizationEngine, action string) gi
 		}
 
 		principal := &authz.Principal{
-			Type:          pType,
-			ID:            userID,
-			OrgID:         orgID,
-			WorkspaceID:   wsID,
-			AllowedModels: allowedModels,
+			Type:                 pType,
+			ID:                   userID,
+			OrgID:                orgID,
+			WorkspaceID:          wsID,
+			AllowedModels:        allowedModels,
+			AllowOwnerPermLookup: pType == authz.PrincipalGatewayKey && IsGatewayKeyRouteAllowed(c.Request.Method, c.FullPath()),
 		}
 
 		target := &authz.ResourceContext{

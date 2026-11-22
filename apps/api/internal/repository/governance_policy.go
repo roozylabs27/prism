@@ -54,7 +54,7 @@ func (r *GovernancePolicyRepository) ListByUserID(ctx context.Context, userID st
 
 func (r *GovernancePolicyRepository) FindByID(ctx context.Context, id, userID string) (*models.GovernancePolicy, error) {
 	var p models.GovernancePolicy
-	ownerClause, args := tenantOwnerClause(ctx, "", userID, []any{id})
+	ownerClause, args := tenantOwnerAndWorkspaceClause(ctx, "", userID, []any{id})
 	err := scanPolicy(r.db.QueryRowContext(ctx,
 		`SELECT `+policyColumns+` FROM governance_policies WHERE id = $1 AND (`+ownerClause+`)`, args...), &p)
 	if err != nil {
@@ -109,7 +109,7 @@ func (r *GovernancePolicyRepository) Update(ctx context.Context, p *models.Gover
 		p.AgentPattern, p.ModelPattern, p.ToolPattern, p.ResourcePattern,
 		p.Priority, p.Enabled, p.UpdatedAt, p.ID,
 	}
-	ownerClause, args := tenantOwnerClause(ctx, "", p.UserID, args)
+	ownerClause, args := tenantOwnerAndWorkspaceClause(ctx, "", p.UserID, args)
 	_, err := r.db.ExecContext(ctx,
 		`UPDATE governance_policies SET name=$1, description=$2, role=$3, effect=$4, agent_pattern=$5, model_pattern=$6, tool_pattern=$7, resource_pattern=$8, priority=$9, enabled=$10, updated_at=$11
 		 WHERE id = $12 AND (`+ownerClause+`)`,
@@ -119,7 +119,7 @@ func (r *GovernancePolicyRepository) Update(ctx context.Context, p *models.Gover
 }
 
 func (r *GovernancePolicyRepository) Delete(ctx context.Context, id, userID string) error {
-	ownerClause, args := tenantOwnerClause(ctx, "", userID, []any{id})
+	ownerClause, args := tenantOwnerAndWorkspaceClause(ctx, "", userID, []any{id})
 	res, err := r.db.ExecContext(ctx, `DELETE FROM governance_policies WHERE id = $1 AND (`+ownerClause+`)`, args...)
 	return requireOneRow(res, err)
 }

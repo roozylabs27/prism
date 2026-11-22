@@ -73,7 +73,8 @@ func (w *OutboxWorker) Run(ctx context.Context) {
 		return
 	}
 
-	items, err := w.outbox.ClaimPendingBatch(ctx, outboxBatchLimit)
+	sysCtx := database.WithSystemBypassRLS(ctx)
+	items, err := w.outbox.ClaimPendingBatch(sysCtx, outboxBatchLimit)
 	if err != nil {
 		log.Printf("[outbox] claim batch failed: %v", err)
 		return
@@ -82,7 +83,7 @@ func (w *OutboxWorker) Run(ctx context.Context) {
 	for _, item := range items {
 		replayErr := w.dispatch(ctx, item)
 		if replayErr == nil {
-			if markErr := w.outbox.MarkDelivered(ctx, item.ID); markErr != nil {
+			if markErr := w.outbox.MarkDelivered(sysCtx, item.ID); markErr != nil {
 				log.Printf("[outbox] mark delivered %s (%s): %v", item.ID, item.EventType, markErr)
 				continue
 			}
@@ -101,7 +102,7 @@ func (w *OutboxWorker) Run(ctx context.Context) {
 			attempts = maxAttempts
 		}
 
-		deadLettered, markErr := w.outbox.MarkFailed(ctx, item.ID, attempts, maxAttempts, replayErr.Error())
+		deadLettered, markErr := w.outbox.MarkFailed(sysCtx, item.ID, attempts, maxAttempts, replayErr.Error())
 		if markErr != nil {
 			log.Printf("[outbox] mark failed %s (%s): %v", item.ID, item.EventType, markErr)
 			continue

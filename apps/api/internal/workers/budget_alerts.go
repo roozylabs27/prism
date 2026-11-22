@@ -4,6 +4,7 @@ import (
 	"context"
 	"log"
 
+	"github.com/roozylabs/prism/internal/database"
 	goredis "github.com/roozylabs/prism/internal/redis"
 	"github.com/roozylabs/prism/internal/repository"
 )
@@ -19,7 +20,8 @@ func NewBudgetAlertScanner(budgets *repository.BudgetRepository, alerts *reposit
 }
 
 func (s *BudgetAlertScanner) Run(ctx context.Context) {
-	budgetList, err := s.budgets.ListAllEnabled(ctx)
+	listCtx := database.WithSystemBypassRLS(ctx)
+	budgetList, err := s.budgets.ListAllEnabled(listCtx)
 	if err != nil {
 		log.Printf("[budget-alert] list budgets: %v", err)
 		return
@@ -29,7 +31,12 @@ func (s *BudgetAlertScanner) Run(ctx context.Context) {
 		if b.MonthlyLimit <= 0 {
 			continue
 		}
-		monthly, _, err := s.budgets.GetCombinedSpend(ctx, b.UserID)
+		bCtx := database.WithTenantContext(listCtx, database.TenantDBContext{
+			OrgID:       b.OrgID,
+			WorkspaceID: b.WorkspaceID,
+			UserID:      b.UserID,
+		})
+		monthly, _, err := s.budgets.GetCombinedSpend(bCtx, b.UserID)
 		if err != nil {
 			log.Printf("[budget-alert] spend for budget %s: %v", b.ID, err)
 			continue
@@ -58,14 +65,15 @@ func (s *BudgetAlertScanner) Run(ctx context.Context) {
 			MonthlySpent: &spent,
 			MonthlyLimit: &limit,
 		}
-		inserted, err := s.alerts.CreateIfNew(ctx, alert)
+		inserted, err := s.alerts.CreateIfNew(bCtx, alert)
 		if err != nil {
 			log.Printf("[budget-alert] create: %v", err)
 			continue
 		}
 		if inserted {
-			_ = s.publisher.Publish(ctx, b.UserID, "budget_alert", map[string]interface{}{
+			_ = s.publisher.Publish(bCtx, b.UserID, "budget_alert", map[string]interface{}{
 				"budget_id":     b.ID,
+				"org_id":        b.OrgID,
 				"alert_type":    alertType,
 				"usage_percent": usagePercent,
 				"monthly_spent": spent,

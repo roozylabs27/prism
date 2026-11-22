@@ -4,6 +4,7 @@ import (
 	"context"
 	"log"
 
+	"github.com/roozylabs/prism/internal/database"
 	"github.com/roozylabs/prism/internal/models"
 	"github.com/roozylabs/prism/internal/proxy"
 	"github.com/roozylabs/prism/internal/repository"
@@ -33,6 +34,7 @@ func NewCredentialRecoveryWorker(creds exhaustedCredentialStore, cooldown cooldo
 }
 
 func (w *CredentialRecoveryWorker) Run(ctx context.Context) {
+	ctx = database.WithSystemBypassRLS(ctx)
 	exhausted, err := w.creds.ListExhausted(ctx)
 	if err != nil {
 		log.Printf("[credential-recovery] list exhausted credentials: %v", err)

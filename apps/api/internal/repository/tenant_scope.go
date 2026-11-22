@@ -53,3 +53,14 @@ func appendOptionalWorkspaceClause(ctx context.Context, colPrefix string, args [
 	args = append(args, wsID)
 	return fmt.Sprintf("(%s IS NULL OR %s = '' OR %s = $%d)", wsCol, wsCol, wsCol, len(args)), args
 }
+
+// tenantOwnerAndWorkspaceClause combines tenantOwnerClause with appendOptionalWorkspaceClause
+// so single-item reads, updates, and deletes cannot cross workspace boundaries when a workspace
+// scope is active.
+func tenantOwnerAndWorkspaceClause(ctx context.Context, colPrefix string, ownerUserID string, args []any) (string, []any) {
+	ownerClause, args := tenantOwnerClause(ctx, colPrefix, ownerUserID, args)
+	if wsClause, wsArgs := appendOptionalWorkspaceClause(ctx, colPrefix, args); wsClause != "" {
+		return fmt.Sprintf("(%s) AND %s", ownerClause, wsClause), wsArgs
+	}
+	return ownerClause, args
+}

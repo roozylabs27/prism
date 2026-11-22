@@ -26,16 +26,17 @@ var (
 )
 
 type Principal struct {
-	Type            PrincipalType
-	ID              string
-	Email           string
-	OrgID           string
-	WorkspaceID     string
-	ProjectID       string
-	RoleSlug        string
-	Permissions     []string
-	AllowedModels   []string
-	IsPlatformAdmin bool
+	Type                 PrincipalType
+	ID                   string
+	Email                string
+	OrgID                string
+	WorkspaceID          string
+	ProjectID            string
+	RoleSlug             string
+	Permissions          []string
+	AllowedModels        []string
+	IsPlatformAdmin      bool
+	AllowOwnerPermLookup bool
 }
 
 type ResourceContext struct {
@@ -98,7 +99,7 @@ func (e *AuthorizationEngine) Can(ctx context.Context, p *Principal, action stri
 
 	// 3. Resolve Organization Permissions (Required for all subsequent gates)
 	perms := p.Permissions
-	if len(perms) == 0 && e.permFinder != nil && p.OrgID != "" && p.Type == PrincipalHumanUser {
+	if len(perms) == 0 && e.permFinder != nil && p.OrgID != "" && (p.Type == PrincipalHumanUser || (p.Type == PrincipalGatewayKey && p.AllowOwnerPermLookup)) {
 		fetchedPerms, roleSlug, err := e.permFinder.GetUserPermissions(ctx, p.ID, p.OrgID)
 		if err != nil {
 			// Fail-closed on error!

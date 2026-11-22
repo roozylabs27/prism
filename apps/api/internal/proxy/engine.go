@@ -470,15 +470,19 @@ func (e *Engine) Proxy(c *gin.Context, req *ProxyRequest, gatewayKey *models.Gat
 	}
 
 	activeCredName := ""
+	activeCredID := ""
 	if len(routes) > 0 {
 		activeCredName = getCredentialDisplayName(routes[0].Credential)
+		if routes[0].Credential != nil {
+			activeCredID = routes[0].Credential.ID
+		}
 	}
 
-	_ = e.cooldown.TrackActiveStream(ctx, reqID, userID, req.Model, gwKeyID, activeCredName)
+	_ = e.cooldown.TrackActiveStreamWithCredential(ctx, reqID, userID, req.Model, gwKeyID, activeCredID, activeCredName)
 	e.publishActiveStreams(ctx, userID)
 
 	defer func() {
-		bgCtx := context.Background()
+		bgCtx := database.WithTenantContext(context.Background(), database.TenantContextFrom(ctx))
 		_ = e.cooldown.UntrackActiveStream(bgCtx, userID, reqID)
 		e.publishActiveStreams(bgCtx, userID)
 	}()
@@ -498,7 +502,11 @@ func (e *Engine) Proxy(c *gin.Context, req *ProxyRequest, gatewayKey *models.Gat
 		}
 		if i > 0 {
 			retryCount++
-			_ = e.cooldown.TrackActiveStream(ctx, reqID, userID, req.Model, gwKeyID, getCredentialDisplayName(route.Credential))
+			credID := ""
+			if route.Credential != nil {
+				credID = route.Credential.ID
+			}
+			_ = e.cooldown.TrackActiveStreamWithCredential(ctx, reqID, userID, req.Model, gwKeyID, credID, getCredentialDisplayName(route.Credential))
 			e.publishActiveStreams(ctx, userID)
 		}
 
@@ -846,15 +854,19 @@ func (e *Engine) ProxyStream(c *gin.Context, req *ProxyRequest, gatewayKey *mode
 	}
 
 	activeCredName := ""
+	activeCredID := ""
 	if len(routes) > 0 {
 		activeCredName = getCredentialDisplayName(routes[0].Credential)
+		if routes[0].Credential != nil {
+			activeCredID = routes[0].Credential.ID
+		}
 	}
 
-	_ = e.cooldown.TrackActiveStream(ctx, reqID, userID, req.Model, gwKeyID, activeCredName)
+	_ = e.cooldown.TrackActiveStreamWithCredential(ctx, reqID, userID, req.Model, gwKeyID, activeCredID, activeCredName)
 	e.publishActiveStreams(ctx, userID)
 
 	defer func() {
-		bgCtx := context.Background()
+		bgCtx := database.WithTenantContext(context.Background(), database.TenantContextFrom(ctx))
 		_ = e.cooldown.UntrackActiveStream(bgCtx, userID, reqID)
 		e.publishActiveStreams(bgCtx, userID)
 	}()
@@ -885,7 +897,11 @@ func (e *Engine) ProxyStream(c *gin.Context, req *ProxyRequest, gatewayKey *mode
 		}
 		if i > 0 {
 			retryCount++
-			_ = e.cooldown.TrackActiveStream(c.Request.Context(), reqID, userID, req.Model, gwKeyID, getCredentialDisplayName(route.Credential))
+			credID := ""
+			if route.Credential != nil {
+				credID = route.Credential.ID
+			}
+			_ = e.cooldown.TrackActiveStreamWithCredential(c.Request.Context(), reqID, userID, req.Model, gwKeyID, credID, getCredentialDisplayName(route.Credential))
 			e.publishActiveStreams(c.Request.Context(), userID)
 		}
 
@@ -1503,13 +1519,15 @@ func getCredentialDisplayName(c *models.Credential) string {
 // publishActiveStreams tells the user's dashboard what is in flight. The
 // summary is read and published off the request path; it reflects the state
 // at the time the task runs, so a later change is not lost.
-func (e *Engine) publishActiveStreams(_ context.Context, userID string) {
+func (e *Engine) publishActiveStreams(reqCtx context.Context, userID string) {
 	if e.publisher == nil || e.cooldown == nil || userID == "" {
 		return
 	}
+	tc := database.TenantContextFrom(reqCtx)
 	e.effects.Go("active streams", func(ctx context.Context) {
-		if summary, err := e.cooldown.GetActiveStreams(ctx, userID); err == nil {
-			_ = e.publisher.Publish(ctx, userID, "active_streams_update", summary)
+		tCtx := database.WithTenantContext(ctx, tc)
+		if summary, err := e.cooldown.GetActiveStreams(tCtx, userID); err == nil {
+			_ = e.publisher.Publish(tCtx, userID, "active_streams_update", summary)
 		}
 	})
 }

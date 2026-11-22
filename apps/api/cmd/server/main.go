@@ -351,8 +351,9 @@ func main() {
 	r.GET("/metrics", middleware.MetricsGuard(cfg.MetricsToken, cfg.IsDevelopment()), telemetry.PrometheusHandler())
 
 	// API routes group
-	tenantChecker := middleware.NewCompositeTenantChecker(accountRepo, workspaceRepo)
+	tenantChecker := middleware.NewCompositeTenantChecker(accountRepo, workspaceRepo, rbacRepo)
 	api := r.Group("/api")
+	api.Use(middleware.CSRFOriginMiddleware(cfg.AllowedOrigins))
 	{
 		// Public API routes
 		api.GET("/health", healthHandler.Check)
@@ -378,6 +379,8 @@ func main() {
 		{
 			// Auth Session
 			userProtected.GET("/auth/me", authHandler.Me)
+			userProtected.POST("/auth/change-password", authHandler.ChangePassword)
+			userProtected.POST("/auth/sessions/revoke-all", authHandler.RevokeAllSessions)
 
 			// User Permissions, Organization List & Onboarding
 			userProtected.GET("/user/permissions", middleware.OptionalTenantMiddleware(tenantChecker), userPermissionsHandler.GetPermissions)
@@ -478,17 +481,17 @@ func main() {
 			protected.GET("/billing/usage", billingEnabled, requirePermission("billing:read"), billingHandler.GetUsage)
 
 			// Dashboard
-			protected.GET("/dashboard/stats", dashboardHandler.GetStats)
-			protected.GET("/dashboard/usage", dashboardHandler.GetUsageChart)
-			protected.GET("/dashboard/health", dashboardHandler.GetProviderHealth)
-			protected.GET("/dashboard/active-streams", activeStreamsHandler.GetActiveStreams)
+			protected.GET("/dashboard/stats", requirePermission("logs:read"), dashboardHandler.GetStats)
+			protected.GET("/dashboard/usage", requirePermission("logs:read"), dashboardHandler.GetUsageChart)
+			protected.GET("/dashboard/health", requirePermission("model:read"), dashboardHandler.GetProviderHealth)
+			protected.GET("/dashboard/active-streams", requirePermission("logs:read"), activeStreamsHandler.GetActiveStreams)
 
 			// Settings
 			protected.GET("/settings", requirePermission("organization:read"), settingsHandler.List)
 			protected.PUT("/settings", requirePermission("organization:update"), settingsHandler.Update)
 
 			// SSE
-			protected.GET("/sse", sseHandler.Stream)
+			protected.GET("/sse", requirePermission("organization:read"), sseHandler.Stream)
 
 			// Routing Rules
 			protected.GET("/routing-rules", requirePermission("routing:read"), routingRuleHandler.List)
@@ -604,7 +607,7 @@ func main() {
 			// Sandbox
 			protected.POST("/sandbox/chat/completions", requirePermission("playground:execute"), gatewayHandler.SandboxChatCompletions)
 			protected.POST("/sandbox/chat/completions/async", requirePermission("playground:execute"), gatewayHandler.AsyncSandboxChatCompletions)
-			protected.GET("/jobs/:jobId", gatewayHandler.GetJobStatus)
+			protected.GET("/jobs/:jobId", requirePermission("playground:execute"), gatewayHandler.GetJobStatus)
 		}
 	}
 

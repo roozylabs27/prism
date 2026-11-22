@@ -11,6 +11,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/lib/pq"
+	"github.com/roozylabs/prism/internal/database"
 	"github.com/roozylabs/prism/internal/models"
 )
 
@@ -41,7 +42,8 @@ func (r *WorkspaceRepository) ListWorkspacesByOrg(ctx context.Context, orgID str
 		`SELECT id, org_id, name, slug, created_at, updated_at
 		 FROM workspaces
 		 WHERE org_id = $1
-		 ORDER BY created_at ASC, name ASC`, orgID,
+		 ORDER BY created_at ASC, name ASC
+		 LIMIT 500`, orgID,
 	)
 	if err != nil {
 		return nil, err
@@ -69,6 +71,7 @@ func (r *WorkspaceRepository) FindWorkspaceInOrg(ctx context.Context, orgID, wor
 	if orgID == "" || workspaceID == "" {
 		return nil, ErrWorkspaceNotFound
 	}
+	ctx = database.WithSystemBypassRLS(ctx)
 	var ws models.Workspace
 	err := r.db.QueryRowContext(ctx,
 		`SELECT id, org_id, name, slug, created_at, updated_at
@@ -166,7 +169,8 @@ func (r *WorkspaceRepository) ListProjectsByWorkspace(ctx context.Context, orgID
 		 FROM projects p
 		 INNER JOIN workspaces w ON w.id = p.workspace_id
 		 WHERE w.org_id = $1 AND p.workspace_id = $2
-		 ORDER BY p.created_at ASC, p.name ASC`, orgID, workspaceID,
+		 ORDER BY p.created_at ASC, p.name ASC
+		 LIMIT 500`, orgID, workspaceID,
 	)
 	if err != nil {
 		return nil, err
@@ -194,6 +198,7 @@ func (r *WorkspaceRepository) FindProjectInOrg(ctx context.Context, orgID, proje
 	if orgID == "" || projectID == "" {
 		return nil, ErrProjectNotFound
 	}
+	ctx = database.WithSystemBypassRLS(ctx)
 	var p models.Project
 	err := r.db.QueryRowContext(ctx,
 		`SELECT p.id, p.workspace_id, p.name, p.slug, p.created_at, p.updated_at

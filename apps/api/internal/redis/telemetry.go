@@ -6,9 +6,11 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"strings"
 	"time"
 
 	goredis "github.com/redis/go-redis/v9"
+	"github.com/roozylabs/prism/internal/database"
 )
 
 type ModelMetrics struct {
@@ -42,6 +44,13 @@ type LatencySample struct {
 	Success   bool  `json:"success"`
 }
 
+func telemetrySamplesKey(ctx context.Context, modelSlug string) string {
+	if orgID := strings.TrimSpace(database.TenantContextFrom(ctx).OrgID); orgID != "" {
+		return fmt.Sprintf("telemetry:org:%s:model:%s:samples", orgID, modelSlug)
+	}
+	return fmt.Sprintf("telemetry:model:%s:samples", modelSlug)
+}
+
 func (s *ModelTelemetryStore) RecordModelLatency(ctx context.Context, modelSlug string, ttftMs int, latencyMs int, success bool) error {
 	if s == nil || s.rdb == nil || modelSlug == "" {
 		return nil
@@ -59,7 +68,7 @@ func (s *ModelTelemetryStore) RecordModelLatency(ctx context.Context, modelSlug 
 		return err
 	}
 
-	key := fmt.Sprintf("telemetry:model:%s:samples", modelSlug)
+	key := telemetrySamplesKey(ctx, modelSlug)
 	pipe := s.rdb.Pipeline()
 	pipe.LPush(ctx, key, string(raw))
 	pipe.LTrim(ctx, key, 0, MaxSamplesPerKey-1)
@@ -73,7 +82,7 @@ func (s *ModelTelemetryStore) GetModelMetrics(ctx context.Context, modelSlug str
 		return &ModelMetrics{ModelSlug: modelSlug}, nil
 	}
 
-	key := fmt.Sprintf("telemetry:model:%s:samples", modelSlug)
+	key := telemetrySamplesKey(ctx, modelSlug)
 	items, err := s.rdb.LRange(ctx, key, 0, -1).Result()
 	if err != nil && !errors.Is(err, goredis.Nil) {
 		return nil, err
@@ -138,7 +147,7 @@ func (s *ModelTelemetryStore) GetMultipleModelMetrics(ctx context.Context, model
 	pipe := s.rdb.Pipeline()
 	cmds := make([]*goredis.StringSliceCmd, len(modelSlugs))
 	for i, slug := range modelSlugs {
-		key := fmt.Sprintf("telemetry:model:%s:samples", slug)
+		key := telemetrySamplesKey(ctx, slug)
 		cmds[i] = pipe.LRange(ctx, key, 0, -1)
 	}
 	if _, err := pipe.Exec(ctx); err != nil && !errors.Is(err, goredis.Nil) {

@@ -63,7 +63,7 @@ func (r *ResourceRepository) ListByUserID(ctx context.Context, userID, workspace
 
 func (r *ResourceRepository) FindByID(ctx context.Context, id, userID string) (*models.Resource, error) {
 	var res models.Resource
-	ownerClause, args := tenantOwnerClause(ctx, "", userID, []any{id})
+	ownerClause, args := tenantOwnerAndWorkspaceClause(ctx, "", userID, []any{id})
 	err := scanResource(r.db.QueryRowContext(ctx,
 		`SELECT `+resourceColumns+` FROM resources WHERE id = $1 AND (`+ownerClause+`)`, args...), &res)
 	if err != nil {
@@ -74,7 +74,7 @@ func (r *ResourceRepository) FindByID(ctx context.Context, id, userID string) (*
 
 func (r *ResourceRepository) FindByUserAndName(ctx context.Context, userID, name string) (*models.Resource, error) {
 	var res models.Resource
-	ownerClause, args := tenantOwnerClause(ctx, "", userID, []any{name})
+	ownerClause, args := tenantOwnerAndWorkspaceClause(ctx, "", userID, []any{name})
 	err := scanResource(r.db.QueryRowContext(ctx,
 		`SELECT `+resourceColumns+` FROM resources WHERE name = $1 AND (`+ownerClause+`)`, args...), &res)
 	if err != nil {
@@ -161,7 +161,7 @@ func (r *ResourceRepository) CreateWithBackendsTx(ctx context.Context, res *mode
 func (r *ResourceRepository) Update(ctx context.Context, res *models.Resource) error {
 	res.UpdatedAt = time.Now()
 	args := []any{res.DisplayName, res.Description, []byte(res.ParametersSchema), res.Enabled, res.UpdatedAt, res.ID}
-	ownerClause, args := tenantOwnerClause(ctx, "", res.UserID, args)
+	ownerClause, args := tenantOwnerAndWorkspaceClause(ctx, "", res.UserID, args)
 	_, err := r.db.ExecContext(ctx,
 		`UPDATE resources SET display_name=$1, description=$2, parameters_schema=$3, enabled=$4, updated_at=$5 WHERE id=$6 AND (`+ownerClause+`)`,
 		args...)
@@ -169,7 +169,7 @@ func (r *ResourceRepository) Update(ctx context.Context, res *models.Resource) e
 }
 
 func (r *ResourceRepository) Delete(ctx context.Context, id, userID string) error {
-	ownerClause, args := tenantOwnerClause(ctx, "", userID, []any{id})
+	ownerClause, args := tenantOwnerAndWorkspaceClause(ctx, "", userID, []any{id})
 	res, err := r.db.ExecContext(ctx, `DELETE FROM resources WHERE id = $1 AND (`+ownerClause+`)`, args...)
 	return requireOneRow(res, err)
 }

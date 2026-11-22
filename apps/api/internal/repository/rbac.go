@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/roozylabs/prism/internal/database"
 	"github.com/roozylabs/prism/internal/models"
 )
 
@@ -41,6 +42,7 @@ func (r *RBACRepository) GetUserPermissions(ctx context.Context, userID string, 
 	if userID == "" || orgID == "" {
 		return nil, "", ErrNotMember
 	}
+	ctx = database.WithSystemBypassRLS(ctx)
 
 	query := `
 		SELECT r.slug, COALESCE(p.code, '')
@@ -300,6 +302,7 @@ func (r *RBACRepository) RemoveOrganizationMember(ctx context.Context, orgID, us
 
 // GetWorkspaceMemberRole returns the role of a user in a workspace.
 func (r *RBACRepository) GetWorkspaceMemberRole(ctx context.Context, wsID, userID string) (string, error) {
+	ctx = database.WithSystemBypassRLS(ctx)
 	var role string
 	err := r.db.QueryRowContext(ctx,
 		`SELECT role FROM workspace_members WHERE workspace_id = $1 AND user_id = $2`,
@@ -651,6 +654,7 @@ func (r *RBACRepository) AcceptInvite(ctx context.Context, rawToken, userID, use
 }
 
 func (r *RBACRepository) ListUserOrganizations(ctx context.Context, userID string) ([]models.Organization, error) {
+	ctx = database.WithSystemBypassRLS(ctx)
 	query := `
 		SELECT o.id, o.name, o.slug, o.plan_tier, o.max_workspaces, o.max_projects_per_workspace, o.created_at, o.updated_at
 		FROM organizations o

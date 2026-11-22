@@ -6,6 +6,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/roozylabs/prism/internal/httputil"
+	"github.com/roozylabs/prism/internal/middleware"
 	"github.com/roozylabs/prism/internal/models"
 	"github.com/roozylabs/prism/internal/repository"
 	"github.com/roozylabs/prism/internal/security"
@@ -31,7 +32,7 @@ type RegisterMCPCatalogRequest struct {
 
 func (h *MCPRegistryHandler) ListCatalog(c *gin.Context) {
 	userID := c.GetString("userId")
-	servers, err := h.repo.ListPublicAndTenant(c.Request.Context(), userID)
+	servers, err := h.repo.ListPublicAndTenant(middleware.ContextWithTenant(c), userID)
 	if err != nil {
 		httputil.RespondInternalError(c, "Failed to list MCP catalog", err, "MCP_REGISTRY_LIST_FAILED")
 		return
@@ -45,11 +46,9 @@ func (h *MCPRegistryHandler) ListCatalog(c *gin.Context) {
 
 func (h *MCPRegistryHandler) GetCatalogBySlug(c *gin.Context) {
 	slug := c.Param("slug")
-	server, err := h.repo.FindBySlug(c.Request.Context(), slug, c.GetString("userId"))
+	server, err := h.repo.FindBySlug(middleware.ContextWithTenant(c), slug, c.GetString("userId"))
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{
-			"error": gin.H{"message": "MCP server not found in catalog", "type": "not_found_error"},
-		})
+		httputil.RespondNotFound(c, "MCP server not found in catalog", err, "MCP_REGISTRY_NOT_FOUND")
 		return
 	}
 
@@ -88,19 +87,24 @@ func (h *MCPRegistryHandler) RegisterServer(c *gin.Context) {
 		req.Capabilities = json.RawMessage("{}")
 	}
 
+	var orgIDPtr *string
+	if orgID := middleware.GetTenantContext(c).OrgID; orgID != "" {
+		orgIDPtr = &orgID
+	}
 	server := &models.MCPRegistryServer{
-		UserID:        userID,
-		Name:          req.Name,
-		Slug:          req.Slug,
-		Description:   req.Description,
-		ServerURL:     req.ServerURL,
-		TransportType: req.TransportType,
-		Visibility:    req.Visibility,
-		Capabilities:  req.Capabilities,
-		IsVerified:    false,
+		UserID:         userID,
+		OrganizationID: orgIDPtr,
+		Name:           req.Name,
+		Slug:           req.Slug,
+		Description:    req.Description,
+		ServerURL:      req.ServerURL,
+		TransportType:  req.TransportType,
+		Visibility:     req.Visibility,
+		Capabilities:   req.Capabilities,
+		IsVerified:     false,
 	}
 
-	if err := h.repo.Create(c.Request.Context(), server); err != nil {
+	if err := h.repo.Create(middleware.ContextWithTenant(c), server); err != nil {
 		if repository.IsUniqueViolation(err) {
 			httputil.RespondError(c, http.StatusConflict, "An MCP catalog entry with this slug already exists", err, "SLUG_TAKEN")
 			return

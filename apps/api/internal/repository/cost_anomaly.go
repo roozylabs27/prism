@@ -22,6 +22,11 @@ type CostAnomaly struct {
 	CreatedAt      time.Time `db:"created_at" json:"created_at"`
 }
 
+type TenantSpendKey struct {
+	OrgID  string
+	UserID string
+}
+
 type CostAnomalyRepository struct {
 	db *sql.DB
 }
@@ -30,8 +35,8 @@ func NewCostAnomalyRepository(db *sql.DB) *CostAnomalyRepository {
 	return &CostAnomalyRepository{db: db}
 }
 
-// Create stores an anomaly and reports whether it is new: a user gets at
-// most one anomaly per metric and hour.
+// Create stores an anomaly and reports whether it is new: a user in an org gets
+// at most one anomaly per metric and hour.
 func (r *CostAnomalyRepository) Create(ctx context.Context, a *CostAnomaly) (bool, error) {
 	if a.OrgID == nil || *a.OrgID == "" {
 		if orgID := tenantOrgID(ctx); orgID != "" {
@@ -41,7 +46,7 @@ func (r *CostAnomalyRepository) Create(ctx context.Context, a *CostAnomaly) (boo
 	res, err := r.db.ExecContext(ctx,
 		`INSERT INTO cost_anomalies (user_id, org_id, window_start, metric, observed, baseline_mean, baseline_stddev, z_score, severity, details)
 		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb)
-		 ON CONFLICT (user_id, metric, window_start) WHERE user_id IS NOT NULL DO NOTHING`,
+		 ON CONFLICT (COALESCE(org_id, ''), user_id, metric, window_start) WHERE user_id IS NOT NULL DO NOTHING`,
 		a.UserID, a.OrgID, a.WindowStart, a.Metric, a.Observed, a.BaselineMean, a.BaselineStddev, a.ZScore, a.Severity, a.Details)
 	if err != nil {
 		return false, err
@@ -78,65 +83,65 @@ func (r *CostAnomalyRepository) ListForUser(ctx context.Context, userID string, 
 	return anomalies, rows.Err()
 }
 
-// Spend is attributed to the owner of the gateway key a request used, as in
-// the rest of FinOps.
+// Spend is attributed to the organization and owner of the gateway key a request used,
+// keeping spend separated when a user belongs to multiple organizations.
 const spendByOwner = `FROM request_logs rl
-		 JOIN gateway_api_keys gak ON gak.id = rl.gateway_api_key_id
-		 WHERE rl.cost_usd > 0`
+		 LEFT JOIN gateway_api_keys gak ON gak.id = rl.gateway_api_key_id
+		 WHERE rl.cost_usd > 0 AND COALESCE(NULLIF(gak.user_id, ''), '') <> ''`
 
-// CurrentHourSpend returns each user's spend so far in the current hour, and
+// CurrentHourSpend returns each (org, user)'s spend so far in the current hour, and
 // that hour's start.
-func (r *CostAnomalyRepository) CurrentHourSpend(ctx context.Context) (map[string]float64, time.Time, error) {
+func (r *CostAnomalyRepository) CurrentHourSpend(ctx context.Context) (map[TenantSpendKey]float64, time.Time, error) {
 	var windowStart time.Time
 	if err := r.db.QueryRowContext(ctx, `SELECT date_trunc('hour', NOW())`).Scan(&windowStart); err != nil {
 		return nil, windowStart, err
 	}
 	rows, err := r.db.QueryContext(ctx,
-		`SELECT gak.user_id, SUM(rl.cost_usd)::float8 `+spendByOwner+`
+		`SELECT COALESCE(NULLIF(rl.org_id, ''), COALESCE(gak.org_id, '')), gak.user_id, SUM(rl.cost_usd)::float8 `+spendByOwner+`
 		   AND rl.created_at >= $1
-		 GROUP BY gak.user_id`, windowStart)
+		 GROUP BY 1, gak.user_id`, windowStart)
 	if err != nil {
 		return nil, windowStart, err
 	}
 	defer func() { _ = rows.Close() }()
-	spend := map[string]float64{}
+	spend := map[TenantSpendKey]float64{}
 	for rows.Next() {
-		var userID string
+		var key TenantSpendKey
 		var total float64
-		if err := rows.Scan(&userID, &total); err != nil {
+		if err := rows.Scan(&key.OrgID, &key.UserID, &total); err != nil {
 			return nil, windowStart, err
 		}
-		spend[userID] = total
+		spend[key] = total
 	}
 	return spend, windowStart, rows.Err()
 }
 
-// SameHourBaselines returns, per user, their spend in the same hour of the
+// SameHourBaselines returns, per (org, user), their spend in the same hour of the
 // day on each of the previous days (days with no spend are left out). The
 // hour is the one starting at windowStart.
-func (r *CostAnomalyRepository) SameHourBaselines(ctx context.Context, windowStart time.Time, days int) (map[string][]float64, error) {
+func (r *CostAnomalyRepository) SameHourBaselines(ctx context.Context, windowStart time.Time, days int) (map[TenantSpendKey][]float64, error) {
 	if days <= 0 {
 		days = 14
 	}
 	rows, err := r.db.QueryContext(ctx,
-		`SELECT gak.user_id, SUM(rl.cost_usd)::float8 `+spendByOwner+`
+		`SELECT COALESCE(NULLIF(rl.org_id, ''), COALESCE(gak.org_id, '')), gak.user_id, SUM(rl.cost_usd)::float8 `+spendByOwner+`
 		   AND rl.created_at >= $1::timestamptz - make_interval(days => $2)
 		   AND rl.created_at < $1::timestamptz
 		   AND date_trunc('hour', rl.created_at) - date_trunc('day', rl.created_at)
 		       = $1::timestamptz - date_trunc('day', $1::timestamptz)
-		 GROUP BY gak.user_id, date_trunc('day', rl.created_at)`, windowStart, days)
+		 GROUP BY 1, gak.user_id, date_trunc('day', rl.created_at)`, windowStart, days)
 	if err != nil {
 		return nil, err
 	}
 	defer func() { _ = rows.Close() }()
-	baselines := map[string][]float64{}
+	baselines := map[TenantSpendKey][]float64{}
 	for rows.Next() {
-		var userID string
+		var key TenantSpendKey
 		var total float64
-		if err := rows.Scan(&userID, &total); err != nil {
+		if err := rows.Scan(&key.OrgID, &key.UserID, &total); err != nil {
 			return nil, err
 		}
-		baselines[userID] = append(baselines[userID], total)
+		baselines[key] = append(baselines[key], total)
 	}
 	return baselines, rows.Err()
 }
@@ -146,19 +151,22 @@ type DailySpend struct {
 	TotalUSD float64 `db:"total_usd" json:"total_usd"`
 }
 
-// GetDailySpendSeries returns userID's spend per day over the last days.
+// GetDailySpendSeries returns userID's (or active org's) spend per day over the last days.
 func (r *CostAnomalyRepository) GetDailySpendSeries(ctx context.Context, userID string, days int) ([]DailySpend, error) {
 	if days <= 0 {
 		days = 28
 	}
-	ownerClause, args := tenantOwnerClause(ctx, "gak.", userID, nil)
-	if orgID := tenantOrgID(ctx); orgID != "" {
-		ownerClause = fmt.Sprintf("(rl.org_id = $1 OR ((rl.org_id IS NULL OR rl.org_id = '') AND (%s)))", ownerClause)
+	ownerClause, args := requestLogOwnerClause(ctx, userID, nil)
+	if ownerClause == "" {
+		ownerClause = "1=1"
 	}
 	args = append(args, days)
 	daysIdx := len(args)
 	rows, err := r.db.QueryContext(ctx,
-		fmt.Sprintf(`SELECT rl.created_at::date::text AS date, SUM(rl.cost_usd)::float8 AS total_usd `+spendByOwner+`
+		fmt.Sprintf(`SELECT rl.created_at::date::text AS date, SUM(rl.cost_usd)::float8 AS total_usd
+		 FROM request_logs rl
+		 LEFT JOIN gateway_api_keys gak ON gak.id = rl.gateway_api_key_id
+		 WHERE rl.cost_usd > 0
 		   AND (%s)
 		   AND rl.created_at >= NOW() - make_interval(days => $%d)
 		 GROUP BY date ORDER BY date`, ownerClause, daysIdx), args...)

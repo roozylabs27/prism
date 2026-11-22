@@ -7,6 +7,7 @@ import (
 	"time"
 
 	goredis "github.com/redis/go-redis/v9"
+	"github.com/roozylabs/prism/internal/database"
 )
 
 // newTestCooldownStore connects to REDIS_URL (set in CI) and skips otherwise.
@@ -125,5 +126,32 @@ func TestGetActiveStreamsScopedToUser(t *testing.T) {
 	mine, _ = s.GetActiveStreams(ctx, alice)
 	if mine.TotalActive != 0 {
 		t.Fatalf("untracked stream still counted: %+v", mine)
+	}
+}
+
+func TestGetActiveStreamsScopedToOrgAndCredentialID(t *testing.T) {
+	s := newTestCooldownStore(t)
+	suffix := time.Now().Format("150405.000000")
+	ctxOrgA := database.WithTenantContext(context.Background(), database.TenantDBContext{OrgID: "org-a-" + suffix, UserID: "user-1"})
+	ctxOrgB := database.WithTenantContext(context.Background(), database.TenantDBContext{OrgID: "org-b-" + suffix, UserID: "user-2"})
+	reqA, reqB := "req-oa-"+suffix, "req-ob-"+suffix
+	t.Cleanup(func() {
+		_ = s.UntrackActiveStream(ctxOrgA, "user-1", reqA)
+		_ = s.UntrackActiveStream(ctxOrgB, "user-2", reqB)
+	})
+
+	if err := s.TrackActiveStreamWithCredential(ctxOrgA, reqA, "user-1", "gpt-4o", "key-a", "cred-a-id", "shared@example.com"); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.TrackActiveStreamWithCredential(ctxOrgB, reqB, "user-2", "gpt-4o", "key-b", "cred-b-id", "shared@example.com"); err != nil {
+		t.Fatal(err)
+	}
+
+	sumA, err := s.GetActiveStreams(ctxOrgA, "user-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if sumA.TotalActive != 1 || sumA.ByCredentialID["cred-a-id"] != 1 || sumA.ByCredentialID["cred-b-id"] != 0 {
+		t.Fatalf("org A stream summary leaked org B or missed cred ID: %+v", sumA)
 	}
 }

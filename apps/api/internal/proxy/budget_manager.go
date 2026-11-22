@@ -71,8 +71,12 @@ func (bm *BudgetManager) SetFailClosed(failClosed bool) {
 }
 
 func budgetScopeKey(ctx context.Context, userID string) string {
-	if orgID := database.TenantContextFrom(ctx).OrgID; orgID != "" {
-		return "org:" + orgID
+	tc := database.TenantContextFrom(ctx)
+	if tc.OrgID != "" {
+		if tc.WorkspaceID != "" {
+			return "org:" + tc.OrgID + ":ws:" + tc.WorkspaceID
+		}
+		return "org:" + tc.OrgID
 	}
 	return "user:" + userID
 }

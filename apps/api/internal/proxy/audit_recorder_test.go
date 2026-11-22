@@ -1,10 +1,12 @@
 package proxy
 
 import (
+	"context"
 	"strings"
 	"testing"
 
 	"github.com/lib/pq"
+	"github.com/roozylabs/prism/internal/database"
 	"github.com/roozylabs/prism/internal/models"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -141,4 +143,55 @@ func TestAuditRecorder_LegacySignatureCompatibility(t *testing.T) {
 
 	trail.ResponseHash = HashPayload("forged")
 	assert.False(t, rec.VerifyTrail(trail).Valid)
+}
+
+type orgFillingAuditRepo struct {
+	stored *models.AIAuditTrail
+}
+
+func (r *orgFillingAuditRepo) Create(ctx context.Context, a *models.AIAuditTrail) error {
+	if a.OrgID == "" {
+		a.OrgID = database.TenantContextFrom(ctx).OrgID
+	}
+	cp := *a
+	cp.ID = "audit-stored-1"
+	r.stored = &cp
+	return nil
+}
+
+func (r *orgFillingAuditRepo) FindByID(_ context.Context, id, _ string) (*models.AIAuditTrail, error) {
+	if r.stored != nil && r.stored.ID == id {
+		return r.stored, nil
+	}
+	return nil, context.DeadlineExceeded
+}
+
+func TestAuditRecorder_RecordPopulatesOrgIDBeforeHMACSign(t *testing.T) {
+	key := DeriveAuditHMACKey("audit-signing-secret-v2", "")
+	repo := &orgFillingAuditRepo{}
+	rec := &AuditRecorder{repo: repo}
+	rec.SetHMACKey(key)
+
+	ctx := database.WithTenantContext(context.Background(), database.TenantDBContext{
+		UserID: "u_alice",
+		OrgID:  "org_acme",
+	})
+	trail := &models.AIAuditTrail{
+		RequestID:        "req-mcp-1",
+		UserID:           "u_alice",
+		ModelSlug:        "mcp:search",
+		ToolsInvoked:     pq.StringArray{"search"},
+		MCPServersCalled: pq.StringArray{"docs"},
+		StatusCode:       200,
+		PromptHash:       HashPayload("mcp:search"),
+		ResponseHash:     HashPayload("ok"),
+		ComplianceStatus: "compliant",
+	}
+
+	require.NoError(t, rec.Record(ctx, trail))
+	require.NotNil(t, repo.stored)
+	assert.Equal(t, "org_acme", repo.stored.OrgID)
+	res, err := rec.VerifyIntegrity(ctx, "audit-stored-1", "u_alice")
+	require.NoError(t, err)
+	assert.True(t, res.Valid, "persisted MCP audit trail with context OrgID must verify cleanly")
 }

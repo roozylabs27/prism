@@ -51,7 +51,7 @@ func nullStringPtr(s sql.NullString) *string {
 
 func (r *QuotaRepository) ListQuotas(ctx context.Context, orgID string) ([]models.TenantQuota, error) {
 	rows, err := r.db.QueryContext(ctx,
-		`SELECT `+quotaColumns+` FROM tenant_quotas WHERE org_id = $1 ORDER BY target_type ASC, target_id ASC`, orgID)
+		`SELECT `+quotaColumns+` FROM tenant_quotas WHERE org_id = $1 ORDER BY target_type ASC, target_id ASC LIMIT 500`, orgID)
 	if err != nil {
 		return nil, fmt.Errorf("list tenant quotas: %w", err)
 	}

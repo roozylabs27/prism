@@ -58,7 +58,9 @@ func (h *LogsHandler) GetAnalytics(c *gin.Context) {
 	userID := c.GetString("userId")
 	days := 30
 	if d := c.Query("days"); d != "" {
-		if n, err := strconv.Atoi(d); err == nil && n > 0 && n <= 90 {
+		if d == "0" {
+			days = 0
+		} else if n, err := strconv.Atoi(d); err == nil && n > 0 && n <= 365 {
 			days = n
 		}
 	}

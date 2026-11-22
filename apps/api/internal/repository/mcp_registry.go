@@ -22,6 +22,10 @@ func (r *MCPRegistryRepository) Create(ctx context.Context, server *models.MCPRe
 	if server.ID == "" {
 		server.ID = uuid.New().String()
 	}
+	if (server.OrganizationID == nil || *server.OrganizationID == "") && tenantOrgID(ctx) != "" {
+		orgID := tenantOrgID(ctx)
+		server.OrganizationID = &orgID
+	}
 	now := time.Now()
 	server.CreatedAt = now
 	server.UpdatedAt = now
@@ -45,17 +49,18 @@ func (r *MCPRegistryRepository) Create(ctx context.Context, server *models.MCPRe
 	return nil
 }
 
-// FindBySlug returns a catalog entry the user may see: a public one or
-// their own.
+// FindBySlug returns a catalog entry the tenant may see: a public one or one
+// owned by the caller's organization (or user fallback when unscoped).
 func (r *MCPRegistryRepository) FindBySlug(ctx context.Context, slug, userID string) (*models.MCPRegistryServer, error) {
-	query := `
+	ownerClause, args := tenantOwnerClause(ctx, "", userID, []any{slug})
+	query := fmt.Sprintf(`
 		SELECT id, COALESCE(user_id, ''), org_id, name, slug, description,
 		       server_url, transport_type, visibility, capabilities, is_verified,
 		       created_at, updated_at
 		FROM mcp_registry
-		WHERE slug = $1 AND (visibility = 'public' OR user_id = $2)
-	`
-	row := r.db.QueryRowContext(ctx, query, slug, userID)
+		WHERE slug = $1 AND (visibility = 'public' OR (%s))
+	`, ownerClause)
+	row := r.db.QueryRowContext(ctx, query, args...)
 	var s models.MCPRegistryServer
 	err := row.Scan(
 		&s.ID, &s.UserID, &s.OrganizationID, &s.Name, &s.Slug, &s.Description,
@@ -69,15 +74,17 @@ func (r *MCPRegistryRepository) FindBySlug(ctx context.Context, slug, userID str
 }
 
 func (r *MCPRegistryRepository) ListPublicAndTenant(ctx context.Context, userID string) ([]models.MCPRegistryServer, error) {
-	query := `
+	ownerClause, args := tenantOwnerClause(ctx, "", userID, nil)
+	query := fmt.Sprintf(`
 		SELECT id, COALESCE(user_id, ''), org_id, name, slug, description,
 		       server_url, transport_type, visibility, capabilities, is_verified,
 		       created_at, updated_at
 		FROM mcp_registry
-		WHERE visibility = 'public' OR user_id = $1
+		WHERE visibility = 'public' OR (%s)
 		ORDER BY is_verified DESC, name ASC
-	`
-	rows, err := r.db.QueryContext(ctx, query, userID)
+		LIMIT 500
+	`, ownerClause)
+	rows, err := r.db.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("list mcp registry servers: %w", err)
 	}

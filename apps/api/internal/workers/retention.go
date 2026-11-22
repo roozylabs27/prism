@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/roozylabs/prism/internal/config"
+	"github.com/roozylabs/prism/internal/database"
 	"github.com/roozylabs/prism/internal/redis"
 	"github.com/roozylabs/prism/internal/repository"
 )
@@ -21,6 +22,7 @@ func NewLatencyFlushWorker(telemetry *redis.ModelTelemetryStore, models *reposit
 }
 
 func (w *LatencyFlushWorker) Run(ctx context.Context) {
+	ctx = database.WithSystemBypassRLS(ctx)
 	modelList, err := w.models.ListEnabled(ctx)
 	if err != nil {
 		log.Printf("[latency-flush] list models: %v", err)
@@ -110,6 +112,7 @@ func RetentionPolicies(days config.RetentionDays) []RetentionPolicy {
 }
 
 func (w *RetentionWorker) Run(ctx context.Context) {
+	ctx = database.WithSystemBypassRLS(ctx)
 	now := time.Now()
 	for _, p := range w.policies {
 		n, err := w.purger.PurgeBefore(ctx, p.Table, p.Column, now.Add(-p.Keep), 5000, 200, 100*time.Millisecond)

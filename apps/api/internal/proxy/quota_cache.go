@@ -64,6 +64,15 @@ func (c *CachedQuotaEvaluator) EvaluateQuota(ctx context.Context, targetType, ta
 	// One caller's cancellation must not fail the evaluation shared with
 	// others, but a stuck query must not hold every caller either.
 	ch := c.group.DoChan(key, func() (interface{}, error) {
+		// Re-check inside singleflight: callers that missed before the first
+		// flight finished may enter DoChan after the completed key is evicted.
+		c.mu.Lock()
+		if e, ok := c.entries[key]; ok && c.now().Before(e.expires) {
+			c.mu.Unlock()
+			return e.res, nil
+		}
+		c.mu.Unlock()
+
 		evalCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), c.timeout)
 		defer cancel()
 		res, err := c.src.EvaluateQuota(evalCtx, targetType, targetID)

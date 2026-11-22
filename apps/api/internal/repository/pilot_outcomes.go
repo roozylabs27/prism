@@ -165,10 +165,10 @@ func (r *PilotOutcomesRepository) GetPilotOutcomes(ctx context.Context, orgID, u
 	}
 
 	// 3. Governance & MCP enforcement summary (hard caps + policy denials caught)
-	auditArgs := []interface{}{orgID, userID, days}
+	auditArgs := []interface{}{orgID, days}
 	auditWSClause := ""
 	if workspaceID != "" {
-		auditWSClause = " AND gak.workspace_id = $4"
+		auditWSClause = " AND gak.workspace_id = $3"
 		auditArgs = append(auditArgs, workspaceID)
 	}
 
@@ -182,8 +182,8 @@ func (r *PilotOutcomesRepository) GetPilotOutcomes(ctx context.Context, orgID, u
 		       COALESCE(COUNT(*) FILTER (WHERE 'delegate_ai_task' = ANY(a.tools_invoked)), 0)
 		FROM ai_audit_trails a
 		LEFT JOIN gateway_api_keys gak ON a.gateway_key_id = gak.id::text
-		WHERE ((gak.org_id = $1) OR (a.user_id = $2 AND a.gateway_key_id IS NULL))
-		  AND a.created_at >= NOW() - make_interval(days => $3)` + auditWSClause
+		WHERE COALESCE(NULLIF(a.org_id, ''), gak.org_id) = $1
+		  AND a.created_at >= NOW() - make_interval(days => $2)` + auditWSClause
 
 	var gov models.PilotGovernanceSummary
 	if err := r.db.QueryRowContext(ctx, auditQuery, auditArgs...).Scan(
@@ -200,10 +200,10 @@ func (r *PilotOutcomesRepository) GetPilotOutcomes(ctx context.Context, orgID, u
 	report.Governance = gov
 
 	// 4. Smart routing policy & selected model breakdown
-	routeArgs := []interface{}{orgID, userID, days}
+	routeArgs := []interface{}{orgID, days}
 	routeWSClause := ""
 	if workspaceID != "" {
-		routeWSClause = " AND COALESCE(NULLIF(rl.workspace_id, ''), gak.workspace_id) = $4"
+		routeWSClause = " AND COALESCE(NULLIF(rl.workspace_id, ''), gak.workspace_id) = $3"
 		routeArgs = append(routeArgs, workspaceID)
 	}
 
@@ -217,8 +217,8 @@ func (r *PilotOutcomesRepository) GetPilotOutcomes(ctx context.Context, orgID, u
 		FROM routing_decisions rd
 		LEFT JOIN request_logs rl ON rl.request_id = rd.request_id
 		LEFT JOIN gateway_api_keys gak ON rl.gateway_api_key_id = gak.id
-		WHERE (COALESCE(NULLIF(rl.org_id, ''), gak.org_id) = $1 OR (rl.id IS NULL AND rd.user_id = $2))
-		  AND rd.created_at >= NOW() - make_interval(days => $3)%s
+		WHERE COALESCE(NULLIF(rl.org_id, ''), gak.org_id) = $1
+		  AND rd.created_at >= NOW() - make_interval(days => $2)%s
 		GROUP BY 1, 2
 		ORDER BY 3 DESC, 4 DESC`,
 		PilotBaselineInputPricePerToken, PilotBaselineOutputPricePerToken, routeWSClause,

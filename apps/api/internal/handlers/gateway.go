@@ -772,8 +772,19 @@ func canAccessJob(c *gin.Context, job *queue.AsyncJob) bool {
 	if callerID == "" || job.UserID != callerID {
 		return false
 	}
-	if job.TenantCtx.OrgID != "" && middleware.GetTenantContext(c).OrgID != job.TenantCtx.OrgID {
+	tc := middleware.GetTenantContext(c)
+	if job.TenantCtx.OrgID != "" && tc.OrgID != job.TenantCtx.OrgID {
 		return false
+	}
+	if job.TenantCtx.WorkspaceID != "" && tc.WorkspaceID != "" && tc.WorkspaceID != job.TenantCtx.WorkspaceID {
+		return false
+	}
+	if val, exists := c.Get("gatewayKey"); exists {
+		if key, ok := val.(*models.GatewayAPIKey); ok && key != nil && key.WorkspaceID != nil && *key.WorkspaceID != "" {
+			if job.TenantCtx.WorkspaceID != *key.WorkspaceID {
+				return false
+			}
+		}
 	}
 	return true
 }
@@ -801,7 +812,7 @@ func (h *GatewayHandler) Models(c *gin.Context) {
 
 	// Query dynamic enabled models from DB repository if available
 	if h.modelRepo != nil {
-		if dbModels, err := h.modelRepo.ListEnabled(c.Request.Context()); err == nil && len(dbModels) > 0 {
+		if dbModels, err := h.modelRepo.ListEnabled(middleware.ContextWithTenant(c)); err == nil && len(dbModels) > 0 {
 			for _, m := range dbModels {
 				id := m.Slug
 				if id == "" {

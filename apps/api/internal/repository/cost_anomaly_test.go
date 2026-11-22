@@ -62,7 +62,9 @@ func TestCostAnomalySpendIsPerUser(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !windowStart.Equal(hour) || current["alice"] != 7 || current["bob"] != 3 {
+	aliceKey := TenantSpendKey{UserID: "alice"}
+	bobKey := TenantSpendKey{UserID: "bob"}
+	if !windowStart.Equal(hour) || current[aliceKey] != 7 || current[bobKey] != 3 {
 		t.Fatalf("current = %v at %v, want alice 7 and bob 3 at %v", current, windowStart, hour)
 	}
 
@@ -70,11 +72,11 @@ func TestCostAnomalySpendIsPerUser(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := baselines["alice"]; len(got) != 4 || sum(got) != 10 {
+	if got := baselines[aliceKey]; len(got) != 4 || sum(got) != 10 {
 		t.Fatalf("alice baseline = %v, want the 4 same-hour days summing to 10", got)
 	}
-	if _, ok := baselines["bob"]; ok {
-		t.Fatalf("bob has no history, got %v", baselines["bob"])
+	if _, ok := baselines[bobKey]; ok {
+		t.Fatalf("bob has no history, got %v", baselines[bobKey])
 	}
 
 	series, err := r.GetDailySpendSeries(ctx, "bob", 28)

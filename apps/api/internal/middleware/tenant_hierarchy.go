@@ -3,6 +3,7 @@ package middleware
 import (
 	"context"
 	"errors"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/roozylabs/prism/internal/database"
@@ -18,19 +19,28 @@ type TenantHierarchyValidator interface {
 	FindProjectInOrg(ctx context.Context, orgID, projectID string) (*models.Project, error)
 }
 
+// WorkspaceAccessChecker validates whether a non-admin user is a member of the
+// requested workspace (or holds org-level workspace:admin permission).
+type WorkspaceAccessChecker interface {
+	GetUserPermissions(ctx context.Context, userID, orgID string) ([]string, string, error)
+	GetWorkspaceMemberRole(ctx context.Context, wsID, userID string) (string, error)
+}
+
 // CompositeTenantChecker combines organization membership/primary-org lookup
-// with workspace/project hierarchy validation.
+// with workspace/project hierarchy and membership validation.
 type CompositeTenantChecker struct {
 	OrgMemberChecker
 	OrgPrimaryResolver
 	TenantHierarchyValidator
+	WorkspaceAccessChecker
 }
 
 // NewCompositeTenantChecker builds a CompositeTenantChecker backed by the
-// account and workspace repositories (gracefully handling nil inputs in tests).
+// account, workspace, and optional RBAC repositories (gracefully handling nil inputs in tests).
 func NewCompositeTenantChecker(
 	accountRepo *repository.AccountRepository,
 	workspaceRepo *repository.WorkspaceRepository,
+	rbacRepos ...WorkspaceAccessChecker,
 ) *CompositeTenantChecker {
 	checker := &CompositeTenantChecker{}
 	if accountRepo != nil {
@@ -39,6 +49,9 @@ func NewCompositeTenantChecker(
 	}
 	if workspaceRepo != nil {
 		checker.TenantHierarchyValidator = workspaceRepo
+	}
+	if len(rbacRepos) > 0 && rbacRepos[0] != nil {
+		checker.WorkspaceAccessChecker = rbacRepos[0]
 	}
 	return checker
 }
@@ -69,7 +82,7 @@ func validateSessionHierarchy(
 	}
 
 	if projID != "" && !keyPinnedProj {
-		proj, err := hv.FindProjectInOrg(ctx, orgID, projID)
+		proj, err := hv.FindProjectInOrg(ctx, orgID, projectIDOr(projID))
 		if err != nil || proj == nil {
 			return "", "", ErrCrossProjectForbidden
 		}
@@ -81,7 +94,42 @@ func validateSessionHierarchy(
 		}
 	}
 
+	// Enforce workspace_members for session-authenticated human users when a
+	// WorkspaceAccessChecker is wired (unless user holds workspace:admin / workspace:*).
+	if wsID != "" && gatewayKey == nil {
+		if ac, ok := checker.(WorkspaceAccessChecker); ok && ac != nil {
+			// Skip when the embedded interface holds a typed nil pointer.
+			if comp, isComp := checker.(*CompositeTenantChecker); !isComp || comp.WorkspaceAccessChecker != nil {
+				userID := c.GetString("userId")
+				if userID == "" {
+					userID = c.GetString("user_id")
+				}
+				if userID != "" {
+					hasWsAdmin := false
+					if perms, _, err := ac.GetUserPermissions(ctx, userID, orgID); err == nil {
+						for _, perm := range perms {
+							clean := strings.ToLower(strings.TrimSpace(perm))
+							if clean == "workspace:admin" || clean == "workspace:*" {
+								hasWsAdmin = true
+								break
+							}
+						}
+					}
+					if !hasWsAdmin {
+						if _, err := ac.GetWorkspaceMemberRole(ctx, wsID, userID); err != nil {
+							return "", "", ErrCrossWorkspaceForbidden
+						}
+					}
+				}
+			}
+		}
+	}
+
 	return wsID, projID, nil
+}
+
+func projectIDOr(projID string) string {
+	return projID
 }
 
 func attachTenantDBContext(c *gin.Context, gatewayKey *models.GatewayAPIKey, tc models.TenantContext) {

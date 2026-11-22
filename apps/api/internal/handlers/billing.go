@@ -36,16 +36,21 @@ func (h *BillingHandler) GetSubscription(c *gin.Context) {
 
 func (h *BillingHandler) UpgradeSubscription(c *gin.Context) {
 	var req struct {
-		PlanSlug string `json:"planSlug" binding:"required"`
+		PlanSlug string `json:"planSlug"`
+		PlanID   string `json:"planId"`
 	}
-	if err := c.ShouldBindJSON(&req); err != nil {
+	if err := c.ShouldBindJSON(&req); err != nil || (req.PlanSlug == "" && req.PlanID == "") {
 		httputil.RespondError(c, http.StatusBadRequest, "planSlug is required", err, "INVALID_PLAN_SLUG")
 		return
+	}
+	slug := req.PlanSlug
+	if slug == "" {
+		slug = req.PlanID
 	}
 
 	c.JSON(http.StatusOK, gin.H{
 		"message":  "Subscription plan updated successfully",
-		"planSlug": req.PlanSlug,
+		"planSlug": slug,
 		"status":   "active",
 	})
 }

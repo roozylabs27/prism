@@ -149,3 +149,54 @@ func TestRequirePermission_Allowed(t *testing.T) {
 
 	assert.Equal(t, http.StatusOK, w.Code, w.Body.String())
 }
+
+func TestRequirePermission_GatewayKeyAllowlistedRoutesEvaluateOwnerPermissions(t *testing.T) {
+	finder := &mockPermFinder{perms: map[string][]string{
+		"viewer":    {"agent:read", "organization:read"},
+		"developer": {"agent:read", "agent:create", "organization:read"},
+	}}
+	engine := authz.NewAuthorizationEngine(finder, mockWsFinder{})
+
+	newGatewayKeyRouter := func(method, path, code, keyOwner, keyOrg string) *gin.Engine {
+		gin.SetMode(gin.TestMode)
+		r := gin.New()
+		r.Handle(method, path, func(c *gin.Context) {
+			c.Set("userId", keyOwner)
+			c.Set("organization_id", keyOrg)
+			c.Set("gatewayKey", &models.GatewayAPIKey{ID: "key_1", UserID: keyOwner, OrgID: &keyOrg})
+			c.Next()
+		}, RequirePermission(engine, code), func(c *gin.Context) {
+			c.JSON(http.StatusOK, gin.H{"ok": true})
+		})
+		return r
+	}
+
+	t.Run("developer key allowed on POST /api/agents", func(t *testing.T) {
+		r := newGatewayKeyRouter(http.MethodPost, "/api/agents", "agent:create", "developer", "org_1")
+		w := httptest.NewRecorder()
+		r.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/api/agents", nil))
+		assert.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	})
+
+	t.Run("developer key allowed on Paperclip register /v1/adapters/paperclip/agent/register", func(t *testing.T) {
+		r := newGatewayKeyRouter(http.MethodPost, "/v1/adapters/paperclip/agent/register", "agent:create", "developer", "org_1")
+		w := httptest.NewRecorder()
+		r.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/v1/adapters/paperclip/agent/register", nil))
+		assert.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	})
+
+	t.Run("viewer key denied on POST /api/agents (insufficient owner permission)", func(t *testing.T) {
+		r := newGatewayKeyRouter(http.MethodPost, "/api/agents", "agent:create", "viewer", "org_1")
+		w := httptest.NewRecorder()
+		r.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/api/agents", nil))
+		assert.Equal(t, http.StatusForbidden, w.Code, w.Body.String())
+		assert.Equal(t, "PERMISSION_DENIED", errorCode(t, w))
+	})
+
+	t.Run("non-allowlisted billing route denied even for owner with billing:manage", func(t *testing.T) {
+		r := newGatewayKeyRouter(http.MethodPost, "/api/billing/subscription/upgrade", "agent:create", "developer", "org_1")
+		w := httptest.NewRecorder()
+		r.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/api/billing/subscription/upgrade", nil))
+		assert.Equal(t, http.StatusForbidden, w.Code, w.Body.String())
+	})
+}

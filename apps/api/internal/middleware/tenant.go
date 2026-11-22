@@ -4,6 +4,7 @@ package middleware
 import (
 	"context"
 	"errors"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/roozylabs/prism/internal/httputil"
@@ -42,10 +43,19 @@ func ResolveCanonicalTenantContext(c *gin.Context, gatewayKey *models.GatewayAPI
 	}
 
 	headerOrgID := ""
+	hintCookieOrgID := ""
 	headerWsID := ""
 	headerProjID := ""
 	if c != nil {
-		headerOrgID = c.GetHeader("X-Prism-Org-ID")
+		headerOrgID = strings.TrimSpace(c.GetHeader("X-Prism-Org-ID"))
+		if headerOrgID == "" {
+			headerOrgID = strings.TrimSpace(c.Query("orgId"))
+		}
+		if headerOrgID == "" {
+			if cookieOrg, err := c.Cookie("prism_active_org"); err == nil {
+				hintCookieOrgID = strings.TrimSpace(cookieOrg)
+			}
+		}
 		headerWsID = c.GetHeader("X-Prism-Workspace-ID")
 		headerProjID = c.GetHeader("X-Prism-Project-ID")
 	}
@@ -58,7 +68,7 @@ func ResolveCanonicalTenantContext(c *gin.Context, gatewayKey *models.GatewayAPI
 			return models.TenantContext{}, ErrCrossTenantForbidden
 		}
 	} else if headerOrgID != "" {
-		// Session-authenticated user specifying X-Prism-Org-ID header
+		// Session-authenticated user specifying X-Prism-Org-ID header or ?orgId= query
 		userID := ""
 		if c != nil {
 			userID = c.GetString("userId")
@@ -87,7 +97,12 @@ func ResolveCanonicalTenantContext(c *gin.Context, gatewayKey *models.GatewayAPI
 				userID = c.GetString("user_id")
 			}
 		}
-		if userID != "" && checker != nil {
+		if userID != "" && checker != nil && hintCookieOrgID != "" {
+			if isMember, err := checker.IsMember(c.Request.Context(), userID, hintCookieOrgID); err == nil && isMember {
+				canonicalOrgID = hintCookieOrgID
+			}
+		}
+		if canonicalOrgID == "" && userID != "" && checker != nil {
 			if resolver, ok := checker.(OrgPrimaryResolver); ok {
 				primaryOrgID, err := resolver.GetPrimaryOrganization(c.Request.Context(), userID)
 				if err == nil && primaryOrgID != "" {

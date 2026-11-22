@@ -8,6 +8,7 @@ import (
 	"time"
 
 	goredis "github.com/redis/go-redis/v9"
+	"github.com/roozylabs/prism/internal/database"
 	"github.com/roozylabs/prism/internal/utils"
 )
 
@@ -152,29 +153,47 @@ func activeRequestsKey(userID string) string {
 	return ActiveRequestsHashKey + ":" + userID
 }
 
+func activeRequestsKeyForTenant(orgID, userID string) string {
+	if orgID != "" {
+		return ActiveRequestsHashKey + ":org:" + orgID
+	}
+	return activeRequestsKey(userID)
+}
+
 type ActiveRequestRecord struct {
+	OrgID        string `json:"orgId,omitempty"`
 	UserID       string `json:"userId"`
 	Model        string `json:"model"`
 	GatewayKeyID string `json:"gatewayKeyId"`
+	CredentialID string `json:"credentialId,omitempty"`
 	Credential   string `json:"credential"`
+	ProviderID   string `json:"providerId,omitempty"`
 	StartedAt    int64  `json:"startedAt"`
 }
 
 type ActiveStreamsSummary struct {
-	TotalActive  int64            `json:"totalActive"`
-	ByModel      map[string]int64 `json:"byModel"`
-	ByCredential map[string]int64 `json:"byCredential"`
-	ByKey        map[string]int64 `json:"byKey"`
+	TotalActive    int64            `json:"totalActive"`
+	ByModel        map[string]int64 `json:"byModel"`
+	ByCredential   map[string]int64 `json:"byCredential"`
+	ByCredentialID map[string]int64 `json:"byCredentialId,omitempty"`
+	ByKey          map[string]int64 `json:"byKey"`
 }
 
 func (s *CooldownStore) TrackActiveStream(ctx context.Context, reqID, userID, modelSlug, gatewayKeyID, credName string) error {
-	if reqID == "" {
+	return s.TrackActiveStreamWithCredential(ctx, reqID, userID, modelSlug, gatewayKeyID, "", credName)
+}
+
+func (s *CooldownStore) TrackActiveStreamWithCredential(ctx context.Context, reqID, userID, modelSlug, gatewayKeyID, credID, credName string) error {
+	if reqID == "" || s == nil || s.rdb == nil {
 		return nil
 	}
+	orgID := database.TenantContextFrom(ctx).OrgID
 	rec := ActiveRequestRecord{
+		OrgID:        orgID,
 		UserID:       userID,
 		Model:        modelSlug,
 		GatewayKeyID: gatewayKeyID,
+		CredentialID: credID,
 		Credential:   utils.MaskEmailName(credName),
 		StartedAt:    time.Now().Unix(),
 	}
@@ -182,7 +201,7 @@ func (s *CooldownStore) TrackActiveStream(ctx context.Context, reqID, userID, mo
 	if err != nil {
 		return err
 	}
-	key := activeRequestsKey(userID)
+	key := activeRequestsKeyForTenant(orgID, userID)
 	pipe := s.rdb.Pipeline()
 	pipe.HSet(ctx, key, reqID, data)
 	pipe.Expire(ctx, key, activeRequestsTTL)
@@ -191,10 +210,19 @@ func (s *CooldownStore) TrackActiveStream(ctx context.Context, reqID, userID, mo
 }
 
 func (s *CooldownStore) UntrackActiveStream(ctx context.Context, userID, reqID string) error {
-	if reqID == "" {
+	if reqID == "" || s == nil || s.rdb == nil {
 		return nil
 	}
-	return s.rdb.HDel(ctx, activeRequestsKey(userID), reqID).Err()
+	orgID := database.TenantContextFrom(ctx).OrgID
+	key := activeRequestsKeyForTenant(orgID, userID)
+	if err := s.rdb.HDel(ctx, key, reqID).Err(); err != nil {
+		return err
+	}
+	if orgID != "" && userID != "" {
+		// Also clean legacy user-keyed entry in case an un-org'd track occurred.
+		_ = s.rdb.HDel(ctx, activeRequestsKey(userID), reqID).Err()
+	}
+	return nil
 }
 
 func (s *CooldownStore) IncrementActiveStream(ctx context.Context, modelSlug, gatewayKeyID, credName string) error {
@@ -205,26 +233,33 @@ func (s *CooldownStore) DecrementActiveStream(ctx context.Context, modelSlug, ga
 	return nil
 }
 
-// GetActiveStreams summarizes in-flight requests. With a userID it counts only
-// that user's requests; an empty userID counts every request, for checks that
-// must see all traffic, such as refusing to delete a credential in use.
+// GetActiveStreams summarizes in-flight requests scoped to the active org in ctx (when present)
+// or the given userID. When neither orgID nor userID is supplied, it scans all active stream hashes.
 func (s *CooldownStore) GetActiveStreams(ctx context.Context, userID string) (*ActiveStreamsSummary, error) {
 	summary := &ActiveStreamsSummary{
-		TotalActive:  0,
-		ByModel:      make(map[string]int64),
-		ByCredential: make(map[string]int64),
-		ByKey:        make(map[string]int64),
+		TotalActive:    0,
+		ByModel:        make(map[string]int64),
+		ByCredential:   make(map[string]int64),
+		ByCredentialID: make(map[string]int64),
+		ByKey:          make(map[string]int64),
+	}
+	if s == nil || s.rdb == nil {
+		return summary, nil
 	}
 
-	keys := []string{activeRequestsKey(userID)}
-	if userID == "" {
-		// Every user's hash: a rare, dashboard-free check (deleting a
-		// credential or model in use), so a key scan is fine here.
+	orgID := database.TenantContextFrom(ctx).OrgID
+	var keys []string
+	if orgID != "" {
+		keys = []string{activeRequestsKeyForTenant(orgID, userID)}
+	} else if userID == "" {
+		// Unscoped global scan only when neither org nor user is provided.
 		all, err := s.scanActiveRequestKeys(ctx)
 		if err != nil {
 			return summary, err
 		}
 		keys = all
+	} else {
+		keys = []string{activeRequestsKey(userID)}
 	}
 
 	for _, key := range keys {
@@ -271,6 +306,9 @@ func (s *CooldownStore) summarizeActiveRequests(ctx context.Context, key string,
 		}
 		if rec.Credential != "" {
 			summary.ByCredential[rec.Credential]++
+		}
+		if rec.CredentialID != "" {
+			summary.ByCredentialID[rec.CredentialID]++
 		}
 		if rec.GatewayKeyID != "" {
 			summary.ByKey[rec.GatewayKeyID]++

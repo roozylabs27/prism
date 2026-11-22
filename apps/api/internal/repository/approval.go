@@ -28,7 +28,7 @@ func NewApprovalRepository(db *sql.DB) *ApprovalRepository {
 	return &ApprovalRepository{db: db}
 }
 
-const approvalColumns = `id, COALESCE(org_id, ''), user_id, COALESCE(agent_id, ''), agent_name, tool_name, mcp_server_name,
+const approvalColumns = `id, COALESCE(org_id, ''), COALESCE(workspace_id, ''), user_id, COALESCE(agent_id, ''), agent_name, tool_name, mcp_server_name,
 	arguments_json, arguments_hash, policy_id, policy_name, reason, status,
 	COALESCE(decided_by, ''), COALESCE(decision_note, ''), decided_at, expires_at, consumed_at, created_at, updated_at`
 
@@ -36,7 +36,7 @@ func scanApproval(row interface{ Scan(...interface{}) error }, a *models.Approva
 	var argsRaw []byte
 	var decidedAt, consumedAt sql.NullTime
 	err := row.Scan(
-		&a.ID, &a.OrgID, &a.UserID, &a.AgentID, &a.AgentName, &a.ToolName, &a.MCPServerName,
+		&a.ID, &a.OrgID, &a.WorkspaceID, &a.UserID, &a.AgentID, &a.AgentName, &a.ToolName, &a.MCPServerName,
 		&argsRaw, &a.ArgumentsHash, &a.PolicyID, &a.PolicyName, &a.Reason, &a.Status,
 		&a.DecidedBy, &a.DecisionNote, &decidedAt, &a.ExpiresAt, &consumedAt, &a.CreatedAt, &a.UpdatedAt,
 	)
@@ -79,6 +79,9 @@ func (r *ApprovalRepository) Create(ctx context.Context, req *models.ApprovalReq
 	if req.OrgID == "" {
 		req.OrgID = tenantOrgID(ctx)
 	}
+	if req.WorkspaceID == "" {
+		req.WorkspaceID = tenantWorkspaceID(ctx)
+	}
 	if req.Status == "" {
 		req.Status = models.ApprovalStatusPending
 	}
@@ -100,15 +103,15 @@ func (r *ApprovalRepository) Create(ctx context.Context, req *models.ApprovalReq
 
 	_, err := r.db.ExecContext(ctx,
 		`INSERT INTO approval_requests (
-			id, org_id, user_id, agent_id, agent_name, tool_name, mcp_server_name,
+			id, org_id, workspace_id, user_id, agent_id, agent_name, tool_name, mcp_server_name,
 			arguments_json, arguments_hash, policy_id, policy_name, reason, status,
 			expires_at, created_at, updated_at
 		) VALUES (
-			$1, NULLIF($2, ''), $3, NULLIF($4, ''), $5, $6, $7,
-			$8, $9, $10, $11, $12, $13,
-			$14, $15, $16
+			$1, NULLIF($2, ''), NULLIF($3, ''), $4, NULLIF($5, ''), $6, $7, $8,
+			$9, $10, $11, $12, $13, $14,
+			$15, $16, $17
 		)`,
-		req.ID, req.OrgID, req.UserID, req.AgentID, req.AgentName, req.ToolName, req.MCPServerName,
+		req.ID, req.OrgID, req.WorkspaceID, req.UserID, req.AgentID, req.AgentName, req.ToolName, req.MCPServerName,
 		[]byte(req.ArgumentsJSON), req.ArgumentsHash, req.PolicyID, req.PolicyName, req.Reason, req.Status,
 		req.ExpiresAt, req.CreatedAt, req.UpdatedAt,
 	)
@@ -116,7 +119,7 @@ func (r *ApprovalRepository) Create(ctx context.Context, req *models.ApprovalReq
 }
 
 func (r *ApprovalRepository) FindByID(ctx context.Context, id, userID string) (*models.ApprovalRequest, error) {
-	ownerClause, args := tenantOwnerClause(ctx, "", userID, []any{id})
+	ownerClause, args := tenantOwnerAndWorkspaceClause(ctx, "", userID, []any{id})
 	var out models.ApprovalRequest
 	err := scanApproval(r.db.QueryRowContext(ctx,
 		`SELECT `+approvalColumns+` FROM approval_requests WHERE id = $1 AND (`+ownerClause+`)`,
@@ -140,14 +143,14 @@ func (r *ApprovalRepository) List(ctx context.Context, userID, status string, li
 	}
 
 	// Mark overdue pending items as expired inside the current tenant boundary.
-	expClause, expArgs := tenantOwnerClause(ctx, "", userID, nil)
+	expClause, expArgs := tenantOwnerAndWorkspaceClause(ctx, "", userID, nil)
 	_, _ = r.db.ExecContext(ctx,
 		`UPDATE approval_requests SET status = 'expired', updated_at = NOW()
 		 WHERE status = 'pending' AND expires_at <= NOW() AND (`+expClause+`)`,
 		expArgs...,
 	)
 
-	ownerClause, args := tenantOwnerClause(ctx, "", userID, nil)
+	ownerClause, args := tenantOwnerAndWorkspaceClause(ctx, "", userID, nil)
 	where := "(" + ownerClause + ")"
 	if status != "" && status != "all" {
 		args = append(args, status)
@@ -183,7 +186,7 @@ func (r *ApprovalRepository) List(ctx context.Context, userID, status string, li
 
 func (r *ApprovalRepository) Decide(ctx context.Context, id, userID, actorID, decisionStatus, note string) (*models.ApprovalRequest, error) {
 	args := []any{decisionStatus, actorID, note, id}
-	ownerClause, args := tenantOwnerClause(ctx, "", userID, args)
+	ownerClause, args := tenantOwnerAndWorkspaceClause(ctx, "", userID, args)
 	var out models.ApprovalRequest
 	err := scanApproval(r.db.QueryRowContext(ctx,
 		`UPDATE approval_requests
@@ -212,7 +215,7 @@ func (r *ApprovalRepository) Decide(ctx context.Context, id, userID, actorID, de
 // tool name, MCP server name, and arguments SHA-256 hash match to status "consumed".
 func (r *ApprovalRepository) VerifyAndConsume(ctx context.Context, id, userID, toolName, mcpServerName, argumentsHash string) (*models.ApprovalRequest, error) {
 	args := []any{id, toolName, mcpServerName, argumentsHash}
-	ownerClause, args := tenantOwnerClause(ctx, "", userID, args)
+	ownerClause, args := tenantOwnerAndWorkspaceClause(ctx, "", userID, args)
 	var out models.ApprovalRequest
 	err := scanApproval(r.db.QueryRowContext(ctx,
 		`UPDATE approval_requests

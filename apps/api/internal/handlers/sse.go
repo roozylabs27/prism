@@ -1,14 +1,17 @@
 package handlers
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	redis "github.com/redis/go-redis/v9"
 	"github.com/roozylabs/prism/internal/httputil"
+	"github.com/roozylabs/prism/internal/middleware"
 	goredis "github.com/roozylabs/prism/internal/redis"
 )
 
@@ -62,13 +65,28 @@ func (h *SSEHandler) Stream(c *gin.Context) {
 	ticker := time.NewTicker(10 * time.Second)
 	defer ticker.Stop()
 
+	ctx := middleware.ContextWithTenant(c)
+	lastEventID := strings.TrimSpace(c.GetHeader("Last-Event-ID"))
+	if lastEventID == "" {
+		lastEventID = strings.TrimSpace(c.Query("lastEventId"))
+	}
+
 	var pubsub *redis.PubSub
 	var ch <-chan *redis.Message
 	if h.publisher != nil {
-		pubsub = h.publisher.Subscribe(c.Request.Context(), userID)
+		pubsub = h.publisher.Subscribe(ctx, userID)
 		if pubsub != nil {
 			defer func() { _ = pubsub.Close() }()
 			ch = pubsub.Channel()
+		}
+		if lastEventID != "" {
+			if missed, err := h.publisher.ReplaySince(ctx, userID, lastEventID); err == nil {
+				for _, payload := range missed {
+					if !writeSSEPayload(c, payload) {
+						return
+					}
+				}
+			}
 		}
 	}
 
@@ -85,23 +103,46 @@ func (h *SSEHandler) Stream(c *gin.Context) {
 			c.Writer.Flush()
 		case msg, ok := <-ch:
 			if !ok {
-				// Redis subscription channel was closed or disconnected; try to resubscribe after a short backoff without dropping client SSE connection
+				// Redis subscription channel was closed or disconnected; wait briefly without blocking shutdown/cancellation.
 				if pubsub != nil {
 					_ = pubsub.Close()
 				}
-				time.Sleep(1 * time.Second)
+				select {
+				case <-c.Request.Context().Done():
+					return
+				case <-h.closing:
+					return
+				case <-time.After(1 * time.Second):
+				}
 				if h.publisher != nil {
-					pubsub = h.publisher.Subscribe(c.Request.Context(), userID)
+					pubsub = h.publisher.Subscribe(ctx, userID)
 					if pubsub != nil {
 						ch = pubsub.Channel()
 					}
 				}
 				continue
 			}
-			if _, err := fmt.Fprintf(c.Writer, "event: message\ndata: %s\n\n", msg.Payload); err != nil {
+			if !writeSSEPayload(c, msg.Payload) {
 				return
 			}
-			c.Writer.Flush()
 		}
 	}
+}
+
+func writeSSEPayload(c *gin.Context, payload string) bool {
+	var meta struct {
+		ID string `json:"id"`
+	}
+	_ = json.Unmarshal([]byte(payload), &meta)
+	var err error
+	if meta.ID != "" {
+		_, err = fmt.Fprintf(c.Writer, "id: %s\nevent: message\ndata: %s\n\n", meta.ID, payload)
+	} else {
+		_, err = fmt.Fprintf(c.Writer, "event: message\ndata: %s\n\n", payload)
+	}
+	if err != nil {
+		return false
+	}
+	c.Writer.Flush()
+	return true
 }

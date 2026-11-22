@@ -65,7 +65,7 @@ func (r *MCPServerRepository) ListByUserID(ctx context.Context, userID string) (
 		args = wsArgs
 	}
 	rows, err := r.db.QueryContext(ctx,
-		`SELECT `+mcpServerColumns+` FROM mcp_servers WHERE `+where+` ORDER BY created_at DESC`, args...)
+		`SELECT `+mcpServerColumns+` FROM mcp_servers WHERE `+where+` ORDER BY created_at DESC LIMIT 500`, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -84,7 +84,7 @@ func (r *MCPServerRepository) ListByUserID(ctx context.Context, userID string) (
 
 func (r *MCPServerRepository) FindByID(ctx context.Context, id, userID string) (*models.MCPServer, error) {
 	var s models.MCPServer
-	ownerClause, args := tenantOwnerClause(ctx, "", userID, []any{id})
+	ownerClause, args := tenantOwnerAndWorkspaceClause(ctx, "", userID, []any{id})
 	err := scanMCPServer(r.db.QueryRowContext(ctx,
 		`SELECT `+mcpServerColumns+` FROM mcp_servers WHERE id = $1 AND (`+ownerClause+`)`, args...), &s)
 	if err != nil {
@@ -145,7 +145,7 @@ func (r *MCPServerRepository) Update(ctx context.Context, s *models.MCPServer) e
 		s.Args = []string{}
 	}
 	args := []any{s.DisplayName, s.Description, s.TransportType, s.EndpointURL, s.AuthTokenEncrypted, s.Status, s.Enabled, s.Type, s.HeadersEncrypted, s.Command, pq.Array(s.Args), encodeEnvJSON(s.Env), s.UpdatedAt, s.ID}
-	ownerClause, args := tenantOwnerClause(ctx, "", s.UserID, args)
+	ownerClause, args := tenantOwnerAndWorkspaceClause(ctx, "", s.UserID, args)
 	_, err := r.db.ExecContext(ctx,
 		`UPDATE mcp_servers SET display_name=$1, description=$2, transport_type=$3, endpoint_url=$4, auth_token_encrypted=$5, status=$6, enabled=$7, config_type=$8, headers_encrypted=$9, command=$10, args=$11, env=$12, updated_at=$13
 		 WHERE id = $14 AND (`+ownerClause+`)`,
@@ -171,7 +171,7 @@ func (r *MCPServerRepository) UpdateStatus(ctx context.Context, id, status strin
 }
 
 func (r *MCPServerRepository) Delete(ctx context.Context, id, userID string) error {
-	ownerClause, args := tenantOwnerClause(ctx, "", userID, []any{id})
+	ownerClause, args := tenantOwnerAndWorkspaceClause(ctx, "", userID, []any{id})
 	res, err := r.db.ExecContext(ctx, `DELETE FROM mcp_servers WHERE id = $1 AND (`+ownerClause+`)`, args...)
 	return requireOneRow(res, err)
 }

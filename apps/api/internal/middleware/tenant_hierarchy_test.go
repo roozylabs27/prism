@@ -19,6 +19,8 @@ type fakeHierarchyChecker struct {
 	primaryOrg string
 	workspaces map[string]*models.Workspace // key: "org/ws"
 	projects   map[string]*models.Project   // key: "org/proj"
+	wsMembers  map[string]string            // key: "ws/user" -> role (only enforced when non-nil)
+	userPerms  map[string][]string          // key: "org/user" -> perms
 }
 
 func (f *fakeHierarchyChecker) IsMember(_ context.Context, userID, orgID string) (bool, error) {
@@ -44,6 +46,23 @@ func (f *fakeHierarchyChecker) FindProjectInOrg(_ context.Context, orgID, projec
 		return proj, nil
 	}
 	return nil, errors.New("project not found")
+}
+
+func (f *fakeHierarchyChecker) GetUserPermissions(_ context.Context, userID, orgID string) ([]string, string, error) {
+	if f.userPerms == nil {
+		return []string{"workspace:admin"}, "owner", nil
+	}
+	return f.userPerms[orgID+"/"+userID], "custom", nil
+}
+
+func (f *fakeHierarchyChecker) GetWorkspaceMemberRole(_ context.Context, wsID, userID string) (string, error) {
+	if f.wsMembers == nil {
+		return "admin", nil
+	}
+	if role, ok := f.wsMembers[wsID+"/"+userID]; ok && role != "" {
+		return role, nil
+	}
+	return "", errors.New("not a workspace member")
 }
 
 func TestResolveCanonicalTenantContext_HierarchyValidation(t *testing.T) {
@@ -106,6 +125,36 @@ func TestResolveCanonicalTenantContext_HierarchyValidation(t *testing.T) {
 		assert.Equal(t, "org_a", dbCtx.OrgID)
 		assert.Equal(t, "ws_1", dbCtx.WorkspaceID)
 		assert.Equal(t, "proj_1", dbCtx.ProjectID)
+	})
+
+	t.Run("non-admin user denied workspace they are not a member of", func(t *testing.T) {
+		strictChecker := &fakeHierarchyChecker{
+			members: map[string]bool{"org_a/user_1": true},
+			workspaces: map[string]*models.Workspace{
+				"org_a/ws_1": {ID: "ws_1", OrgID: "org_a"},
+				"org_a/ws_2": {ID: "ws_2", OrgID: "org_a"},
+			},
+			userPerms: map[string][]string{
+				"org_a/user_1": {"workspace:read", "logs:read"},
+			},
+			wsMembers: map[string]string{
+				"ws_1/user_1": "developer",
+			},
+		}
+		cAllowed := makeCtx(map[string]string{
+			"X-Prism-Org-ID":       "org_a",
+			"X-Prism-Workspace-ID": "ws_1",
+		})
+		tc, err := ResolveCanonicalTenantContext(cAllowed, nil, strictChecker)
+		require.NoError(t, err)
+		assert.Equal(t, "ws_1", tc.WorkspaceID)
+
+		cDenied := makeCtx(map[string]string{
+			"X-Prism-Org-ID":       "org_a",
+			"X-Prism-Workspace-ID": "ws_2",
+		})
+		_, err = ResolveCanonicalTenantContext(cDenied, nil, strictChecker)
+		require.ErrorIs(t, err, ErrCrossWorkspaceForbidden)
 	})
 }
 

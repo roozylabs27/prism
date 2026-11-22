@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"testing"
 
+	"github.com/roozylabs/prism/internal/database"
 	"github.com/roozylabs/prism/internal/models"
 )
 
@@ -62,5 +63,33 @@ func TestMCPRegistryListsPublicAndOwnEntriesVerifiedFirst(t *testing.T) {
 	}
 	if got, err := r.FindBySlug(ctx, "curated", "nobody"); err != nil || got.UserID != "" || !got.IsVerified {
 		t.Fatalf("system entry = %+v, %v", got, err)
+	}
+}
+
+func TestMCPRegistryScopesPrivateEntriesByOrg(t *testing.T) {
+	f := newTenantFixture(t)
+	r := NewMCPRegistryRepository(f.db)
+
+	orgA := "org_alice"
+	orgB := "org_bob"
+	ctxOrgA := database.WithTenantContext(context.Background(), database.TenantDBContext{OrgID: orgA, UserID: "alice"})
+	ctxOrgB := database.WithTenantContext(context.Background(), database.TenantDBContext{OrgID: orgB, UserID: "alice"})
+
+	if err := r.Create(ctxOrgA, &models.MCPRegistryServer{
+		UserID: "alice", Name: "orgA private", Slug: "orga-priv", ServerURL: "https://a.example", TransportType: "sse", Visibility: "private", Capabilities: []byte(`{}`),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := r.FindBySlug(ctxOrgB, "orga-priv", "alice"); err == nil {
+		t.Fatal("user alice in org_bob unexpectedly read org_alice private catalog entry")
+	}
+	if list, err := r.ListPublicAndTenant(ctxOrgB, "alice"); err != nil {
+		t.Fatal(err)
+	} else {
+		for _, item := range list {
+			if item.Slug == "orga-priv" {
+				t.Fatalf("org_bob listing exposed org_alice private entry: %+v", item)
+			}
+		}
 	}
 }

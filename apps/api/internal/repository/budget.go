@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -32,7 +33,8 @@ func (r *BudgetRepository) ListByUserID(ctx context.Context, userID string) ([]m
 		`SELECT `+budgetColumns+`
 		 FROM budgets
 		 WHERE `+where+`
-		 ORDER BY created_at DESC`, args...,
+		 ORDER BY created_at DESC
+		 LIMIT 500`, args...,
 	)
 	if err != nil {
 		return nil, err
@@ -74,7 +76,7 @@ func (r *BudgetRepository) ListAllEnabled(ctx context.Context) ([]models.Budget,
 
 func (r *BudgetRepository) FindByID(ctx context.Context, id, userID string) (*models.Budget, error) {
 	var budget models.Budget
-	ownerClause, args := tenantOwnerClause(ctx, "", userID, []any{id})
+	ownerClause, args := tenantOwnerAndWorkspaceClause(ctx, "", userID, []any{id})
 	err := r.db.QueryRowContext(ctx,
 		`SELECT `+budgetColumns+`
 		 FROM budgets
@@ -120,7 +122,7 @@ func (r *BudgetRepository) Update(ctx context.Context, budget *models.Budget) er
 	args := []any{budget.Name, budget.MonthlyLimit, budget.DailyLimit, budget.HardLimit,
 		budget.WarningThreshold, budget.CriticalThreshold, budget.Enabled,
 		budget.UpdatedAt, budget.ID}
-	ownerClause, args := tenantOwnerClause(ctx, "", budget.UserID, args)
+	ownerClause, args := tenantOwnerAndWorkspaceClause(ctx, "", budget.UserID, args)
 	_, err := r.db.ExecContext(ctx,
 		`UPDATE budgets
 		 SET name = $1, monthly_limit = $2, daily_limit = $3, hard_limit = $4,
@@ -132,7 +134,7 @@ func (r *BudgetRepository) Update(ctx context.Context, budget *models.Budget) er
 }
 
 func (r *BudgetRepository) Delete(ctx context.Context, id, userID string) error {
-	ownerClause, args := tenantOwnerClause(ctx, "", userID, []any{id})
+	ownerClause, args := tenantOwnerAndWorkspaceClause(ctx, "", userID, []any{id})
 	res, err := r.db.ExecContext(ctx,
 		`DELETE FROM budgets WHERE id = $1 AND (`+ownerClause+`)`, args...,
 	)
@@ -140,10 +142,21 @@ func (r *BudgetRepository) Delete(ctx context.Context, id, userID string) error 
 }
 
 func budgetSpendWhereClause(ctx context.Context, userID string) (string, []any) {
+	var clauses []string
+	var args []any
 	if orgID := tenantOrgID(ctx); orgID != "" {
-		return `(org_id = $1 OR ((org_id IS NULL OR org_id = '') AND gateway_api_key_id IN (SELECT id FROM gateway_api_keys WHERE org_id = $1 OR ((org_id IS NULL OR org_id = '') AND user_id = $2))))`, []any{orgID, userID}
+		args = append(args, orgID)
+		clauses = append(clauses, fmt.Sprintf(`(org_id = $%d OR ((org_id IS NULL OR org_id = '') AND gateway_api_key_id IN (SELECT id FROM gateway_api_keys WHERE org_id = $%d)))`, len(args), len(args)))
+	} else {
+		args = append(args, userID)
+		clauses = append(clauses, fmt.Sprintf(`gateway_api_key_id IN (SELECT id FROM gateway_api_keys WHERE user_id = $%d)`, len(args)))
 	}
-	return `gateway_api_key_id IN (SELECT id FROM gateway_api_keys WHERE user_id = $1)`, []any{userID}
+	if wsID := tenantWorkspaceID(ctx); wsID != "" {
+		args = append(args, wsID)
+		idx := len(args)
+		clauses = append(clauses, fmt.Sprintf(`(workspace_id = $%d OR ((workspace_id IS NULL OR workspace_id = '') AND gateway_api_key_id IN (SELECT id FROM gateway_api_keys WHERE workspace_id = $%d)))`, idx, idx))
+	}
+	return strings.Join(clauses, " AND "), args
 }
 
 func (r *BudgetRepository) GetTotalMonthlySpend(ctx context.Context, userID string) (float64, error) {

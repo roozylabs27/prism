@@ -135,6 +135,12 @@ func TestProtectedRoutes_SensitiveRoutesRequirePermission(t *testing.T) {
 		"POST /credentials/:credId/reset-cooldown":               "credential:update",
 		"POST /agent-templates/:id/instantiate":                  "agent:create",
 		"POST /providers/:id/credentials/:credId/reset-cooldown": "credential:update",
+		"GET /dashboard/stats":                                   "logs:read",
+		"GET /dashboard/usage":                                   "logs:read",
+		"GET /dashboard/health":                                  "model:read",
+		"GET /dashboard/active-streams":                          "logs:read",
+		"GET /sse":                                               "organization:read",
+		"GET /jobs/:jobId":                                       "playground:execute",
 	}
 
 	for route, want := range expected {
@@ -150,16 +156,9 @@ func TestProtectedRoutes_SensitiveRoutesRequirePermission(t *testing.T) {
 }
 
 func TestProtectedRoutes_UnguardedRoutesAreExplicit(t *testing.T) {
-	// Routes still relying on handler-level user/tenant scoping only. Adding a
-	// route here is a deliberate decision; prefer a requirePermission guard.
-	unguarded := map[string]bool{
-		"GET /dashboard/stats":          true,
-		"GET /dashboard/usage":          true,
-		"GET /dashboard/health":         true,
-		"GET /dashboard/active-streams": true,
-		"GET /sse":                      true,
-		"GET /jobs/:jobId":              true,
-	}
+	// Every route on the tenant-scoped protected group must carry an explicit
+	// requirePermission guard.
+	unguarded := map[string]bool{}
 
 	for route, code := range protectedRoutePermissions(t) {
 		if code == "" && !unguarded[route] {

@@ -7,6 +7,7 @@ import (
 	"math"
 	"time"
 
+	"github.com/roozylabs/prism/internal/database"
 	goredis "github.com/roozylabs/prism/internal/redis"
 	"github.com/roozylabs/prism/internal/repository"
 )
@@ -21,8 +22,8 @@ const (
 )
 
 type anomalyStore interface {
-	CurrentHourSpend(ctx context.Context) (map[string]float64, time.Time, error)
-	SameHourBaselines(ctx context.Context, windowStart time.Time, days int) (map[string][]float64, error)
+	CurrentHourSpend(ctx context.Context) (map[repository.TenantSpendKey]float64, time.Time, error)
+	SameHourBaselines(ctx context.Context, windowStart time.Time, days int) (map[repository.TenantSpendKey][]float64, error)
 	Create(ctx context.Context, a *repository.CostAnomaly) (bool, error)
 }
 
@@ -45,6 +46,7 @@ func NewAnomalyDetector(anomalies *repository.CostAnomalyRepository, publisher *
 }
 
 func (d *AnomalyDetector) Run(ctx context.Context) {
+	ctx = database.WithSystemBypassRLS(ctx)
 	current, windowStart, err := d.anomalies.CurrentHourSpend(ctx)
 	if err != nil {
 		log.Printf("[anomaly] fetch current hour: %v", err)
@@ -59,8 +61,8 @@ func (d *AnomalyDetector) Run(ctx context.Context) {
 		return
 	}
 
-	for userID, spend := range current {
-		historical := baselines[userID]
+	for key, spend := range current {
+		historical := baselines[key]
 		severity, mean, stddev, zScore, ok := evaluateHourlySpend(spend, historical)
 		if !ok {
 			continue
@@ -69,10 +71,17 @@ func (d *AnomalyDetector) Run(ctx context.Context) {
 		details, _ := json.Marshal(map[string]interface{}{
 			"hour_of_day": windowStart.Hour(),
 			"days_used":   len(historical),
+			"org_id":      key.OrgID,
 		})
-		uid := userID
+		uid := key.UserID
+		var orgPtr *string
+		if key.OrgID != "" {
+			orgID := key.OrgID
+			orgPtr = &orgID
+		}
 		inserted, err := d.anomalies.Create(ctx, &repository.CostAnomaly{
 			UserID:         &uid,
+			OrgID:          orgPtr,
 			WindowStart:    windowStart,
 			Metric:         "hourly_spend",
 			Observed:       spend,
@@ -83,11 +92,13 @@ func (d *AnomalyDetector) Run(ctx context.Context) {
 			Details:        details,
 		})
 		if err != nil {
-			log.Printf("[anomaly] create for user %s: %v", userID, err)
+			log.Printf("[anomaly] create for org=%s user=%s: %v", key.OrgID, key.UserID, err)
 			continue
 		}
 		if inserted && d.publisher != nil {
-			_ = d.publisher.Publish(ctx, userID, "cost_anomaly", map[string]interface{}{
+			pubCtx := database.WithTenantContext(ctx, database.TenantDBContext{OrgID: key.OrgID, UserID: key.UserID})
+			_ = d.publisher.Publish(pubCtx, key.UserID, "cost_anomaly", map[string]interface{}{
+				"org_id":      key.OrgID,
 				"severity":    severity,
 				"observed":    spend,
 				"z_score":     math.Round(zScore*100) / 100,
