@@ -1,91 +1,92 @@
-export const governed = [
-  'Model inference sent to /v1/chat/completions (sync or SSE stream), /v1/messages (Anthropic format), and /v1/chat/completions/async (polled via /v1/jobs/:jobId)',
-  'MCP tool discovery and execution sent through POST /v1/mcp (JSON-RPC 2.0 Streamable HTTP)',
-  'Governed REST tool calls (/v1/tools/:name/execute) and data resource queries (/v1/resources/:name/query) with SSRF dial-time guards blocking private and loopback hosts',
-  'Upstream provider credential selection, Retry-After cooldowns, and workspace or agent spend limits',
-];
-
-export const notGoverned = [
-  'Shell commands, local file edits, or external HTTP calls an agent executes directly',
-  'MCP servers an agent connects to outside Prism without routing through /v1/mcp',
-  'Model requests that use a raw provider API key instead of a Prism gateway key',
-];
-
-export const agencyRows = [
+export const requestChecks = [
   {
-    problem: 'Spend is hard to isolate per client or team',
-    prism: 'Create one workspace per client account and projects inside it. Every request is metered and attributed to its canonical workspace and project, with role-based member invitations.',
-    where: 'Workspaces, Members (/api/workspaces)',
+    name: '1. Key & tenant scope',
+    detail: 'Validates gateway key, resolves workspace scope, and blocks spoofed headers.',
   },
   {
-    problem: 'Provider keys are scattered across runtimes',
-    prism: 'Store upstream provider API keys once in Prism, encrypted at rest with AES-256-GCM. Callers only receive Prism gateway keys (prism_sk_*) pinned to a workspace, project, or agent, and revocation drops keys from the gateway lookup cache immediately.',
-    where: 'Credentials, Gateway keys',
+    name: '2. Quotas & budget',
+    detail: 'Checks spend, request, and concurrent stream caps before calling upstream.',
   },
   {
-    problem: 'One runaway loop or client can run up the bill',
-    prism: 'Enforce daily and monthly spend limits, request quotas, and concurrent stream caps at organization, workspace, and project levels, backed by organization budgets. Requests over the cap return 429 before reaching upstream providers.',
-    where: 'Quotas, Budgets',
+    name: '3. Agent policy',
+    detail: 'Verifies allowed models, MCP servers, tools, and !deny rules.',
   },
   {
-    problem: 'Agents call destructive tools or expensive models',
-    prism: 'Assign each agent an allowlist for models, tools, resources, and MCP servers with !deny rules (which override * wildcards) and a hard maxBudgetCents spend cap.',
-    where: 'Agents (/api/agents)',
-  },
-  {
-    problem: 'Client reporting and admin audit trails are fragmented',
-    prism: 'Export per-workspace token usage, model spend, and policy denials as CSV or JSON, while an admin audit log records key, credential, member, budget, and policy changes.',
-    where: 'Pilot outcomes, Audit trail',
+    name: '4. Route & failover',
+    detail: 'Selects the route via rules or prism-auto, retrying pre-stream errors.',
   },
 ];
 
-export const inference = [
-  {
-    title: 'Routing rules or prism-auto selection',
-    body: 'Pin model patterns (such as claude-* or gpt-4o*) to specific providers by priority with routing rules, or send model: "prism-auto" to score eligible models by prompt task, cost, latency, and credential health. Override the active routing policy per request with X-Routing-Policy (unknown or disabled policies return 404).',
-    ref: '/api/routing-rules · model: "prism-auto"',
-  },
-  {
-    title: 'Failover across provider credentials',
-    body: 'When an upstream credential returns 429 or 5xx (or fails before the first token on an SSE stream), Prism places it in a Redis cooldown honoring Retry-After and retries the next eligible credential. Prism only records token spend for the final completed response; if all candidates fail, the caller receives the error.',
-    ref: 'Retry-After · 50x circuit breaker',
-  },
-  {
-    title: 'Correlation headers, JSON logs, and Prometheus metrics',
-    body: 'Responses include X-Request-ID, X-Prism-Model, and X-Prism-Provider (plus X-Prism-Routing-Policy on prism-auto routes and X-Prism-Failovers on non-streaming completions). The gateway writes structured JSON logs with secret redaction and exposes Prometheus instruments at /metrics (guarded by METRICS_TOKEN).',
-    ref: 'X-Request-ID · X-Prism-Model · /metrics',
-  },
-  {
-    title: 'Fail closed on Redis state and startup secrets',
-    body: 'Spend reservations, quotas, and sliding-window rate limits run on Redis. Outside development, Prism refuses to start with empty or default secrets and rejects gateway calls with 503 when Redis is unreachable (REDIS_FAIL_CLOSED=true by default).',
-    ref: 'REDIS_FAIL_CLOSED · METRICS_TOKEN',
-  },
-];
+export const boundarySummary = {
+  governed: [
+    {
+      label: 'Model inference',
+      detail: 'Synchronous, streaming, and async completions routed through Prism model endpoints.',
+    },
+    {
+      label: 'MCP servers',
+      detail: 'Tool discovery and execution proxied through Prism over HTTP MCP (JSON-RPC 2.0).',
+    },
+    {
+      label: 'Governed tools & resources',
+      detail: 'Registered REST tools and resource queries invoked through Prism with SSRF guards.',
+    },
+  ],
+  outside: [
+    {
+      label: 'Local agent runtime',
+      detail: 'Shell commands, local file edits, and direct outbound HTTP calls on the agent host.',
+    },
+    {
+      label: 'Direct provider calls',
+      detail: 'Model APIs or MCP servers contacted directly with raw upstream credentials.',
+    },
+  ],
+};
 
-export const agentControls = [
+export interface CapabilityPillar {
+  index: string;
+  title: string;
+  summary: string;
+  points: string[];
+  meta: string[];
+  hasAgentExample?: boolean;
+}
+
+export const capabilities: CapabilityPillar[] = [
   {
-    term: 'Identity',
-    def: 'Bind an agentId directly to a gateway key so callers cannot omit or spoof it, or pass X-Prism-Agent-ID per request for a registered agent.',
+    index: '01',
+    title: 'Routing & failover',
+    summary:
+      'Control how requests pick models and recover from upstream provider errors without scattering retry loops across apps.',
+    points: [
+      'Pin wildcard model patterns (such as claude-* or gpt-4o*) to specific providers via routing rules, or send model: "prism-auto" to score candidates by task, cost, latency, and credential health.',
+      'Override policy per request with X-Routing-Policy (unknown or disabled policies return 404). On 429 or 5xx before the first token, Prism places the credential in a Redis Retry-After cooldown and retries the next candidate, recording spend only for the final completed response.',
+    ],
+    meta: ['/api/routing-rules', 'model: "prism-auto"', 'X-Routing-Policy', 'Retry-After cooldown'],
   },
   {
-    term: 'Allowlists & !deny',
-    def: 'Configure allowedModels, allowedTools, allowedResources, and allowedMcpServers. Prefix any entry with ! to deny it; explicit deny rules always override * wildcards.',
+    index: '02',
+    title: 'Governance & isolation',
+    summary:
+      'Separate workspaces, keys, spend limits, and tool permissions across client accounts or internal teams.',
+    points: [
+      'Isolate traffic into organizations, workspaces, and projects with role-based member invitations. Upstream keys stay encrypted with AES-256-GCM while callers use prism_sk_* keys that drop from the lookup cache immediately upon revocation.',
+      'Set daily and monthly spend, request, and concurrent stream quotas at org, workspace, and project scopes, paired with org budgets and per-agent allowlists where !deny rules always override * wildcards.',
+    ],
+    meta: ['AES-256-GCM vault', 'prism_sk_* keys', 'Quotas & Budgets', '!deny > *'],
+    hasAgentExample: true,
   },
   {
-    term: 'Spending cap',
-    def: 'maxBudgetCents blocks further calls once an agent reaches its monthly spend ceiling.',
-  },
-  {
-    term: 'MCP gateway',
-    def: 'HTTP MCP clients connect to POST /v1/mcp and only see and execute tools permitted for their agent identity.',
-  },
-  {
-    term: 'Delegation',
-    def: 'The built-in delegate_ai_task MCP tool dispatches a routed model call through Prism and returns the chosen model, provider, and USD cost.',
-  },
-  {
-    term: 'Audit & HMAC verification',
-    def: 'Allowed and denied model, tool, and MCP executions are logged with agent identity, policy decision, and HMAC signature verification (/api/audit-trail/:id/verify), alongside an admin audit log of configuration changes.',
+    index: '03',
+    title: 'Visibility & security',
+    summary:
+      'Trace every request across providers, export usage without spreadsheets, and keep production secrets fail-closed.',
+    points: [
+      'Responses return X-Request-ID, X-Prism-Model, and X-Prism-Provider (plus X-Prism-Routing-Policy and non-stream X-Prism-Failovers). Export per-workspace usage, spend, and policy denials as CSV or JSON.',
+      'Structured JSON logs redact secrets, Prometheus /metrics is guarded by METRICS_TOKEN, AI audit trails support HMAC verification, admin changes are logged, and REDIS_FAIL_CLOSED refuses traffic outside development when Redis is down.',
+    ],
+    meta: ['X-Request-ID', '/metrics', 'CSV / JSON export', 'HMAC audit trail', 'SSRF dial guard'],
   },
 ];
 
@@ -97,43 +98,40 @@ export const agentPolicyExample = `{
   "maxBudgetCents": 5000
 }`;
 
-export const selfHostOption = {
+export const selfHostTrack = {
   title: 'Self-host with Docker Compose',
   tag: 'Self-hosted · Local Docker or VPS',
-  who: 'For engineering teams running Prism on their own infrastructure. No Prism software fee; you run the containers and pay your upstream AI providers directly for model usage.',
+  summary:
+    'Run the Go gateway, Next.js admin console, PostgreSQL, and Redis on your own host. No Prism software fee; you pay upstream AI providers directly for model usage.',
   prerequisites:
-    'Docker and Docker Compose (or Go 1.25+, pnpm 9+, PostgreSQL 15, and Redis 7), plus at least one upstream provider API key.',
-  command:
-    'git clone https://github.com/roozylabs27/prism.git && cd prism && cp .env.example .env && docker compose up -d --build',
-  steps: [
-    'Clone the repository, copy .env.example to .env, and set POSTGRES_PASSWORD, REDIS_PASSWORD, ENCRYPTION_KEY (32+ chars), and APP_ENV=development for local testing.',
-    'Start the Go gateway (127.0.0.1:8080), Next.js admin console (127.0.0.1:3000), Postgres, and Redis with docker compose up -d --build.',
-    'Sign up in the local console, add a provider credential, mint a prism_sk_* gateway key, and point your client base URL at http://localhost:8080/v1.',
-  ],
-  linkLabel: 'Self-host with Docker',
-  expectAfterClick:
-    'Opens the Quick Start section on GitHub. Follow the Getting Started guide afterwards to send your first /v1/chat/completions or /v1/mcp call.',
+    'Docker & Docker Compose, plus OpenSSL (or another secret generator) to populate required secrets in .env before starting.',
+  cloneCommand:
+    'git clone https://github.com/roozylabs27/prism.git && cd prism && cp .env.example .env',
+  envConfig: {
+    secrets:
+      'POSTGRES_PASSWORD, REDIS_PASSWORD (openssl rand -hex 24), ENCRYPTION_KEY (openssl rand -hex 32)',
+    localDev:
+      'APP_ENV=development, TURNSTILE_DISABLED=true, ALLOWED_ORIGINS=http://localhost:3000,http://127.0.0.1:3000, APP_PUBLIC_URL=http://localhost:3000',
+    note: '.env.example leaves secrets blank and defaults to APP_ENV=production. Populate .env before starting Compose.',
+  },
+  startCommand: 'docker compose up -d --build && curl -fsS http://127.0.0.1:8080/ready',
+  linkLabel: 'Open Quick Start on GitHub',
+  guideLabel: 'Full local & production setup guide',
+  note: 'Binds gateway on 127.0.0.1:8080, console on 127.0.0.1:3000, and web on 127.0.0.1:3001. Production deployments must keep APP_ENV=production with HTTPS origins and Turnstile.',
 };
 
-export const pilotOption = {
+export const pilotTrack = {
   title: 'Design-partner staging pilot',
   tag: 'Guided 14-day cohort · 3 to 5 agencies',
-  who: 'For AI automation agencies running 5 to 30 client accounts who want hands-on help setting up isolated workspaces, quotas, and agent policies on staging traffic.',
+  summary:
+    'There are no paid hosted tiers enabled today. Agencies running 5 to 30 client accounts can work with us to configure isolated workspaces, pinned keys, and hard quota caps on staging.',
   prerequisites:
-    '2 or more isolated client or project staging workflows (OpenAI SDK, n8n, LangGraph, CrewAI, or HTTP MCP client) ready to route through Prism for 7 to 14 days.',
+    '2 or more isolated client or project staging workflows (OpenAI SDK, n8n, LangGraph, CrewAI, or HTTP MCP client) ready to test for 7 to 14 days.',
   steps: [
-    'Open a pilot request issue on GitHub with your client count, model stack, and MCP tool setup.',
-    'Join a 30-minute onboarding session to configure client workspaces, pinned gateway keys, and hard quota caps.',
-    'Run staging traffic for 7 to 14 days, test a hard budget/tool denial end-to-end, and review exported CSV/JSON cost outcomes together.',
-  ],
-  capabilities: [
-    'Isolated client workspaces & projects',
-    'Client-pinned prism_sk_* keys',
-    'prism-auto routing & credential failover',
-    'Governed /v1/mcp + delegate_ai_task',
-    'Weekly CSV/JSON cost & denial export',
+    'Open a pilot request issue on GitHub with your client count, models, and MCP setup.',
+    'Configure isolated workspaces, pinned gateway keys, and quota limits in a 30-minute onboarding call.',
+    'Test a budget/tool denial end-to-end and review exported CSV/JSON cost attribution together.',
   ],
   linkLabel: 'Apply for a design-partner pilot',
-  expectAfterClick:
-    'Opens a pre-filled GitHub issue template (requires a GitHub account) to share your workload profile, with the 1-page pilot charter linked below.',
+  note: 'Opens a pre-filled GitHub issue template (requires a GitHub account).',
 };

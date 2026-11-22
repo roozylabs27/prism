@@ -1,0 +1,60 @@
+---
+import Section from '../ui/Section.astro';
+import Icon from '../ui/Icon.astro';
+import RequestPath from '../diagrams/RequestPath.astro';
+import McpBoundary from '../diagrams/McpBoundary.astro';
+import { boundarySummary } from '../../data/content';
+import { links } from '../../data/site';
+---
+
+<Section
+	id="architecture"
+	label="01 · Architecture"
+	title="Prism sits in the request path, and stops at its endpoints."
+	intro="Every call sent to Prism passes through four ordered admission checks before reaching an upstream provider or MCP server. Traffic outside those endpoints is governed by your agent runtime."
+	layout="stacked"
+>
+	<RequestPath />
+
+	<div class="mt-10 grid grid-cols-1 gap-8 lg:grid-cols-12 lg:items-start">
+		<div class="lg:col-span-5 space-y-4 min-w-0">
+			<div class="border border-rule border-l-2 border-l-allow rounded-sm bg-raised/70 p-4 sm:p-5">
+				<p class="font-mono text-xs text-allow">INSIDE PRISM BOUNDARY</p>
+				<h3 class="mt-1 font-semibold text-base text-ink">Governed by Prism</h3>
+				<ul class="mt-3 space-y-3 text-sm">
+					{boundarySummary.governed.map((item) => (
+						<li>
+							<span class="block font-medium text-ink">{item.label}</span>
+							<span class="block text-muted mt-0.5">{item.detail}</span>
+						</li>
+					))}
+				</ul>
+			</div>
+
+			<div class="border border-dashed border-rule rounded-sm bg-paper p-4 sm:p-5">
+				<p class="font-mono text-xs text-muted">OUTSIDE PRISM · NOT INTERCEPTED</p>
+				<h3 class="mt-1 font-semibold text-base text-ink">Outside Prism</h3>
+				<ul class="mt-3 space-y-3 text-sm">
+					{boundarySummary.outside.map((item) => (
+						<li>
+							<span class="block font-medium text-ink">{item.label}</span>
+							<span class="block text-muted mt-0.5">{item.detail}</span>
+						</li>
+					))}
+				</ul>
+			</div>
+
+			<p class="text-sm text-muted">
+				For exact endpoint paths, headers, and status codes, see the{' '}
+				<a href={links.apiReference} target="_blank" rel="noopener noreferrer" class="link inline-flex items-center gap-1">
+					API reference
+					<Icon name="external" class="h-3.5 w-3.5" />
+				</a>.
+			</p>
+		</div>
+
+		<div class="lg:col-span-7 min-w-0">
+			<McpBoundary />
+		</div>
+	</div>
+</Section>

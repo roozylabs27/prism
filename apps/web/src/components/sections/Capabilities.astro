@@ -1,0 +1,48 @@
+---
+import Section from '../ui/Section.astro';
+import { capabilities, agentPolicyExample } from '../../data/content';
+---
+
+<Section
+	id="capabilities"
+	label="02 · Capabilities"
+	title="Routing, isolation, and visibility in one control plane."
+	intro="Built for engineering teams and agencies running multiple providers, workspaces, and autonomous agents without scattering raw keys."
+	layout="stacked"
+	class="bg-raised/40"
+>
+	<div class="divide-y divide-rule border-y border-rule">
+		{capabilities.map((pillar) => (
+			<div class="py-10 grid grid-cols-1 gap-8 lg:grid-cols-12 lg:gap-12">
+				<div class="lg:col-span-4 min-w-0">
+					<p class="eyebrow">{pillar.index}</p>
+					<h3 class="mt-2 text-xl font-semibold tracking-tight text-ink">{pillar.title}</h3>
+					<p class="mt-2 text-muted text-base">{pillar.summary}</p>
+					<div class="mt-4 flex flex-wrap gap-1.5">
+						{pillar.meta.map((tag) => (
+							<code class="inline-code text-xs">{tag}</code>
+						))}
+					</div>
+				</div>
+
+				<div class="lg:col-span-8 min-w-0 space-y-6">
+					<div class="grid grid-cols-1 gap-6 sm:grid-cols-2">
+						{pillar.points.map((point) => (
+							<p class="text-muted text-sm sm:text-base leading-relaxed">{point}</p>
+						))}
+					</div>
+
+					{pillar.hasAgentExample && (
+						<figure class="border border-rule rounded-sm bg-paper">
+							<figcaption class="px-4 py-2.5 border-b border-rule eyebrow flex items-center justify-between gap-2">
+								<span>POST /api/agents</span>
+								<span class="text-xs text-muted">Example configuration</span>
+							</figcaption>
+							<pre class="p-4 overflow-x-auto text-sm leading-relaxed"><code>{agentPolicyExample}</code></pre>
+						</figure>
+					)}
+				</div>
+			</div>
+		))}
+	</div>
+</Section>

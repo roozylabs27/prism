@@ -1,32 +1,59 @@
 ---
-// Three calls from one agent. Status is spelled out in text, color only reinforces it.
-const calls = [
-	{ call: 'crm__lookup_customer', via: 'through /v1/mcp', status: 'Allowed', tone: 'allow', why: 'On the agent allowlist. Recorded.' },
-	{ call: 'crm__delete_customer', via: 'through /v1/mcp', status: 'Denied', tone: 'deny', why: 'Matches !delete_customer. Recorded.' },
-	{ call: 'rm -rf ./data', via: 'agent shell, direct', status: 'Not seen', tone: 'none', why: 'Never reaches Prism. Govern it in the agent runtime.' },
+// Three calls from one agent. Solid frame marks calls Prism intercepts; dashed frame marks direct host execution.
+const governedCalls = [
+	{ call: 'crm__lookup_customer', via: 'via POST /v1/mcp', status: 'Allowed', tone: 'allow', why: 'Matches agent allowlist. Recorded.' },
+	{ call: 'crm__delete_customer', via: 'via POST /v1/mcp', status: 'Denied', tone: 'deny', why: 'Blocked by !delete_customer. Recorded.' },
 ] as const;
+
+const externalCall = {
+	call: 'rm -rf ./data',
+	via: 'agent host shell, direct',
+	status: 'Not seen',
+	why: 'Never reaches Prism. Govern it in the agent runtime.',
+} as const;
 
 const toneClass = {
 	allow: 'text-allow border-allow',
 	deny: 'text-deny border-deny',
-	none: 'text-muted border-rule border-dashed',
 };
 ---
 
 <figure class="border border-rule rounded-sm bg-raised p-5 sm:p-6">
 	<figcaption class="eyebrow">Illustrative trace: agent <span class="text-ink">support-bot-acme</span> makes three calls</figcaption>
-	<ul class="mt-5 divide-y divide-rule">
-		{calls.map((c) => (
-			<li class="py-4 grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
-				<div class="min-w-0">
-					<code class="font-mono text-sm break-all">{c.call}</code>
-					<span class="block text-sm text-muted">{c.via}</span>
-				</div>
-				<div class="sm:text-right">
-					<span class:list={['inline-block font-mono text-sm px-2 py-0.5 border rounded-sm', toneClass[c.tone]]}>{c.status}</span>
-					<span class="block text-sm text-muted mt-1">{c.why}</span>
-				</div>
-			</li>
-		))}
-	</ul>
+
+	<div class="mt-4 border border-rule border-l-2 border-l-allow rounded-sm bg-paper/60">
+		<div class="px-4 py-2 border-b border-rule font-mono text-xs text-allow">
+			INTERCEPTED BY PRISM · POST /v1/mcp
+		</div>
+		<ul class="divide-y divide-rule px-4">
+			{governedCalls.map((c) => (
+				<li class="py-3.5 grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
+					<div class="min-w-0">
+						<code class="font-mono text-sm break-all text-ink">{c.call}</code>
+						<span class="block text-sm text-muted">{c.via}</span>
+					</div>
+					<div class="sm:text-right">
+						<span class:list={['inline-block font-mono text-sm px-2 py-0.5 border rounded-sm', toneClass[c.tone]]}>{c.status}</span>
+						<span class="block text-sm text-muted mt-1">{c.why}</span>
+					</div>
+				</li>
+			))}
+		</ul>
+	</div>
+
+	<div class="mt-3 border border-dashed border-rule rounded-sm bg-paper">
+		<div class="px-4 py-2 border-b border-dashed border-rule font-mono text-xs text-muted">
+			OUTSIDE PRISM · AGENT HOST SHELL
+		</div>
+		<div class="px-4 py-3.5 grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
+			<div class="min-w-0">
+				<code class="font-mono text-sm break-all text-muted">{externalCall.call}</code>
+				<span class="block text-sm text-muted">{externalCall.via}</span>
+			</div>
+			<div class="sm:text-right">
+				<span class="inline-block font-mono text-sm px-2 py-0.5 border border-dashed border-rule text-muted rounded-sm">{externalCall.status}</span>
+				<span class="block text-sm text-muted mt-1">{externalCall.why}</span>
+			</div>
+		</div>
+	</div>
 </figure>

@@ -1,5 +1,5 @@
-// Client behaviour for the landing page: theme, mobile nav, section scroll-spy,
-// Hero stage route inspector & pointer tilt, code tabs, and command/code copy.
+// Client behaviour for the landing page: theme, mobile nav drawer, section scroll-spy,
+// Hero stage route inspector, code tabs, and command/code copy.
 
 function setupTheme() {
 	const buttons = document.querySelectorAll<HTMLButtonElement>('[data-theme-toggle]');
@@ -278,32 +278,6 @@ function setupPrismStageInspector() {
 	});
 }
 
-function setupPrismStageParallax() {
-	const stage = document.querySelector<HTMLElement>('[data-prism-stage]');
-	const group = stage?.querySelector<HTMLElement>('[data-prism-parallax]');
-	if (!stage || !group || !window.matchMedia) return;
-
-	const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
-	const coarsePointer = window.matchMedia('(pointer: coarse)');
-
-	stage.addEventListener('pointermove', (e) => {
-		if (reducedMotion.matches || coarsePointer.matches) return;
-		const rect = stage.getBoundingClientRect();
-		if (!rect.width || !rect.height) return;
-		const nx = Math.max(-1, Math.min(1, ((e.clientX - rect.left) / rect.width - 0.5) * 2));
-		const ny = Math.max(-1, Math.min(1, ((e.clientY - rect.top) / rect.height - 0.5) * 2));
-		const rotY = (nx * 4.5).toFixed(2);
-		const rotX = (-ny * 4.5).toFixed(2);
-		const tx = (nx * 6).toFixed(1);
-		const ty = (ny * 5).toFixed(1);
-		group.style.transform = `perspective(1000px) rotateX(${rotX}deg) rotateY(${rotY}deg) translate3d(${tx}px, ${ty}px, 0px)`;
-	});
-
-	stage.addEventListener('pointerleave', () => {
-		group.style.transform = 'none';
-	});
-}
-
 setupTheme();
 const syncHeader = setupHeaderScroll();
 setupMobileNav(syncHeader);
@@ -311,4 +285,3 @@ setupSectionObserver();
 setupTabs();
 setupCommandCopyBlocks();
 setupPrismStageInspector();
-setupPrismStageParallax();
