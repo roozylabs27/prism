@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { Card, CardHeader, CardTitle, CardContent } from '@/components/molecules/Card';
+import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/molecules/Card';
 import { Button } from '@/components/atoms/Button';
 import { Badge } from '@/components/atoms/Badge';
 import { Label } from '@/components/atoms/Label';
@@ -219,54 +219,76 @@ export function SandboxOutputConsole({
 }: SandboxOutputConsoleProps) {
   return (
     <Card className="flex flex-col min-w-0 overflow-hidden border-border/70 shadow-lg">
-      <CardHeader className="pb-3 border-b border-border/40 bg-card/50">
-        <div className="flex items-center justify-between">
-          <CardTitle className="text-sm font-semibold flex items-center gap-2">
-            <TerminalIcon className="h-4 w-4 text-primary" />
-            <span>Execution Output Console</span>
-          </CardTitle>
-          <div className="flex items-center gap-2">
+      <CardHeader className="pb-3 border-b border-border/40 bg-card/50 space-y-2.5">
+        <div className="flex items-center justify-between gap-4">
+          <div className="space-y-1 min-w-0">
+            <CardTitle className="text-sm font-semibold flex items-center gap-2">
+              <TerminalIcon className="h-4 w-4 text-primary shrink-0" />
+              <span>Execution Output Console</span>
+            </CardTitle>
+            <CardDescription className="text-xs">
+              Live response stream, model routing metadata, and token execution telemetry.
+            </CardDescription>
+          </div>
+          {Boolean(executionOutput) && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 px-2.5 text-xs gap-1.5 shrink-0 border-border/70 hover:bg-accent hover:text-accent-foreground"
+              onClick={onCopyOutput}
+              disabled={isExecuting}
+            >
+              {copied ? (
+                <CheckIcon className="h-3.5 w-3.5 text-emerald-500 dark:text-emerald-400" />
+              ) : (
+                <CopyIcon className="h-3.5 w-3.5 text-primary" />
+              )}
+              <span>{copied ? 'Copied!' : 'Copy Result'}</span>
+            </Button>
+          )}
+        </div>
+
+        {(routedModel || routedPolicy || latencyMs != null || tokenStats) && (
+          <div className="flex items-center gap-2 flex-wrap pt-0.5">
             {routedModel && (
-              <Badge variant="violet" className="font-mono text-[10px] gap-1 border-slate-800">
-                <LayersIcon className="h-3 w-3" />
-                Model: {routedModel}
+              <Badge
+                variant="violet"
+                className="font-mono text-[11px] gap-1.5 px-2.5 py-0.5 whitespace-nowrap shrink-0 border-violet-500/30"
+              >
+                <LayersIcon className="h-3 w-3 text-violet-400 shrink-0" />
+                <span className="text-muted-foreground font-normal">Model:</span>
+                <span className="font-semibold text-foreground">{routedModel}</span>
               </Badge>
             )}
             {routedPolicy && (
-              <Badge variant="outline" className="font-mono text-[10px] gap-1">
-                Policy: {routedPolicy}
+              <Badge
+                variant="outline"
+                className="font-mono text-[11px] gap-1.5 px-2.5 py-0.5 whitespace-nowrap shrink-0 border-border/70 bg-background/50"
+              >
+                <span className="text-muted-foreground font-normal">Policy:</span>
+                <span className="font-semibold text-foreground">{routedPolicy}</span>
               </Badge>
             )}
             {latencyMs != null && (
-              <Badge variant="violet" className="font-mono text-[10px] gap-1">
-                <ClockIcon className="h-3 w-3" />
-                {latencyMs} ms
+              <Badge
+                variant="violet"
+                className="font-mono text-[11px] gap-1.5 px-2.5 py-0.5 whitespace-nowrap shrink-0 border-violet-500/30"
+              >
+                <ClockIcon className="h-3 w-3 text-violet-400 shrink-0" />
+                <span className="font-semibold text-foreground">{latencyMs} ms</span>
               </Badge>
             )}
             {tokenStats && (
-              <Badge variant="outline" className="font-mono text-[10px] gap-1">
-                <ZapIcon className="h-3 w-3 text-amber-400" />
-                {tokenStats.input + tokenStats.output} tokens
+              <Badge
+                variant="outline"
+                className="font-mono text-[11px] gap-1.5 px-2.5 py-0.5 whitespace-nowrap shrink-0 border-border/70 bg-background/50"
+              >
+                <ZapIcon className="h-3 w-3 text-amber-400 shrink-0" />
+                <span className="font-semibold text-foreground">{tokenStats.input + tokenStats.output} tokens</span>
               </Badge>
             )}
-            {Boolean(executionOutput) && (
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-7 px-2.5 text-xs gap-1.5 border-slate-800 hover:border-slate-700"
-                onClick={onCopyOutput}
-                disabled={isExecuting}
-              >
-                {copied ? (
-                  <CheckIcon className="h-3.5 w-3.5 text-emerald-700 dark:text-emerald-400" />
-                ) : (
-                  <CopyIcon className="h-3.5 w-3.5 text-primary" />
-                )}
-                <span>{copied ? 'Copied!' : 'Copy Result'}</span>
-              </Button>
-            )}
           </div>
-        </div>
+        )}
       </CardHeader>
 
       <CardContent className="flex-1 flex flex-col pt-4">
