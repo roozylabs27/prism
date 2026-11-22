@@ -12,6 +12,12 @@
 >
 > Prism is currently suitable **only for single-tenant or trusted internal pilot use behind VPN/private network access**. Four P0 findings (`AUD-P0-01`–`AUD-P0-04`) and 17 P1 findings create verified cross-organization leakage, account takeover exposure, broken SDK/CLI authentication, inconsistent financial analytics, and a live `-race` concurrency defect.
 
+### Post-Remediation Status Update (`2026-11-22`)
+
+> **Code & Unit Implementation Status:** **Remediation `REM-01` through `REM-24` implemented in source.**
+> - **Completed in codebase:** `REM-01` (`rls_driver.go` `ResetSession` GUC sync + `driver.ErrBadConn`, non-superuser `prism_app` role, migrations, restore script), `REM-02`–`REM-16`, `REM-17` (decomposed Overview `< 350`, Sandbox `< 350`, Organization Settings `< 120` lines + modular hooks/mutations + RHF/Zod), `REM-18` (`prism_active_org` middleware header forwarding + `server-auth.ts` pass-through), `REM-19`–`REM-20`, `REM-21` (`.github/workflows/app-ci-cd.yml` ephemeral Postgres 15 + Redis 7 + Go API + Next.js stack + expanded `apps/app/e2e/dashboard.spec.ts`), `REM-22` (accessible keyboard/click-blocking `<PermissionGuard>` across all privileged dashboard actions), `REM-23` (responsive `TenantSelector`), and `REM-24` (`AbortSignal` across `lib/api/*` + `hooks/queries/*`, `pnpm lint` clean at `0` errors / `0` warnings).
+> - **Pending Live Environment Verification:** Local Docker Desktop was offline; live container execution against PostgreSQL 15 (`TestRLS`, `pg-restore-test.sh`), Redis 7, and live `PLAYWRIGHT_LIVE_E2E=1` browser E2E remain **pending CI / live Docker run**, so all 6 Release Gates in Section 4 remain unchecked `[ ]` until CI passes.
+
 ---
 
 ## 2. Domain Production Readiness Matrix
@@ -51,7 +57,7 @@
 
 ## 4. Pre-Production Release Gate Checklist
 
-Before approving Prism for public multi-tenant GA, every gate below must pass **post-remediation** against live PostgreSQL 15 & Redis 7 containers:
+Before approving Prism for public multi-tenant GA, every gate below must pass **post-remediation** against live PostgreSQL 15 & Redis 7 containers *(all code prerequisites `REM-01`–`REM-24` are implemented; boxes remain unchecked until executed against live containers in CI or Docker)*:
 
 - [ ] **Gate 1 (M1 Non-Superuser RLS + Restore):** `go test -v ./internal/database -run TestRLS` passes against PostgreSQL 15 under `NOSUPERUSER NOBYPASSRLS` role AND `bash scripts/backup/pg-restore-test.sh` passes exit `0`.
 - [ ] **Gate 2 (M1 Auth/Tenant/Isolation Suite):** `go test -race -count=1 ./...` passes with **0 failures** (including fixed `TestCachedQuotaEvaluator_ConcurrentMissesShareOneEvaluation`) against live PostgreSQL & Redis.

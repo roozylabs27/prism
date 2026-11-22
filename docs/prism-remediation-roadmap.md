@@ -141,3 +141,14 @@ flowchart TD
 - **`REM-22`:** Privileged create/delete buttons across dashboard views wrapped in `<PermissionGuard permission="...">` with accessible disabled tooltips for `viewer` role.
 - **`REM-23`:** Workspace and Project selectors accessible inside responsive header popover or mobile navigation drawer below `1280px`.
 - **`REM-24`:** React Query `AbortSignal` threaded into `lib/api/*` reads + default Axios `30s` request timeout; `pnpm lint` warnings resolved cleanly (0 errors, 0 actionable a11y/hook warnings).
+
+---
+
+## 5. Post-Remediation Implementation Status (`2026-11-22`)
+
+| Group | Tasks Covered | Implementation & Local Unit Status | Live Container / CI Status |
+|---|---|---|---|
+| **M1: Security & Tenant Isolation** | `REM-01`–`REM-10` | **Implemented & unit-verified** (includes `rlsConn.ResetSession` pool sync + `ErrBadConn`, OAuth hardening, CSRF/Origin checks, workspace RBAC, tenant-keyed RQ purge) | **Pending live Docker/CI** (PostgreSQL 15 `TestRLS` + `pg-restore-test.sh` & Redis 7; local Docker offline) |
+| **M2: Correctness, SSE & SDK Parity** | `REM-11`–`REM-15` | **Implemented & unit-verified** (coalesced typed SSE + `Last-Event-ID`, consistent `all` range + `LEFT JOIN` logs, `PrincipalGatewayKey` RBAC, `-race`-safe `CachedQuotaEvaluator`, tenant telemetry) | **Pending live Docker/CI** (end-to-end live DB/Redis & live gateway-key integration verification) |
+| **M3: Performance, Architecture & CI** | `REM-16`–`REM-21` | **Implemented & locally verified** (session rotation/revocation, decomposed Overview/Sandbox/Organization pages `< 350` lines + RHF/Zod, `prism_active_org` SSR pass-through, SQL indexes, OpenAPI/SDK/CLI suites, `.github/workflows/app-ci-cd.yml` ephemeral stack + `apps/app/e2e/dashboard.spec.ts`) | **Pending CI `playwright-e2e` run** (`PLAYWRIGHT_LIVE_E2E=1` skipped locally while live stack offline) |
+| **M4: UI Ergonomics & Hygiene** | `REM-22`–`REM-24` | **Implemented & verified locally** (`PermissionGuard` keyboard/click blocking + all dashboard views guarded, responsive `TenantSelector`, `AbortSignal` across `lib/api/*` + `hooks/queries/*`, `pnpm lint` clean `0` errors / `0` warnings) | Complete locally; covered in E2E flows above |

@@ -100,6 +100,7 @@ For the detailed internal architecture, see [docs/ARCHITECTURE.md](docs/ARCHITEC
 ### 1. Prerequisites
 
 - [Docker & Docker Compose](https://docs.docker.com/get-docker/) installed on your system.
+- `openssl` (or another secret generator) to generate `.env` credentials before first boot.
 - [Go 1.25+](https://go.dev/dl/) and [pnpm 9+](https://pnpm.io/) (if running locally without Docker).
 
 ### 2. Connect a Client (OpenCode CLI example)
@@ -120,22 +121,37 @@ Add Prism to your `~/.config/opencode/opencode.jsonc`:
 
 ### 3. Run with Docker Compose
 
+1. Clone the repository and create `.env` from the template:
+
 ```bash
-git clone https://github.com/roozylabs/prism.git
+git clone https://github.com/roozylabs27/prism.git
 cd prism
 cp .env.example .env
-docker compose up -d --build
 ```
 
-The stack will be available at:
+2. Populate required secrets and environment settings in `.env` **before** starting Compose (`.env.example` leaves secrets blank and defaults `APP_ENV=production`, so starting without editing `.env` fails immediately):
 
-- **Prism Landing Page**: `http://localhost:3001`
-- **Admin Console Dashboard**: `http://localhost:3000`
-- **Prism Gateway API**: `http://localhost:8080`
+   - Generate random values for `POSTGRES_PASSWORD`, `REDIS_PASSWORD` (`openssl rand -hex 24`), and `ENCRYPTION_KEY` (`openssl rand -hex 32`).
+   - **Local evaluation (`http://localhost:3000`)**: set `APP_ENV=development`, `TURNSTILE_DISABLED=true`, `ALLOWED_ORIGINS=http://localhost:3000,http://127.0.0.1:3000`, and `APP_PUBLIC_URL=http://localhost:3000` (plus `PUBLIC_URL=http://localhost:3000`).
+   - **Production deployment**: keep `APP_ENV=production`, configure HTTPS origins in `ALLOWED_ORIGINS` / `APP_PUBLIC_URL`, configure Cloudflare Turnstile (`CLOUDFLARE_SECRET_KEY` and `NEXT_PUBLIC_CLOUDFLARE_SITE_KEY`), and review [docs/operations/configuration.md](docs/operations/configuration.md).
+
+3. Build, start the stack, and verify gateway readiness:
+
+```bash
+docker compose up -d --build
+docker compose ps
+curl -fsS http://127.0.0.1:8080/ready
+```
+
+The stack binds on loopback by default:
+
+- **Prism Gateway API**: `http://127.0.0.1:8080`
+- **Admin Console Dashboard**: `http://127.0.0.1:3000`
+- **Prism Landing Page**: `http://127.0.0.1:3001`
 
 ### 4. Next Steps
 
-- Follow the full [Getting Started Guide](docs/getting-started.md) for cURL, the [TypeScript SDK](docs/sdk-typescript.md), and the [Prism CLI](docs/cli.md).
+- Follow the full [Getting Started Guide](docs/getting-started.md) for complete `.env` walkthroughs (local vs. production), cURL, the [TypeScript SDK](docs/sdk-typescript.md), and the [Prism CLI](docs/cli.md).
 
 ---
 

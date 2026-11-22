@@ -6,6 +6,9 @@
 **Audit Mode:** Audit-first, read-only code & test verification (zero application code modified)  
 **Verdict:** **NOT READY FOR PUBLIC MULTI-TENANT PRODUCTION** (`4 P0`, `17 P1`, `12 P2`, `4 P3` = **37 confirmed findings**)
 
+> [!NOTE]
+> **Post-Remediation Addendum (`2026-11-22`):** The historical section below captures the pre-remediation baseline audit (`e85566b`). Remediation items **`REM-01` through `REM-24`** have now been implemented in code and verified by local Go (`go vet`, `go test -race`) and Next.js (`typecheck`, `lint`, `vitest`, `next build`) unit/component suites. See [`prism-remediation-roadmap.md`](./prism-remediation-roadmap.md) and [`prism-readiness-matrix.md`](./prism-readiness-matrix.md) for current task status and the remaining live Docker/CI release gates (PostgreSQL 15 RLS drill, Redis 7, and live Playwright E2E).
+
 ---
 
 ## 1. Executive Summary
