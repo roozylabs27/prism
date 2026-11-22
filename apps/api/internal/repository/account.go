@@ -6,6 +6,7 @@ import (
 	"errors"
 
 	"github.com/google/uuid"
+	"github.com/roozylabs/prism/internal/database"
 	"github.com/roozylabs/prism/internal/models"
 )
 
@@ -45,10 +46,51 @@ func (r *AccountRepository) Create(ctx context.Context, account *models.Account)
 	return err
 }
 
+func (r *AccountRepository) DeleteCredentialByUserID(ctx context.Context, userID string) error {
+	_, err := r.db.ExecContext(ctx,
+		`DELETE FROM account WHERE user_id = $1 AND provider_id = 'credential'`, userID,
+	)
+	return err
+}
+
+func (r *AccountRepository) UpdateCredentialPassword(ctx context.Context, userID, hashedPassword string) error {
+	res, err := r.db.ExecContext(ctx,
+		`UPDATE account SET password = $1, updated_at = NOW() WHERE user_id = $2 AND provider_id = 'credential'`,
+		hashedPassword, userID,
+	)
+	if err != nil {
+		return err
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		return sql.ErrNoRows
+	}
+	return nil
+}
+
+func (r *AccountRepository) UpsertOAuth(ctx context.Context, account *models.Account) error {
+	if account.ID == "" {
+		account.ID = uuid.New().String()
+	}
+	_, err := r.db.ExecContext(ctx,
+		`INSERT INTO account (id, account_id, provider_id, user_id, password, created_at, updated_at)
+		 VALUES ($1, $2, $3, $4, $5, NOW(), NOW())
+		 ON CONFLICT (user_id, provider_id) DO UPDATE
+		 SET account_id = EXCLUDED.account_id, updated_at = NOW()`,
+		account.ID, account.AccountID, account.ProviderID,
+		account.UserID, account.Password,
+	)
+	return err
+}
+
 func (r *AccountRepository) IsMember(ctx context.Context, userID, orgID string) (bool, error) {
 	if userID == "" || orgID == "" {
 		return false, nil
 	}
+	ctx = database.WithSystemBypassRLS(ctx)
 	var exists bool
 	err := r.db.QueryRowContext(ctx,
 		`SELECT EXISTS(SELECT 1 FROM organization_members WHERE user_id = $1 AND org_id = $2)`,
@@ -62,6 +104,7 @@ func (r *AccountRepository) GetPrimaryOrganization(ctx context.Context, userID s
 	if userID == "" {
 		return "", nil
 	}
+	ctx = database.WithSystemBypassRLS(ctx)
 	var orgID string
 	err := r.db.QueryRowContext(ctx,
 		`SELECT org_id FROM organization_members WHERE user_id = $1 ORDER BY created_at ASC LIMIT 1`,

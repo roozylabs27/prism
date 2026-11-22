@@ -58,11 +58,13 @@ func newGoogleCredentialTest(t *testing.T, refreshToken string) (*gin.Engine, *f
 
 	creds := &fakeCredentials{}
 	h := NewGoogleOAuthHandler(creds, fakeProviders{
-		"mine":     {ID: "mine", UserID: "alice", Type: "google", Enabled: true},
-		"system":   {ID: "system", UserID: "", Type: "google", Enabled: true},
-		"bobs":     {ID: "bobs", UserID: "bob", Type: "google", Enabled: true},
-		"openai":   {ID: "openai", UserID: "alice", Type: "openai", Enabled: true},
-		"disabled": {ID: "disabled", UserID: "alice", Type: "google", Enabled: false},
+		"mine":      {ID: "mine", UserID: "alice", Type: "google", Enabled: true},
+		"org-prov":  {ID: "org-prov", UserID: "creator", OrgID: "org-team", Type: "google", Enabled: true},
+		"alice-org": {ID: "alice-org", UserID: "alice", OrgID: "org-alpha", Type: "google", Enabled: true},
+		"system":    {ID: "system", UserID: "", Type: "google", Enabled: true},
+		"bobs":      {ID: "bobs", UserID: "bob", Type: "google", Enabled: true},
+		"openai":    {ID: "openai", UserID: "alice", Type: "openai", Enabled: true},
+		"disabled":  {ID: "disabled", UserID: "alice", Type: "google", Enabled: false},
 	}, testEncKey)
 	h.client = srv.Client()
 	h.tokenURL = srv.URL + "/token"
@@ -74,7 +76,11 @@ func newGoogleCredentialTest(t *testing.T, refreshToken string) (*gin.Engine, *f
 	r.Use(func(c *gin.Context) {
 		if u := c.GetHeader("X-Test-User"); u != "" {
 			c.Set("userId", u)
-			c.Set("organization_id", "org-"+u)
+			org := c.GetHeader("X-Test-Org")
+			if org == "" {
+				org = "org-" + u
+			}
+			c.Set("organization_id", org)
 		}
 	})
 	r.GET("/api/providers/google/oauth/login", h.Login)
@@ -203,4 +209,26 @@ func TestGoogleCredentialCallbackNeedsRefreshToken(t *testing.T) {
 		&http.Cookie{Name: credentialOAuthStateCookie, Value: "n.mine"})
 	assert.Equal(t, http.StatusBadRequest, w.Code)
 	assert.Empty(t, creds.saved)
+}
+
+func TestGoogleCredentialLoginEnforcesOrganizationScope(t *testing.T) {
+	r, _ := newGoogleCredentialTest(t, testRefreshToken)
+
+	// Teammate in the same org (teammate != creator) is allowed.
+	reqSameOrg := httptest.NewRequest(http.MethodGet, "/api/providers/google/oauth/login?provider_id=org-prov", nil)
+	reqSameOrg.Header.Set("X-Test-User", "teammate")
+	reqSameOrg.Header.Set("X-Test-Org", "org-team")
+	wSame := httptest.NewRecorder()
+	r.ServeHTTP(wSame, reqSameOrg)
+	require.Equal(t, http.StatusTemporaryRedirect, wSame.Code)
+	require.NotNil(t, stateCookie(wSame))
+
+	// Creator switched into a different org cannot attach credentials to org-alpha's provider.
+	reqWrongOrg := httptest.NewRequest(http.MethodGet, "/api/providers/google/oauth/login?provider_id=alice-org", nil)
+	reqWrongOrg.Header.Set("X-Test-User", "alice")
+	reqWrongOrg.Header.Set("X-Test-Org", "org-beta")
+	wWrong := httptest.NewRecorder()
+	r.ServeHTTP(wWrong, reqWrongOrg)
+	assert.Equal(t, http.StatusBadRequest, wWrong.Code)
+	assert.Nil(t, stateCookie(wWrong))
 }

@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/roozylabs/prism/internal/middleware"
 	"github.com/roozylabs/prism/internal/models"
 	"github.com/roozylabs/prism/internal/utils"
 )
@@ -63,9 +64,12 @@ func NewGoogleOAuthHandler(credentials credentialCreator, providers credentialPr
 func (h *GoogleOAuthHandler) getOAuthEnv(c *gin.Context) (clientID, clientSecret, redirectURI string) {
 	clientID = os.Getenv("GOOGLE_CLIENT_ID")
 	clientSecret = os.Getenv("GOOGLE_CLIENT_SECRET")
-	baseURL := os.Getenv("BETTER_AUTH_URL")
+	baseURL := strings.TrimSpace(os.Getenv("APP_PUBLIC_URL"))
 	if baseURL == "" {
-		baseURL = os.Getenv("PUBLIC_URL")
+		baseURL = strings.TrimSpace(os.Getenv("PUBLIC_URL"))
+	}
+	if baseURL == "" {
+		baseURL = strings.TrimSpace(os.Getenv("BETTER_AUTH_URL"))
 	}
 	if baseURL == "" && c != nil {
 		scheme := "https"
@@ -91,14 +95,27 @@ func (h *GoogleOAuthHandler) getOAuthEnv(c *gin.Context) (clientID, clientSecret
 	return clientID, clientSecret, redirectURI
 }
 
+func resolveHandlerOrgID(c *gin.Context) string {
+	if c == nil {
+		return ""
+	}
+	if orgID := middleware.GetTenantContext(c).OrgID; orgID != "" {
+		return orgID
+	}
+	if orgID := c.GetString("organization_id"); orgID != "" {
+		return orgID
+	}
+	return c.GetString("organizationId")
+}
+
 // googleProviderDenial says why the signed-in user may not attach a Gemini
 // credential to providerID, in words the popup can show, or "" if they may.
-func (h *GoogleOAuthHandler) googleProviderDenial(ctx context.Context, providerID, userID string) string {
+func (h *GoogleOAuthHandler) googleProviderDenial(ctx context.Context, providerID, userID, orgID string) string {
 	if userID == "" {
 		return "Sign in to connect a Google account."
 	}
 	prov, err := h.providers.FindByID(ctx, providerID)
-	if err != nil || !providerAcceptsCredentialsFrom(prov, userID) {
+	if err != nil || !providerAcceptsCredentialsFrom(prov, userID, orgID) {
 		return "You cannot add credentials to this provider."
 	}
 	if prov.Type != "google" {
@@ -113,7 +130,8 @@ func (h *GoogleOAuthHandler) Login(c *gin.Context) {
 		renderPopupResult(c, false, "", "provider_id is required")
 		return
 	}
-	if denial := h.googleProviderDenial(c.Request.Context(), providerID, c.GetString("userId")); denial != "" {
+	orgID := resolveHandlerOrgID(c)
+	if denial := h.googleProviderDenial(middleware.ContextWithTenant(c), providerID, c.GetString("userId"), orgID); denial != "" {
 		renderPopupResult(c, false, "", denial)
 		return
 	}
@@ -168,7 +186,9 @@ func (h *GoogleOAuthHandler) Callback(c *gin.Context) {
 
 	// Check again: access may have changed while the user was at Google.
 	userID := c.GetString("userId")
-	if denial := h.googleProviderDenial(c.Request.Context(), providerID, userID); denial != "" {
+	orgID := resolveHandlerOrgID(c)
+	tenantCtx := middleware.ContextWithTenant(c)
+	if denial := h.googleProviderDenial(tenantCtx, providerID, userID, orgID); denial != "" {
 		renderPopupResult(c, false, "", denial)
 		return
 	}
@@ -231,11 +251,11 @@ func (h *GoogleOAuthHandler) Callback(c *gin.Context) {
 		Enabled:           true,
 		Status:            models.CredentialStatusActive,
 	}
-	if orgID := c.GetString("organization_id"); orgID != "" {
+	if orgID != "" {
 		cred.OrgID = &orgID
 	}
 
-	if err := h.credentials.Create(c.Request.Context(), cred); err != nil {
+	if err := h.credentials.Create(tenantCtx, cred); err != nil {
 		log.Printf("[Google credential OAuth] save credential: %v", err)
 		renderPopupResult(c, false, "", "Failed to save the credential")
 		return

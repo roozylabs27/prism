@@ -27,6 +27,8 @@ type authServiceBackend interface {
 	Signup(ctx context.Context, name, email, password, ip, ua string) (*service.LoginResponse, error)
 	Logout(ctx context.Context, token string) error
 	Me(ctx context.Context, token string) (*models.User, error)
+	ChangePassword(ctx context.Context, userID, currentPassword, newPassword, currentToken string) error
+	RevokeAllSessions(ctx context.Context, userID string) error
 }
 
 var _ authServiceBackend = (*service.AuthService)(nil)
@@ -387,4 +389,69 @@ func (h *AuthHandler) Me(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, user)
+}
+
+// ChangePassword godoc
+// @Summary      Change password
+// @Description  Update the current user's password and revoke all other sessions
+// @Tags         auth
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Param        request body service.ChangePasswordRequest true "Current and new password"
+// @Success      200 {object} map[string]string
+// @Failure      400 {object} map[string]string
+// @Failure      401 {object} map[string]string
+// @Router       /api/auth/change-password [post]
+func (h *AuthHandler) ChangePassword(c *gin.Context) {
+	userID := c.GetString("userId")
+	if userID == "" {
+		httputil.RespondUnauthorized(c, "Unauthorized", nil, "AUTH_REQUIRED")
+		return
+	}
+	var req service.ChangePasswordRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		httputil.RespondBadRequest(c, "currentPassword and newPassword are required", err, "INVALID_REQUEST_BODY")
+		return
+	}
+	err := h.auth.ChangePassword(c.Request.Context(), userID, req.CurrentPassword, req.NewPassword, c.GetString("token"))
+	if err != nil {
+		var invalid *service.InvalidSignupError
+		if errors.As(err, &invalid) {
+			httputil.RespondBadRequest(c, invalid.Error(), err, "AUTH_INVALID_PASSWORD")
+			return
+		}
+		if errors.Is(err, service.ErrInvalidCredentials) {
+			httputil.RespondUnauthorized(c, "Current password is incorrect", err, "AUTH_INVALID_CREDENTIALS")
+			return
+		}
+		httputil.RespondInternalError(c, "Failed to update password", err, "AUTH_PASSWORD_CHANGE_FAILED")
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "Password updated and other sessions revoked"})
+}
+
+// RevokeAllSessions godoc
+// @Summary      Revoke all sessions
+// @Description  Invalidate all active sessions for the current user and clear session cookie
+// @Tags         auth
+// @Produce      json
+// @Security     BearerAuth
+// @Success      200 {object} map[string]string
+// @Failure      401 {object} map[string]string
+// @Router       /api/auth/sessions/revoke-all [post]
+func (h *AuthHandler) RevokeAllSessions(c *gin.Context) {
+	userID := c.GetString("userId")
+	if userID == "" {
+		httputil.RespondUnauthorized(c, "Unauthorized", nil, "AUTH_REQUIRED")
+		return
+	}
+	if err := h.auth.RevokeAllSessions(c.Request.Context(), userID); err != nil {
+		httputil.RespondInternalError(c, "Failed to revoke sessions", err, "AUTH_REVOKE_SESSIONS_FAILED")
+		return
+	}
+	c.SetSameSite(http.SameSiteLaxMode)
+	isSecure := c.Request.TLS != nil || strings.EqualFold(c.GetHeader("X-Forwarded-Proto"), "https")
+	c.SetCookie("auth_token", "", -1, "/", "", isSecure, true)
+	c.JSON(http.StatusOK, gin.H{"message": "All sessions revoked"})
 }

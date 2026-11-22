@@ -228,6 +228,21 @@ func TestInitiateOAuthWithoutClientID(t *testing.T) {
 	assert.Equal(t, []string{"github.developer@roozylabs.dev"}, sessions.emails)
 }
 
+func TestInitiateOAuthPrefersAppPublicURLOverForwardedHost(t *testing.T) {
+	h, _ := newTestOAuthHandler(t, &fakeProvider{})
+	t.Setenv("APP_PUBLIC_URL", "https://app.prism.roozylabs.com")
+
+	req := httptest.NewRequest(http.MethodGet, "/api/auth/oauth/google", nil)
+	req.Header.Set("X-Forwarded-Host", "attacker.example")
+	w := httptest.NewRecorder()
+	oauthRouter(h).ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusTemporaryRedirect, w.Code)
+	loc, err := url.Parse(w.Header().Get("Location"))
+	require.NoError(t, err)
+	assert.Equal(t, "https://app.prism.roozylabs.com/api/auth/google/callback", loc.Query().Get("redirect_uri"))
+}
+
 func TestRenderPopupResultEscapesInput(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	w := httptest.NewRecorder()

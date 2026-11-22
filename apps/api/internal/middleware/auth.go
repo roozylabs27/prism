@@ -30,11 +30,6 @@ func AuthMiddleware(sessions *repository.SessionRepository, keys GatewayKeyFinde
 			}
 		}
 
-		// 3. Try Query param fallback (for SSE EventSource)
-		if token == "" {
-			token = c.Query("token")
-		}
-
 		if token == "" {
 			httputil.RespondUnauthorized(c, "Missing authorization token", nil, "AUTH_TOKEN_MISSING")
 			return

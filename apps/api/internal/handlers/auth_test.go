@@ -16,6 +16,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/roozylabs/prism/internal/database"
+	"github.com/roozylabs/prism/internal/models"
 	"github.com/roozylabs/prism/internal/repository"
 	"github.com/roozylabs/prism/internal/service"
 	"github.com/stretchr/testify/assert"
@@ -219,5 +220,62 @@ func TestAuthFailsClosedWhenLimiterErrorsAndConfigured(t *testing.T) {
 		w := postJSON(r, path, `{"name":"Ada","email":"ada@example.com","password":"correct horse"}`)
 		assert.Equal(t, http.StatusServiceUnavailable, w.Code, path)
 		assert.Contains(t, w.Body.String(), "AUTH_THROTTLE_UNAVAILABLE", path)
+	}
+}
+
+type fakeSessionAuthBackend struct {
+	token string
+}
+
+func (f fakeSessionAuthBackend) Login(_ context.Context, email, _, _, _ string) (*service.LoginResponse, error) {
+	return &service.LoginResponse{Token: f.token, User: &models.User{ID: "u1", Email: email}}, nil
+}
+
+func (f fakeSessionAuthBackend) Signup(_ context.Context, name, email, _, _, _ string) (*service.LoginResponse, error) {
+	return &service.LoginResponse{Token: f.token, User: &models.User{ID: "u1", Name: name, Email: email}}, nil
+}
+
+func (fakeSessionAuthBackend) Logout(context.Context, string) error        { return nil }
+func (fakeSessionAuthBackend) Me(context.Context, string) (*models.User, error) { return nil, nil }
+func (fakeSessionAuthBackend) ChangePassword(context.Context, string, string, string, string) error {
+	return nil
+}
+func (fakeSessionAuthBackend) RevokeAllSessions(context.Context, string) error { return nil }
+
+func TestLoginAndSignupOmitTokenFromJSONAndSetHttpOnlyCookie(t *testing.T) {
+	h := &AuthHandler{
+		auth:      fakeSessionAuthBackend{token: "super-secret-session-token"},
+		turnstile: NewTurnstile("", false),
+	}
+	r := authRouter(h)
+
+	for _, tc := range []struct {
+		path   string
+		body   string
+		status int
+	}{
+		{"/api/auth/login", `{"email":"ada@example.com","password":"correct horse"}`, http.StatusOK},
+		{"/api/auth/signup", `{"name":"Ada","email":"ada@example.com","password":"correct horse"}`, http.StatusCreated},
+	} {
+		w := postJSON(r, tc.path, tc.body)
+		require.Equal(t, tc.status, w.Code, w.Body.String())
+		assert.NotContains(t, w.Body.String(), "super-secret-session-token", tc.path)
+
+		var decoded map[string]any
+		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &decoded))
+		_, hasToken := decoded["token"]
+		assert.False(t, hasToken, "%s response body must not expose session token", tc.path)
+		assert.NotNil(t, decoded["user"])
+
+		var authCookie *http.Cookie
+		for _, ck := range w.Result().Cookies() {
+			if ck.Name == "auth_token" {
+				authCookie = ck
+			}
+		}
+		require.NotNil(t, authCookie, "%s must set HttpOnly auth_token cookie", tc.path)
+		assert.Equal(t, "super-secret-session-token", authCookie.Value)
+		assert.True(t, authCookie.HttpOnly)
+		assert.Equal(t, http.SameSiteLaxMode, authCookie.SameSite)
 	}
 }

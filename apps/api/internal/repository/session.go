@@ -86,3 +86,22 @@ func (r *SessionRepository) Delete(ctx context.Context, token string) error {
 	_, err := r.db.ExecContext(ctx, `DELETE FROM session WHERE token = $1`, utils.HashSHA256(token))
 	return err
 }
+
+func (r *SessionRepository) DeleteAllByUserID(ctx context.Context, userID string) error {
+	if userID == "" {
+		return nil
+	}
+	_, err := r.db.ExecContext(ctx, `DELETE FROM session WHERE user_id = $1`, userID)
+	return err
+}
+
+func (r *SessionRepository) DeleteAllByUserIDExcept(ctx context.Context, userID, keepToken string) error {
+	if userID == "" {
+		return nil
+	}
+	if strings.TrimSpace(keepToken) == "" {
+		return r.DeleteAllByUserID(ctx, userID)
+	}
+	_, err := r.db.ExecContext(ctx, `DELETE FROM session WHERE user_id = $1 AND token <> $2`, userID, utils.HashSHA256(keepToken))
+	return err
+}

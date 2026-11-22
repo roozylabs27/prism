@@ -2,8 +2,7 @@
 
 import React, { createContext, useContext } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import Cookies from 'js-cookie';
-import { AppRoutes, CookieKeys } from '@/constants/routes';
+import { AppRoutes } from '@/constants/routes';
 import { useTenantStore } from '@/stores/useTenantStore';
 import { User, LoginRequest, SignupRequest, apiLogin, apiSignup, apiLogout, apiGetMe } from '@/lib/api';
 
@@ -71,8 +70,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } catch {
       // Ignore network errors or already expired tokens on logout
     } finally {
-      Cookies.remove(CookieKeys.AUTH_TOKEN, { path: '/' });
-      Cookies.remove(CookieKeys.AUTH_TOKEN);
       useTenantStore.getState().resetTenant();
       queryClient.clear();
       const target =

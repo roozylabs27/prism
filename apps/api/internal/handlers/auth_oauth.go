@@ -71,9 +71,12 @@ func NewOAuthHandler(authService *service.AuthService) *OAuthHandler {
 }
 
 func (h *OAuthHandler) getBaseURL(c *gin.Context) string {
-	baseURL := os.Getenv("BETTER_AUTH_URL")
+	baseURL := strings.TrimSpace(os.Getenv("APP_PUBLIC_URL"))
 	if baseURL == "" {
-		baseURL = os.Getenv("PUBLIC_URL")
+		baseURL = strings.TrimSpace(os.Getenv("PUBLIC_URL"))
+	}
+	if baseURL == "" {
+		baseURL = strings.TrimSpace(os.Getenv("BETTER_AUTH_URL"))
 	}
 	if baseURL == "" && c != nil {
 		scheme := "https"

@@ -88,10 +88,8 @@ export async function middleware(request: NextRequest) {
         }
       }
     } catch (_err) {
-      if (token && isAuthPage) {
-        const dashboardUrl = new URL('/', request.url);
-        return NextResponse.redirect(dashboardUrl);
-      }
+      // Do not redirect away from auth pages on network/fetch errors; otherwise
+      // an unreachable or erroring backend causes an infinite /signin <-> / loop.
     }
   }
 

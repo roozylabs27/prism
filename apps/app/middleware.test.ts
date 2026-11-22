@@ -67,15 +67,16 @@ describe('middleware', () => {
     expect(redirectTarget(await middleware(request('/logs', 'tok')))).toBeNull();
   });
 
-  it('falls through when the backend cannot be reached, except on auth pages', async () => {
+  it('falls through without redirect loop when the backend cannot be reached, including on auth pages', async () => {
     globalThis.fetch = vi.fn(async () => {
       throw new Error('ECONNREFUSED');
     });
     expect(redirectTarget(await middleware(request('/logs', 'tok')))).toBeNull();
-    expect(redirectTarget(await middleware(request('/signin', 'tok')))).toBe('/');
+    expect(redirectTarget(await middleware(request('/signin', 'tok')))).toBeNull();
 
     globalThis.fetch = permissions(false, false);
     expect(redirectTarget(await middleware(request('/logs', 'tok')))).toBeNull();
+    expect(redirectTarget(await middleware(request('/signin', 'tok')))).toBeNull();
   });
 
   it('does not let spoofed Next.js headers bypass auth checks', async () => {

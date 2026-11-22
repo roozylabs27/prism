@@ -13,13 +13,21 @@ export async function getServerUserPermissions(): Promise<ApiUserPermissionsResp
     const cookieStore = await cookies();
     const token = cookieStore.get('auth_token')?.value;
     if (!token) return null;
+    const activeOrgHint = cookieStore.get('prism_active_org')?.value?.trim();
 
     const backendUrl = getBackendApiUrl();
+    const headers: Record<string, string> = {
+      Cookie: activeOrgHint
+        ? `auth_token=${token}; prism_active_org=${encodeURIComponent(activeOrgHint)}`
+        : `auth_token=${token}`,
+      Authorization: `Bearer ${token}`,
+    };
+    if (activeOrgHint) {
+      headers['X-Prism-Org-ID'] = activeOrgHint;
+    }
+
     const res = await fetch(`${backendUrl}/api/user/permissions`, {
-      headers: {
-        Cookie: `auth_token=${token}`,
-        Authorization: `Bearer ${token}`,
-      },
+      headers,
       cache: 'no-store',
     });
 

@@ -37,6 +37,14 @@ func (f *fakeLogoutAuthService) Me(_ context.Context, _ string) (*models.User, e
 	return nil, nil
 }
 
+func (f *fakeLogoutAuthService) ChangePassword(_ context.Context, _, _, _, _ string) error {
+	return nil
+}
+
+func (f *fakeLogoutAuthService) RevokeAllSessions(_ context.Context, _ string) error {
+	return nil
+}
+
 func assertClearsAuthCookie(t *testing.T, w *httptest.ResponseRecorder) {
 	t.Helper()
 	cookies := w.Result().Cookies()
