@@ -21,6 +21,44 @@ func NewGoogleAdapter() *GoogleAdapter {
 	}
 }
 
+// MapGoogleUpstreamModel maps internal, virtual, or alias model names to valid Google AI Studio model IDs.
+func MapGoogleUpstreamModel(model string) string {
+	m := strings.TrimSpace(strings.ToLower(model))
+	m = strings.TrimPrefix(m, "models/")
+
+	switch m {
+	case "", "prism-auto", "roozy-auto", "auto":
+		return "gemini-3.5-flash"
+	case "gemini-3.5-flash":
+		return "gemini-3.5-flash"
+	case "gemini-3.5-flash-lite":
+		return "gemini-3.5-flash-lite"
+	case "gemini-3.6-flash":
+		return "gemini-3.6-flash"
+	case "gemini-3.7-flash":
+		return "gemini-3.7-flash"
+	case "gemini-3.8-flash":
+		return "gemini-3.8-flash"
+	case "gemma-4-26b-a4b-it":
+		return "gemma-4-26b-a4b-it"
+	case "gemma-4-31b-it":
+		return "gemma-4-31b-it"
+	case "gemini-2.0-flash", "gemini-2.0-flash-001", "gemini-1.5-flash", "gemini-1.5-flash-001", "gemini-flash":
+		return "gemini-3.5-flash"
+	case "gemini-2.0-flash-lite", "gemini-2.0-flash-lite-preview", "gemini-1.5-flash-8b":
+		return "gemini-3.5-flash-lite"
+	case "gemini-1.5-pro", "gemini-2.0-pro", "gemini-2.5-pro", "gemini-pro":
+		return "gemini-3.5-flash"
+	default:
+		// Virtual orchestrators and heavy next-gen aliases map gracefully to gemini-3.5-flash
+		if strings.HasPrefix(m, "orchestrator-") ||
+			strings.HasPrefix(m, "gemini-4-") {
+			return "gemini-3.5-flash"
+		}
+		return model
+	}
+}
+
 func (a *GoogleAdapter) BuildRequest(baseURL, apiKey string, req *ProviderRequest) (*http.Request, error) {
 	u, err := url.Parse(baseURL)
 	if err != nil {
@@ -34,10 +72,7 @@ func (a *GoogleAdapter) BuildRequest(baseURL, apiKey string, req *ProviderReques
 		u.Path = path.Join(u.Path, "chat", "completions")
 	}
 
-	targetModel := req.Model
-	if targetModel == "" || targetModel == "prism-auto" || targetModel == "roozy-auto" {
-		targetModel = "gemini-3.6-flash"
-	}
+	targetModel := MapGoogleUpstreamModel(req.Model)
 
 	body := map[string]interface{}{
 		"model":    targetModel,

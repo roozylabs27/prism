@@ -685,7 +685,7 @@ func (e *Engine) Proxy(c *gin.Context, req *ProxyRequest, gatewayKey *models.Gat
 				}
 			}
 			e.syncCredentialHealthLater(route.Credential, true, false)
-			lastErr = fmt.Errorf("upstream returned %d", httpResp.StatusCode)
+			lastErr = fmt.Errorf("upstream returned %d: %s", httpResp.StatusCode, strings.TrimSpace(string(body)))
 			e.recordModelFailure(route.Model.Slug, attemptStart)
 			lastAttemptStatus = httpResp.StatusCode
 			attempts = append(attempts, newAttemptRecord(route, httpResp.StatusCode, lastErr.Error(), attemptStart))

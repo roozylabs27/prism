@@ -258,6 +258,21 @@ func translateToolChoiceToAnthropic(tc interface{}) interface{} {
 	return nil
 }
 
+// MapAnthropicUpstreamModel maps aliases to valid Anthropic model IDs.
+func MapAnthropicUpstreamModel(model string) string {
+	m := strings.TrimSpace(strings.ToLower(model))
+	switch m {
+	case "", "prism-auto", "roozy-auto", "auto":
+		return "claude-3-5-sonnet-20241022"
+	case "claude-opus-5.5":
+		return "claude-3-opus-20240229"
+	case "claude-sonnet-5.5":
+		return "claude-3-5-sonnet-20241022"
+	default:
+		return model
+	}
+}
+
 func (a *AnthropicAdapter) BuildRequest(baseURL, apiKey string, req *ProviderRequest) (*http.Request, error) {
 	systemPrompt, messages := convertMessagesToAnthropic(req.Messages)
 
@@ -267,7 +282,7 @@ func (a *AnthropicAdapter) BuildRequest(baseURL, apiKey string, req *ProviderReq
 	}
 
 	body := map[string]interface{}{
-		"model":      req.Model,
+		"model":      MapAnthropicUpstreamModel(req.Model),
 		"messages":   messages,
 		"max_tokens": maxTokens,
 		"stream":     req.Stream,

@@ -487,3 +487,43 @@ func TestGoogleAndNonGoogleSanitizationAndTemperature(t *testing.T) {
 	})
 }
 
+func TestMapUpstreamModels(t *testing.T) {
+	tests := []struct {
+		input    string
+		expected string
+	}{
+		{"orchestrator-neon", "gemini-3.5-flash"},
+		{"orchestrator-argon", "gemini-3.5-flash"},
+		{"gemini-4-neon", "gemini-3.5-flash"},
+		{"gemini-4-argon", "gemini-3.5-flash"},
+		{"gemini-4-hydrogen", "gemini-3.5-flash"},
+		{"gemini-3.5-flash", "gemini-3.5-flash"},
+		{"gemini-3.6-flash", "gemini-3.6-flash"},
+		{"gemini-3.7-flash", "gemini-3.7-flash"},
+		{"gemini-3.8-flash", "gemini-3.8-flash"},
+		{"gemini-2.0-flash", "gemini-3.5-flash"},
+		{"prism-auto", "gemini-3.5-flash"},
+		{"", "gemini-3.5-flash"},
+		{"models/gemini-3.5-flash", "gemini-3.5-flash"},
+		{"gemini-1.5-flash", "gemini-3.5-flash"},
+		{"gemini-1.5-pro", "gemini-3.5-flash"},
+		{"gemini-3.5-flash-lite", "gemini-3.5-flash-lite"},
+		{"gemma-4-26b-a4b-it", "gemma-4-26b-a4b-it"},
+	}
+
+	for _, tc := range tests {
+		actual := MapGoogleUpstreamModel(tc.input)
+		if actual != tc.expected {
+			t.Errorf("MapGoogleUpstreamModel(%q) = %q; expected %q", tc.input, actual, tc.expected)
+		}
+	}
+
+	// Anthropic & OpenAI mapper checks
+	if MapAnthropicUpstreamModel("claude-opus-5.5") != "claude-3-opus-20240229" {
+		t.Errorf("expected claude-opus-5.5 to map to claude-3-opus-20240229")
+	}
+	if MapOpenAIUpstreamModel("gpt-oss-120b") != "gpt-4o" {
+		t.Errorf("expected gpt-oss-120b to map to gpt-4o")
+	}
+}
+

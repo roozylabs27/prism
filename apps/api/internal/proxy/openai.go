@@ -14,9 +14,22 @@ func NewOpenAIAdapter() *OpenAIAdapter {
 	return &OpenAIAdapter{}
 }
 
+// MapOpenAIUpstreamModel maps aliases to valid OpenAI model IDs.
+func MapOpenAIUpstreamModel(model string) string {
+	m := strings.TrimSpace(strings.ToLower(model))
+	switch m {
+	case "", "prism-auto", "roozy-auto", "auto":
+		return "gpt-4o"
+	case "gpt-oss-120b":
+		return "gpt-4o"
+	default:
+		return model
+	}
+}
+
 func (a *OpenAIAdapter) BuildRequest(baseURL, apiKey string, req *ProviderRequest) (*http.Request, error) {
 	body := map[string]interface{}{
-		"model":    req.Model,
+		"model":    MapOpenAIUpstreamModel(req.Model),
 		"messages": req.Messages,
 		"stream":   req.Stream,
 	}
