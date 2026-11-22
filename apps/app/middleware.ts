@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
+const SSR_PERMISSIONS_HEADER = 'x-prism-ssr-permissions';
+
 function getBackendApiUrl(): string {
   if (process.env.API_URL) return process.env.API_URL;
   if (process.env.INTERNAL_API_URL) return process.env.INTERNAL_API_URL;
@@ -11,6 +13,9 @@ function getBackendApiUrl(): string {
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const token = request.cookies.get('auth_token')?.value;
+  // Strip any client-supplied internal header before forwarding downstream.
+  const requestHeaders = new Headers(request.headers);
+  requestHeaders.delete(SSR_PERMISSIONS_HEADER);
 
   const isAuthPage = pathname === '/signin' || pathname === '/signup';
   const isOnboardingPage = pathname === '/onboarding';
@@ -38,18 +43,27 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(signinUrl);
   }
   if (isInvitePage) {
-    return NextResponse.next();
+    return NextResponse.next({ request: { headers: requestHeaders } });
   }
 
-  // Server-side onboarding check: prevents any visual delay / dashboard flash
+  // Server-side onboarding & permissions check: forwards verified permissions to
+  // DashboardLayout so RSC renders do not trigger a second /api/user/permissions call.
   if (token) {
     try {
       const backendUrl = getBackendApiUrl();
+      const activeOrgHint = request.cookies.get('prism_active_org')?.value?.trim();
+      const fetchHeaders: Record<string, string> = {
+        Cookie: activeOrgHint
+          ? `auth_token=${token}; prism_active_org=${encodeURIComponent(activeOrgHint)}`
+          : `auth_token=${token}`,
+        Authorization: `Bearer ${token}`,
+      };
+      if (activeOrgHint) {
+        fetchHeaders['X-Prism-Org-ID'] = activeOrgHint;
+      }
+
       const res = await fetch(`${backendUrl}/api/user/permissions`, {
-        headers: {
-          Cookie: `auth_token=${token}`,
-          Authorization: `Bearer ${token}`,
-        },
+        headers: fetchHeaders,
         cache: 'no-store',
       });
 
@@ -58,7 +72,7 @@ export async function middleware(request: NextRequest) {
         // pages never get stuck in a loop and auth pages can sign in cleanly.
         const out = !isAuthPage
           ? NextResponse.redirect(new URL('/signin', request.url))
-          : NextResponse.next();
+          : NextResponse.next({ request: { headers: requestHeaders } });
         out.cookies.delete('auth_token');
         return out;
       }
@@ -86,6 +100,9 @@ export async function middleware(request: NextRequest) {
           const dashboardUrl = new URL('/', request.url);
           return NextResponse.redirect(dashboardUrl);
         }
+
+        requestHeaders.set(SSR_PERMISSIONS_HEADER, encodeURIComponent(JSON.stringify(data)));
+        return NextResponse.next({ request: { headers: requestHeaders } });
       }
     } catch (_err) {
       // Do not redirect away from auth pages on network/fetch errors; otherwise
@@ -93,7 +110,7 @@ export async function middleware(request: NextRequest) {
     }
   }
 
-  return NextResponse.next();
+  return NextResponse.next({ request: { headers: requestHeaders } });
 }
 
 export const config = {

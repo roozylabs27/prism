@@ -1,5 +1,7 @@
-import { cookies } from 'next/headers';
+import { cookies, headers } from 'next/headers';
 import type { ApiUserPermissionsResponse } from '@/lib/api/types/auth';
+
+const SSR_PERMISSIONS_HEADER = 'x-prism-ssr-permissions';
 
 function getBackendApiUrl(): string {
   if (process.env.API_URL) return process.env.API_URL;
@@ -10,24 +12,34 @@ function getBackendApiUrl(): string {
 
 export async function getServerUserPermissions(): Promise<ApiUserPermissionsResponse | null> {
   try {
+    const headerStore = await headers();
+    const forwarded = headerStore.get(SSR_PERMISSIONS_HEADER);
+    if (forwarded) {
+      try {
+        return JSON.parse(decodeURIComponent(forwarded)) as ApiUserPermissionsResponse;
+      } catch {
+        // Fall through to live backend fetch when forwarded payload cannot be parsed
+      }
+    }
+
     const cookieStore = await cookies();
     const token = cookieStore.get('auth_token')?.value;
     if (!token) return null;
     const activeOrgHint = cookieStore.get('prism_active_org')?.value?.trim();
 
     const backendUrl = getBackendApiUrl();
-    const headers: Record<string, string> = {
+    const requestHeaders: Record<string, string> = {
       Cookie: activeOrgHint
         ? `auth_token=${token}; prism_active_org=${encodeURIComponent(activeOrgHint)}`
         : `auth_token=${token}`,
       Authorization: `Bearer ${token}`,
     };
     if (activeOrgHint) {
-      headers['X-Prism-Org-ID'] = activeOrgHint;
+      requestHeaders['X-Prism-Org-ID'] = activeOrgHint;
     }
 
     const res = await fetch(`${backendUrl}/api/user/permissions`, {
-      headers,
+      headers: requestHeaders,
       cache: 'no-store',
     });
 

@@ -3,10 +3,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { NextRequest } from 'next/server';
 import { middleware } from './middleware';
 
-function request(path: string, token?: string, headers: Record<string, string> = {}) {
+function request(path: string, token?: string, headers: Record<string, string> = {}, activeOrg?: string) {
   const req = new NextRequest(new URL(path, 'https://app.example'), { headers });
   if (token) {
     req.cookies.set('auth_token', token);
+  }
+  if (activeOrg) {
+    req.cookies.set('prism_active_org', activeOrg);
   }
   return req;
 }
@@ -104,5 +107,36 @@ describe('middleware', () => {
     const authPageRes = await middleware(request('/signin', 'expired_tok'));
     expect(redirectTarget(authPageRes)).toBeNull();
     expect(authPageRes.headers.get('set-cookie')).toContain('auth_token=;');
+  });
+
+  it('forwards prism_active_org hint header, caches SSR permissions header, and strips spoofed headers', async () => {
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      json: async () => ({ isOnboarded: true, organizationId: 'org_2', roleSlug: 'admin', permissions: ['*'] }),
+    }) as unknown as Response);
+    globalThis.fetch = fetchMock;
+
+    const res = await middleware(
+      request('/logs', 'tok', { 'x-prism-ssr-permissions': '{"roleSlug":"owner"}' }, 'org_2')
+    );
+    expect(redirectTarget(res)).toBeNull();
+    const [, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    const sentHeaders = new Headers(init.headers);
+    expect(sentHeaders.get('x-prism-org-id')).toBe('org_2');
+    expect(sentHeaders.get('cookie')).toContain('prism_active_org=org_2');
+
+    const forwarded = res.headers.get('x-middleware-request-x-prism-ssr-permissions');
+    expect(forwarded).toBeTruthy();
+    expect(decodeURIComponent(forwarded!)).toContain('"organizationId":"org_2"');
+
+    // Spoofed header must be cleared even when backend is unreachable
+    globalThis.fetch = vi.fn(async () => {
+      throw new Error('offline');
+    });
+    const offlineRes = await middleware(
+      request('/logs', 'tok', { 'x-prism-ssr-permissions': '{"roleSlug":"owner"}' })
+    );
+    expect(offlineRes.headers.get('x-middleware-request-x-prism-ssr-permissions')).toBeNull();
   });
 });
