@@ -281,3 +281,59 @@ func TestRLSLivePostgresPoolIsolation(t *testing.T) {
 		t.Fatalf("expected reset GUCs ('', '', ''), got (%q, %q, %q)", u, o, b)
 	}
 }
+
+func TestRLSConnector_ResetSessionClearsStaleTenantOnPoolCheckout(t *testing.T) {
+	drv := &fakeRLSDriver{}
+	connector := NewRLSConnector(&fakeConnector{drv: drv})
+	db := sql.OpenDB(connector)
+	defer db.Close()
+	db.SetMaxOpenConns(1)
+
+	aliceCtx := WithTenantContext(context.Background(), TenantDBContext{UserID: "u_alice", OrgID: "org_a"})
+	if _, err := db.ExecContext(aliceCtx, "SELECT 1"); err != nil {
+		t.Fatalf("alice exec: %v", err)
+	}
+	if _, err := db.ExecContext(WithSystemBypassRLS(context.Background()), "SELECT 2"); err != nil {
+		t.Fatalf("bypass exec: %v", err)
+	}
+
+	// Simply checking out a pooled connection under an unscoped context must immediately reset session GUCs.
+	conn, err := db.Conn(context.Background())
+	if err != nil {
+		t.Fatalf("db.Conn: %v", err)
+	}
+	_ = conn.Close()
+
+	got := drv.snapshot()
+	last := got[len(got)-1]
+	if last.kind != "exec" || last.query != setRLSConfigSQL || !reflect.DeepEqual(last.args, []any{"", "", ""}) {
+		t.Fatalf("expected ResetSession at checkout to clear GUCs to ('','',''), got %+v", last)
+	}
+
+	// If set_config fails inside ResetSession, return driver.ErrBadConn so database/sql drops the connection.
+	badDrv := &fakeRLSDriver{}
+	rawConn, err := NewRLSConnector(&fakeConnector{drv: badDrv, useErrSkip: false}).Connect(context.Background())
+	if err != nil {
+		t.Fatalf("connect: %v", err)
+	}
+	defer func() { _ = rawConn.Close() }()
+	errConn := &failingExecRLSInnerConn{inner: rawConn.(*rlsConn).inner}
+	wrapped := &rlsConn{inner: errConn, appliedValid: true, appliedUserID: "u_alice", appliedOrgID: "org_a"}
+	if err := wrapped.ResetSession(context.Background()); err != driver.ErrBadConn {
+		t.Fatalf("expected driver.ErrBadConn when GUC reset fails, got %v", err)
+	}
+}
+
+type failingExecRLSInnerConn struct {
+	inner driver.Conn
+}
+
+func (c *failingExecRLSInnerConn) Prepare(query string) (driver.Stmt, error) {
+	return c.inner.Prepare(query)
+}
+func (c *failingExecRLSInnerConn) Close() error              { return c.inner.Close() }
+func (c *failingExecRLSInnerConn) Begin() (driver.Tx, error) { return c.inner.Begin() }
+func (c *failingExecRLSInnerConn) ExecContext(context.Context, string, []driver.NamedValue) (driver.Result, error) {
+	return nil, context.DeadlineExceeded
+}
+

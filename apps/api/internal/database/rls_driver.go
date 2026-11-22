@@ -232,6 +232,16 @@ func (c *rlsConn) ResetSession(ctx context.Context) error {
 			return err
 		}
 	}
+
+	c.mu.Lock()
+	inTx := c.inTx
+	c.mu.Unlock()
+	if !inTx {
+		if err := c.ensureRLS(ctx); err != nil {
+			// Discard the pooled connection rather than risking stale tenant GUCs.
+			return driver.ErrBadConn
+		}
+	}
 	return nil
 }
 
