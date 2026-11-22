@@ -84,7 +84,7 @@ For the detailed internal architecture, see [docs/ARCHITECTURE.md](docs/ARCHITEC
 ## Monorepo & Technology Stack
 
 - **`apps/api`**: Go 1.25 API proxy engine and control plane.
-- **`apps/app`**: Next.js 16 admin console and dashboard.
+- **`apps/console`**: Next.js 16 admin console and dashboard.
 - **`apps/web`**: Astro 5.0 marketing landing page.
 - **`packages/sdk`**: Official TypeScript SDK (`@roozylabs/prism`) for chat, routing, workspaces, governed tools/MCP (`/v1/mcp`), and analytics.
 - **`packages/cli`**: Official CLI (`@roozylabs/prism-cli`).

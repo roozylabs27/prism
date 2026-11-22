@@ -1,6 +1,6 @@
 # Prism Marketing Site: Design Direction
 
-Scope: `apps/web` only. The dashboard (`apps/app`) follows `.agents/skills/antislop/DESIGN.md` (with sharp `2px` radius unified across both apps).
+Scope: `apps/web` only. The console (`apps/console`) follows `.agents/skills/antislop/DESIGN.md` (with sharp `2px` radius unified across both apps).
 Updated 2026-11-22.
 
 ## Identity: "Technical control ledger"
