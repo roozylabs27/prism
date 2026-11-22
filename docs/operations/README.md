@@ -56,4 +56,4 @@ If Prism is experiencing an incident, **start with the Emergency Incident Decisi
 - **On-Call Operator**: `admin@roozylabs.com`
 - **Security Incident Response Team**: `security@roozylabs.com`
 - **Production API Base URL**: `https://api.prism.roozylabs.com`
-- **Dashboard Admin Console**: `https://app.prism.roozylabs.com`
+- **Dashboard Admin Console**: `https://console.prism.roozylabs.com`

@@ -5,7 +5,7 @@
 [![Astro](https://img.shields.io/badge/Astro-5.0-BC52EE?style=flat&logo=astro)](https://astro.build)
 [![Docker](https://img.shields.io/badge/Docker-Enabled-2496ED?style=flat&logo=docker)](https://www.docker.com/)
 [![Version](https://img.shields.io/badge/Version-0.4.0-blue.svg)](CHANGELOG.md)
-[![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![License](https://img.shields.io/badge/License-MIT-blue.svg)](#license)
 
 **RoozyLabs Prism** is an infrastructure-grade **Universal AI Control Plane** and intelligent model gateway. It unifies multiple AI providers (OpenAI, Anthropic, Google Gemini, OpenRouter, OpenCode Free) and credential pools behind a single, resilient execution layer.
 
@@ -16,7 +16,7 @@ Your client applications and AI coding tools (OpenCode CLI, Claude Code, Antigra
 ## Public Live Domains & Endpoints
 
 - **Public Landing Page**: [https://prism.roozylabs.com](https://prism.roozylabs.com)
-- **Admin Console Dashboard**: [https://app.prism.roozylabs.com](https://app.prism.roozylabs.com)
+- **Admin Console Dashboard**: [https://console.prism.roozylabs.com](https://console.prism.roozylabs.com)
 - **Model Gateway API Proxy**: [https://api.prism.roozylabs.com](https://api.prism.roozylabs.com)
 
 ---
@@ -182,4 +182,4 @@ See the full [API Reference](docs/api-reference.md) for complete endpoint detail
 
 ## License
 
-Distributed under the [MIT License](LICENSE).
+Packages in this monorepo (`packages/sdk`, `packages/cli`) declare the MIT License; a root `LICENSE` file has not yet been added to the repository.

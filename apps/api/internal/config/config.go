@@ -112,7 +112,7 @@ type RetentionDays struct {
 const defaultTrustedProxies = "127.0.0.0/8,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,::1/128,fc00::/7"
 
 const (
-	defaultAllowedOrigins    = "https://app.prism.roozylabs.com,https://prism.roozylabs.com,https://api.prism.roozylabs.com"
+	defaultAllowedOrigins    = "https://console.prism.roozylabs.com,https://app.prism.roozylabs.com,https://prism.roozylabs.com,https://api.prism.roozylabs.com"
 	defaultDevAllowedOrigins = defaultAllowedOrigins + ",http://localhost:3000,http://127.0.0.1:3000"
 )
 

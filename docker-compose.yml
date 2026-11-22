@@ -59,10 +59,10 @@ services:
       RETENTION_BUDGET_ALERTS_DAYS: ${RETENTION_BUDGET_ALERTS_DAYS:-}
       NEXT_PUBLIC_CLOUDFLARE_SITE_KEY: ${NEXT_PUBLIC_CLOUDFLARE_SITE_KEY:-}
       CLOUDFLARE_SITE_KEY: ${NEXT_PUBLIC_CLOUDFLARE_SITE_KEY:-}
-      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-https://app.prism.roozylabs.com,https://prism.roozylabs.com,https://api.prism.roozylabs.com}
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-https://console.prism.roozylabs.com,https://app.prism.roozylabs.com,https://prism.roozylabs.com,https://api.prism.roozylabs.com}
       # Member invitations & OAuth redirect URI: links point at the dashboard; emailed when SMTP is set.
-      APP_PUBLIC_URL: ${APP_PUBLIC_URL:-https://app.prism.roozylabs.com}
-      PUBLIC_URL: ${PUBLIC_URL:-${APP_PUBLIC_URL:-https://app.prism.roozylabs.com}}
+      APP_PUBLIC_URL: ${APP_PUBLIC_URL:-https://console.prism.roozylabs.com}
+      PUBLIC_URL: ${PUBLIC_URL:-${APP_PUBLIC_URL:-https://console.prism.roozylabs.com}}
       SMTP_HOST: ${SMTP_HOST:-}
       SMTP_PORT: ${SMTP_PORT:-587}
       SMTP_USERNAME: ${SMTP_USERNAME:-}
@@ -153,10 +153,10 @@ services:
       RETENTION_BUDGET_ALERTS_DAYS: ${RETENTION_BUDGET_ALERTS_DAYS:-}
       NEXT_PUBLIC_CLOUDFLARE_SITE_KEY: ${NEXT_PUBLIC_CLOUDFLARE_SITE_KEY:-}
       CLOUDFLARE_SITE_KEY: ${NEXT_PUBLIC_CLOUDFLARE_SITE_KEY:-}
-      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-https://app.prism.roozylabs.com,https://prism.roozylabs.com,https://api.prism.roozylabs.com}
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-https://console.prism.roozylabs.com,https://app.prism.roozylabs.com,https://prism.roozylabs.com,https://api.prism.roozylabs.com}
       # Member invitations & OAuth redirect URI: links point at the dashboard; emailed when SMTP is set.
-      APP_PUBLIC_URL: ${APP_PUBLIC_URL:-https://app.prism.roozylabs.com}
-      PUBLIC_URL: ${PUBLIC_URL:-${APP_PUBLIC_URL:-https://app.prism.roozylabs.com}}
+      APP_PUBLIC_URL: ${APP_PUBLIC_URL:-https://console.prism.roozylabs.com}
+      PUBLIC_URL: ${PUBLIC_URL:-${APP_PUBLIC_URL:-https://console.prism.roozylabs.com}}
       SMTP_HOST: ${SMTP_HOST:-}
       SMTP_PORT: ${SMTP_PORT:-587}
       SMTP_USERNAME: ${SMTP_USERNAME:-}
@@ -210,7 +210,7 @@ services:
   app:
     image: ghcr.io/roozylabs/prism-app:${APP_IMAGE_TAG:-latest}
     build:
-      context: ./apps/app
+      context: ./apps/console
       dockerfile: Dockerfile
       args:
         NEXT_PUBLIC_CLOUDFLARE_SITE_KEY: ${NEXT_PUBLIC_CLOUDFLARE_SITE_KEY:-}
@@ -252,7 +252,7 @@ services:
     profiles: ["green"]
     image: ghcr.io/roozylabs/prism-app:${APP_IMAGE_TAG:-latest}
     build:
-      context: ./apps/app
+      context: ./apps/console
       dockerfile: Dockerfile
       args:
         NEXT_PUBLIC_CLOUDFLARE_SITE_KEY: ${NEXT_PUBLIC_CLOUDFLARE_SITE_KEY:-}

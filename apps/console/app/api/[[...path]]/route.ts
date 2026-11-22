@@ -33,7 +33,7 @@ async function proxyHandler(request: NextRequest, { params }: { params: Promise<
     : `${backendApiUrl}/api/${subPath}${searchParams}`;
 
   const headers = new Headers(request.headers);
-  const host = request.headers.get('host') || 'app.prism.roozylabs.com';
+  const host = request.headers.get('host') || 'console.prism.roozylabs.com';
   const proto = request.headers.get('x-forwarded-proto') || (request.url.startsWith('https') ? 'https' : 'http');
   headers.set('x-forwarded-host', host);
   headers.set('x-forwarded-proto', proto);

@@ -31,9 +31,9 @@ The root `.env.example` file defines configuration parameters classified into 6 
 | `REDIS_PORT` | Redis | Optional | No | `6379` | Connects on port 6379. |
 | `ENCRYPTION_KEY` | Security | **Required** | **YES** | `<SECRET>` | **CRITICAL: Credential decryption fails.** |
 | `BETTER_AUTH_SECRET` | Auth | **Required** | **YES** | `<SECRET>` | Next.js dashboard login fails. |
-| `BETTER_AUTH_URL` | Auth | **Required** | No | `https://app.prism.roozylabs.com` | OAuth callbacks break. |
+| `BETTER_AUTH_URL` | Auth | **Required** | No | `https://console.prism.roozylabs.com` | OAuth callbacks break. |
 | `API_URL` | Internal Net | **Required** | No | `http://api:8080` | App dashboard cannot reach API. |
-| `ALLOWED_ORIGINS` | Security | **Required** | No | `https://app.prism.roozylabs.com` | Comma-separated browser origins answered with credentials. Outside development the API refuses `*` and local origins (`localhost`, `127.0.0.1`). |
+| `ALLOWED_ORIGINS` | Security | **Required** | No | `https://console.prism.roozylabs.com` | Comma-separated browser origins answered with credentials. Outside development the API refuses `*` and local origins (`localhost`, `127.0.0.1`). |
 | `CLOUDFLARE_SECRET_KEY` | Security | **Required** | **YES** | `<SECRET>` | Turnstile server key for sign-up and sign-in. Outside development the API refuses to start without it unless `TURNSTILE_DISABLED=true`. |
 | `NEXT_PUBLIC_CLOUDFLARE_SITE_KEY` | Security | **Required** | No | `0x4AAA...` | Turnstile site key, passed to the dashboard build. With a secret set and no site key, every sign-in fails. |
 | `TURNSTILE_DISABLED` | Security | Optional | No | `false` | Runs sign-up without a captcha on purpose; only the per-address attempt limit protects it. |

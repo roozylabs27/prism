@@ -12,7 +12,7 @@ import (
 func csrfTestRouter() *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
-	r.Use(CSRFOriginMiddleware([]string{"https://app.prism.roozylabs.com", "http://localhost:3000"}))
+	r.Use(CSRFOriginMiddleware([]string{"https://console.prism.roozylabs.com", "https://app.prism.roozylabs.com", "http://localhost:3000"}))
 	ok := func(c *gin.Context) { c.Status(http.StatusOK) }
 	r.GET("/api/providers", ok)
 	r.POST("/api/gateway-keys", ok)

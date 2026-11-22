@@ -180,7 +180,7 @@ prism routing simulate --model prism-auto --prompt "Refactor this SQL query"
 
 ## Next Steps
 
-- Explore the [TypeScript SDK Guide](file:///c:/me/projects/ai-gateway/docs/sdk-typescript.md)
-- Learn about [Prism CLI Commands](file:///c:/me/projects/ai-gateway/docs/cli.md)
-- Inspect the full [OpenAPI API Reference](file:///c:/me/projects/ai-gateway/docs/api-reference.md)
+- Explore the [TypeScript SDK Guide](./sdk-typescript.md)
+- Learn about [Prism CLI Commands](./cli.md)
+- Inspect the full [OpenAPI API Reference](./api-reference.md)
 

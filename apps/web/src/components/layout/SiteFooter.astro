@@ -1,4 +1,5 @@
 ---
+import Icon from '../ui/Icon.astro';
 import { links, site } from '../../data/site';
 
 const groups = [
@@ -46,9 +47,15 @@ const groups = [
 								href={item.href}
 								target={item.external ? '_blank' : undefined}
 								rel={item.external ? 'noopener noreferrer' : undefined}
-								class="inline-flex items-center min-h-[44px] text-ink hover:text-accent transition-colors duration-150"
+								class="inline-flex items-center gap-1.5 min-h-[44px] text-ink hover:text-accent transition-colors duration-150"
 							>
-								{item.label}
+								<span>{item.label}</span>
+								{item.external && (
+									<>
+										<Icon name="external" class="h-3.5 w-3.5 text-muted shrink-0" />
+										<span class="sr-only">(opens in a new tab)</span>
+									</>
+								)}
 							</a>
 						</li>
 					))}
@@ -58,7 +65,12 @@ const groups = [
 	</div>
 	<div class="border-t border-rule">
 		<p class="mx-auto max-w-page px-5 sm:px-8 py-6 text-sm text-muted">
-			© 2026 {site.org}. Source and release history on <a href={links.changelog} target="_blank" rel="noopener noreferrer" class="link">GitHub</a>.
+			© 2026 {site.org}. Source and release history on{' '}
+			<a href={links.changelog} target="_blank" rel="noopener noreferrer" class="link inline-flex items-center gap-1">
+				<span>GitHub</span>
+				<Icon name="external" class="h-3.5 w-3.5 shrink-0" />
+				<span class="sr-only">(opens in a new tab)</span>
+			</a>.
 		</p>
 	</div>
 </footer>

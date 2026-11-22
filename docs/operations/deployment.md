@@ -16,9 +16,9 @@ Before deploying Prism to a production Linux VPS or Cloud Server, verify the hos
   - Nginx Reverse Proxy (`nginx -v`)
   - Certbot Let's Encrypt SSL (`certbot --version`)
 - **DNS Records**:
-  - `api.prism.roozylabs.com` ──► `A` Record ──► VPS Public IP
-  - `app.prism.roozylabs.com` ──► `A` Record ──► VPS Public IP
-  - `prism.roozylabs.com`     ──► `A` Record ──► VPS Public IP
+  - `api.prism.roozylabs.com`     ──► `A` Record ──► VPS Public IP
+  - `console.prism.roozylabs.com` ──► `A` Record ──► VPS Public IP
+  - `prism.roozylabs.com`         ──► `A` Record ──► VPS Public IP
 
 ---
 
@@ -41,7 +41,7 @@ POSTGRES_USER=postgres_prism
 POSTGRES_PASSWORD=<STRONG_RANDOM_PASSWORD>
 REDIS_PASSWORD=<STRONG_RANDOM_PASSWORD>
 ENCRYPTION_KEY=<MIN_32_CHAR_RANDOM_KEY>
-ALLOWED_ORIGINS=https://app.prism.roozylabs.com,https://prism.roozylabs.com,https://api.prism.roozylabs.com
+ALLOWED_ORIGINS=https://console.prism.roozylabs.com,https://app.prism.roozylabs.com,https://prism.roozylabs.com,https://api.prism.roozylabs.com
 ```
 
 ---
@@ -92,7 +92,7 @@ server {
 
 Enable SSL via Certbot:
 ```bash
-sudo certbot --nginx -d api.prism.roozylabs.com -d app.prism.roozylabs.com -d prism.roozylabs.com
+sudo certbot --nginx -d api.prism.roozylabs.com -d console.prism.roozylabs.com -d app.prism.roozylabs.com -d prism.roozylabs.com
 ```
 
 ---

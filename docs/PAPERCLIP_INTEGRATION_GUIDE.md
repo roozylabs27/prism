@@ -124,6 +124,6 @@ Once configured:
 1. Every task execution triggered by Paperclip agents will hit `https://api.prism.roozylabs.com/v1/chat/completions` with `"model": "prism-auto"`.
 2. **Smart Router Decision**: Prism automatically classifies task intent, pre-filters ready credentials, and routes to the optimal provider (OpenAI, Anthropic, Google Gemini).
 3. **Observability**:
-   - Inspect active agent executions under **`https://app.prism.roozylabs.com/agents`**.
-   - Inspect cryptographic SHA-256 execution logs under **`https://app.prism.roozylabs.com/audit-trail`**.
-   - Monitor real-time streaming decisions on **`https://app.prism.roozylabs.com/logs`**.
+   - Inspect active agent executions under **`https://console.prism.roozylabs.com/agents`**.
+   - Inspect cryptographic SHA-256 execution logs under **`https://console.prism.roozylabs.com/audit-trail`**.
+   - Monitor real-time streaming decisions on **`https://console.prism.roozylabs.com/logs`**.
