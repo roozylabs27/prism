@@ -1,15 +1,12 @@
-import { useQuery, useMutation } from '@tanstack/react-query';
-import { apiGetAuditTrails, apiVerifyAuditIntegrity } from '@/lib/api';
+import { useQuery } from '@tanstack/react-query';
+import { apiGetAuditTrails } from '@/lib/api';
+import { useTenantScopeKey } from './useTenantScopeKey';
+export { useVerifyAuditIntegrity } from '@/hooks/mutations/useAuditLogMutations';
 
 export function useAuditTrailsQuery(params?: { limit?: number; page?: number }) {
+  const scope = useTenantScopeKey();
   return useQuery({
-    queryKey: ['audit-trails', params],
+    queryKey: ['audit-trails', ...scope, params],
     queryFn: () => apiGetAuditTrails(params),
-  });
-}
-
-export function useVerifyAuditIntegrity() {
-  return useMutation({
-    mutationFn: (id: string) => apiVerifyAuditIntegrity(id),
   });
 }

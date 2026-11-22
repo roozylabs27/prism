@@ -1,5 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import Cookies from 'js-cookie';
+import { beforeEach, describe, expect, it } from 'vitest';
 import type { AxiosAdapter, InternalAxiosRequestConfig } from 'axios';
 import { AxiosError } from 'axios';
 import { api } from './client';
@@ -24,18 +23,13 @@ function stubAdapter(status = 200) {
 
 describe('api client', () => {
   beforeEach(() => {
-    Cookies.remove('auth_token');
     localStorage.clear();
     useTenantStore.getState().resetTenant();
     window.history.replaceState({}, '', '/');
   });
-  afterEach(() => {
-    Cookies.remove('auth_token');
-  });
 
-  it('attaches the bearer token and the selected tenant to every request', async () => {
+  it('uses HttpOnly credentials and attaches selected tenant headers to every request', async () => {
     const seen = stubAdapter();
-    Cookies.set('auth_token', 'tok_123');
     useTenantStore.getState().setSelectedOrg('org_1', 'Org One');
     useTenantStore.getState().setSelectedWorkspaceId('ws_1');
     useTenantStore.getState().setSelectedProjectId('proj_1');
@@ -43,7 +37,8 @@ describe('api client', () => {
     await api.get('/gateway-keys');
 
     expect(seen).toHaveLength(1);
-    expect(seen[0].headers.Authorization).toBe('Bearer tok_123');
+    expect(seen[0].withCredentials).toBe(true);
+    expect(seen[0].headers.Authorization).toBeUndefined();
     expect(seen[0].headers['X-Prism-Org-ID']).toBe('org_1');
     expect(seen[0].headers['X-Prism-Workspace-ID']).toBe('ws_1');
     expect(seen[0].headers['X-Prism-Project-ID']).toBe('proj_1');
@@ -73,15 +68,13 @@ describe('api client', () => {
     expect(seen[0].headers['X-Prism-Org-ID']).toBeUndefined();
   });
 
-  it('turns failures into ApiError and drops the session cookie on 401', async () => {
+  it('turns 401 failures into ApiError and stays on auth pages', async () => {
     stubAdapter(401);
-    Cookies.set('auth_token', 'stale');
     // On the sign-in page a 401 is a wrong password, so no redirect happens.
     window.history.replaceState({}, '', '/signin');
 
     await expect(api.post('/auth/login', {})).rejects.toMatchObject({ code: 'AUTH_REQUIRED', status: 401 });
     await expect(api.post('/auth/login', {})).rejects.toBeInstanceOf(ApiError);
-    expect(Cookies.get('auth_token')).toBeUndefined();
     expect(window.location.pathname).toBe('/signin');
   });
 

@@ -1,5 +1,21 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { apiCreateBudget, apiUpdateBudget, apiDeleteBudget, ApiBudget } from '@/lib/api';
+import {
+  apiAcknowledgeBudgetAlert,
+  apiCreateBudget,
+  apiUpdateBudget,
+  apiDeleteBudget,
+  ApiBudget,
+} from '@/lib/api';
+
+export function useAcknowledgeBudgetAlertMutation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => apiAcknowledgeBudgetAlert(id),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['budget-alerts'] });
+    },
+  });
+}
 
 export function useCreateBudgetMutation() {
   const queryClient = useQueryClient();

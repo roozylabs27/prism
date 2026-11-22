@@ -1,48 +1,27 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import {
-  apiCreateRoutingRule,
-  apiDeleteRoutingRule,
-  apiGetPolicies,
-  apiGetRoutingRules,
-} from '@/lib/api';
+import { useQuery } from '@tanstack/react-query';
+import { apiGetPolicies, apiGetRoutingRules } from '@/lib/api';
+import { useTenantScopeKey } from './useTenantScopeKey';
 export {
   useCreatePolicyMutation as useCreatePolicy,
   useUpdatePolicyMutation as useUpdatePolicy,
   useDeletePolicyMutation as useDeletePolicy,
   useSetDefaultPolicyMutation as useSetDefaultPolicy,
+  useCreateRoutingRuleMutation,
+  useDeleteRoutingRuleMutation,
 } from '@/hooks/mutations/usePolicyMutations';
 
 export function usePoliciesQuery() {
+  const scope = useTenantScopeKey();
   return useQuery({
-    queryKey: ['policies'],
+    queryKey: ['policies', ...scope],
     queryFn: apiGetPolicies,
   });
 }
 
 export function useRoutingRulesQuery() {
+  const scope = useTenantScopeKey();
   return useQuery({
-    queryKey: ['routing-rules'],
+    queryKey: ['routing-rules', ...scope],
     queryFn: apiGetRoutingRules,
-  });
-}
-
-export function useCreateRoutingRuleMutation() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (data: { modelPattern: string; providerId?: string; priority?: number; enabled?: boolean }) =>
-      apiCreateRoutingRule(data),
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: ['routing-rules'] });
-    },
-  });
-}
-
-export function useDeleteRoutingRuleMutation() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (id: string) => apiDeleteRoutingRule(id),
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: ['routing-rules'] });
-    },
   });
 }

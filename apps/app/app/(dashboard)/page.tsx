@@ -6,16 +6,15 @@ import { AppLayout } from '@/components/AppLayout';
 import { MetricCard } from '@/components/molecules/MetricCard';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/molecules/Card';
 import { Button } from '@/components/atoms/Button';
-import { StatusDot, Badge, StatusType } from '@/components/atoms/Badge';
+import { Badge } from '@/components/atoms/Badge';
 import { DataTable, Column } from '@/components/organisms/DataTable';
 import {
   LazyTrafficChart,
   LazyModelDonutChart,
   TrafficChartData,
   ModelShareItem,
-  MODEL_PALETTE,
 } from '@/components/organisms/ChartContainer';
-import { ErrorState, EmptyState } from '@/components/molecules/StateAlerts';
+import { ErrorState } from '@/components/molecules/StateAlerts';
 import {
   useDashboardStatsQuery,
   useUsageChartQuery,
@@ -25,23 +24,22 @@ import {
 import { useLogsQuery, useLogAnalyticsQuery } from '@/hooks/queries/useLogsQuery';
 import { useWorkspacesQuery } from '@/hooks/queries/useWorkspacesQuery';
 import { useTenantStore } from '@/stores/useTenantStore';
-import { apiExportPilotOutcomes, ApiRequestLog, ApiProviderHealth } from '@/lib/api';
+import { ApiRequestLog } from '@/lib/api';
 import { ClientOnboardingModal } from '@/components/organisms/ClientOnboardingModal';
+import {
+  DashboardOperationalBreakdown,
+  type DashboardHealthSignal,
+} from '@/features/dashboard/components/DashboardOperationalBreakdown';
+import { DashboardPilotOutcomesCard } from '@/features/dashboard/components/DashboardPilotOutcomesCard';
 import { AppRoutes } from '@/constants/routes';
 import {
   Activity,
   Zap,
   DollarSign,
   CheckCircle2,
-  Server,
   Download,
   RefreshCw,
   ArrowUpRight,
-  AlertCircle,
-  ShieldCheck,
-  Cpu,
-  FileText,
-  Rocket,
 } from 'lucide-react';
 import {
   Select,
@@ -51,11 +49,6 @@ import {
   SelectItem,
 } from '@/components/molecules/Select';
 import { toast } from 'sonner';
-
-function providerStatusToDot(status: ApiProviderHealth['status']): StatusType {
-  if (status === 'down') return 'disabled';
-  return status;
-}
 
 interface RecentActivity {
   id: string;
@@ -72,7 +65,7 @@ const DATE_RANGE_OPTIONS = [
   { value: '7d', label: 'Last 7 Days', days: 7 },
   { value: '30d', label: 'Last 30 Days', days: 30 },
   { value: '90d', label: 'Last 90 Days', days: 90 },
-  { value: 'all', label: 'All Time', days: 90 },
+  { value: 'all', label: 'All Time', days: 0 },
 ];
 
 const QUICK_RANGES = [
@@ -94,6 +87,68 @@ function formatTokens(tokens: number): string {
   return tokens.toLocaleString();
 }
 
+const ACTIVITY_COLUMNS: Column<RecentActivity>[] = [
+  {
+    title: 'Time & Date',
+    dataIndex: 'time',
+    key: 'time',
+    render: (time) => (
+      <span className="font-mono text-muted-foreground whitespace-nowrap text-xs">{String(time ?? '')}</span>
+    ),
+  },
+  {
+    title: 'Client App / Model',
+    dataIndex: 'route',
+    key: 'route',
+    render: (route) => (
+      <span className="font-mono text-foreground font-medium text-xs truncate max-w-[150px] block">
+        {String(route ?? '')}
+      </span>
+    ),
+  },
+  {
+    title: 'Resolved Model',
+    dataIndex: 'model',
+    key: 'model',
+    render: (model) => (
+      <Badge variant="outline" className="font-mono text-[11px]">
+        {String(model ?? '')}
+      </Badge>
+    ),
+  },
+  {
+    title: 'Latency',
+    dataIndex: 'latency',
+    key: 'latency',
+    render: (lat) => (
+      <span className="font-mono text-xs tabular-nums whitespace-nowrap">{String(lat ?? 0)} ms</span>
+    ),
+  },
+  {
+    title: 'Cost',
+    dataIndex: 'cost',
+    key: 'cost',
+    render: (cost) => (
+      <span className="font-mono text-emerald-700 dark:text-emerald-400 text-xs tabular-nums whitespace-nowrap">
+        ${Number(cost || 0).toFixed(4)}
+      </span>
+    ),
+  },
+  {
+    title: 'Status',
+    dataIndex: 'status',
+    key: 'status',
+    render: (status) => (
+      <Badge
+        variant={status === 'success' ? 'success' : 'destructive'}
+        className="text-[10px] uppercase font-bold"
+      >
+        {String(status ?? '').toUpperCase()}
+      </Badge>
+    ),
+  },
+];
+
 export default function DashboardPage() {
   const [dateRange, setDateRange] = useState<string>('30d');
   const [pilotWorkspaceId, setPilotWorkspaceId] = useState<string>('all');
@@ -111,46 +166,34 @@ export default function DashboardPage() {
   } = useDashboardStatsQuery(dateRange);
   const { data: usageData, refetch: refetchUsage } = useUsageChartQuery(dateRange);
   const { data: logsData, refetch: refetchLogs } = useLogsQuery({ limit: 10 });
-  const {
-    data: healthData,
-    isLoading: isHealthLoading,
-    refetch: refetchHealth,
-  } = useDashboardHealthQuery();
-  const { data: analyticsData, isLoading: isAnalyticsLoading, refetch: refetchAnalytics } = useLogAnalyticsQuery(selectedDays);
+  const { data: healthData, isLoading: isHealthLoading, refetch: refetchHealth } = useDashboardHealthQuery();
+  const { data: analyticsData, isLoading: isAnalyticsLoading, refetch: refetchAnalytics } =
+    useLogAnalyticsQuery(selectedDays);
   const activePilotWorkspace = pilotWorkspaceId !== 'all' ? pilotWorkspaceId : undefined;
-  const { data: pilotOutcomes, refetch: refetchPilot } = usePilotOutcomesQuery(selectedDays, activePilotWorkspace);
+  const { data: pilotOutcomes, refetch: refetchPilot } = usePilotOutcomesQuery(
+    selectedDays || 90,
+    activePilotWorkspace
+  );
 
-  const rangeLabelMap: Record<string, string> = {
-    '24h': '24h',
-    '7d': '7d',
-    '30d': '30d',
-    '90d': '90d',
-    all: 'All Time',
-  };
-  const currentRangeLabel = rangeLabelMap[dateRange] || '30d';
+  const currentRangeLabel =
+    ({ '24h': '24h', '7d': '7d', '30d': '30d', '90d': '90d', all: 'All Time' } as Record<string, string>)[
+      dateRange
+    ] || '30d';
 
   const { trafficData, modelKeys, sparklineSeries } = useMemo(() => {
     if (!usageData || usageData.length === 0) {
-      return {
-        trafficData: [] as TrafficChartData[],
-        modelKeys: [] as string[],
-        sparklineSeries: [] as number[],
-      };
+      return { trafficData: [] as TrafficChartData[], modelKeys: [] as string[], sparklineSeries: [] as number[] };
     }
-
     const dateMap = new Map<string, TrafficChartData>();
     const modelsSet = new Set<string>();
-
     for (const p of usageData) {
       const model = p.model || 'default';
       modelsSet.add(model);
-
       const existing = dateMap.get(p.date) || { time: p.date, requests: 0 };
       existing.requests += p.requests;
       existing[model] = (Number(existing[model]) || 0) + p.requests;
       dateMap.set(p.date, existing);
     }
-
     const series = Array.from(dateMap.values());
     return {
       trafficData: series,
@@ -159,7 +202,6 @@ export default function DashboardPage() {
     };
   }, [usageData]);
 
-  // Prefer LogAnalytics model breakdown, fallback to aggregating usageData points
   const modelShareItems: ModelShareItem[] = useMemo(() => {
     if (analyticsData?.models && analyticsData.models.length > 0) {
       return analyticsData.models.map((m) => ({
@@ -184,42 +226,27 @@ export default function DashboardPage() {
 
   const activities: RecentActivity[] = useMemo(() => {
     if (!logsData?.data) return [];
-    return logsData.data.slice(0, 10).map((log: ApiRequestLog) => {
-      const d = new Date(log.createdAt);
-      const formattedTime = d.toLocaleString('en-US', {
+    return logsData.data.slice(0, 10).map((log: ApiRequestLog) => ({
+      id: log.id,
+      time: new Date(log.createdAt).toLocaleString('en-US', {
         month: 'short',
         day: 'numeric',
         hour: '2-digit',
         minute: '2-digit',
         second: '2-digit',
         hour12: false,
-      });
-      return {
-        id: log.id,
-        time: formattedTime,
-        route: log.clientApp || log.model,
-        model: log.model,
-        latency: log.latencyMs,
-        cost: log.estimatedCost ?? log.costUSD ?? 0,
-        status: (log.statusCode < 400 ? 'success' : 'error') as 'success' | 'error',
-      };
-    });
+      }),
+      route: log.clientApp || log.model,
+      model: log.model,
+      latency: log.latencyMs,
+      cost: log.estimatedCost ?? log.costUSD ?? 0,
+      status: (log.statusCode < 400 ? 'success' : 'error') as 'success' | 'error',
+    }));
   }, [logsData]);
 
-  // Build real routing & health signals from live provider health and recent request logs
-  const healthSignals = useMemo(() => {
-    const signals: Array<{
-      id: string;
-      severity: 'error' | 'info' | 'ok';
-      title: string;
-      description: string;
-      chip: string;
-      href: string;
-      cta: string;
-    }> = [];
-
-    const degradedProviders = (healthData ?? []).filter((p) => p.status !== 'healthy');
-    for (const p of degradedProviders.slice(0, 2)) {
+  const healthSignals = useMemo<DashboardHealthSignal[]>(() => {
+    const signals: DashboardHealthSignal[] = [];
+    for (const p of (healthData ?? []).filter((item) => item.status !== 'healthy').slice(0, 2)) {
       signals.push({
         id: `prov-${p.id}`,
         severity: 'error',
@@ -230,19 +257,12 @@ export default function DashboardPage() {
         cta: 'Inspect',
       });
     }
-
-    const erroredOrRetried = (logsData?.data ?? []).filter(
-      (l) => l.statusCode >= 400 || l.retryCount > 0
-    );
-    for (const log of erroredOrRetried.slice(0, 2)) {
+    for (const log of (logsData?.data ?? []).filter((l) => l.statusCode >= 400 || l.retryCount > 0).slice(0, 2)) {
       if (signals.length >= 3) break;
       signals.push({
         id: `log-${log.id}`,
         severity: log.statusCode >= 400 ? 'error' : 'info',
-        title:
-          log.statusCode >= 400
-            ? `HTTP ${log.statusCode} on ${log.model}`
-            : `Failover retry (${log.retryCount}x) on ${log.model}`,
+        title: log.statusCode >= 400 ? `HTTP ${log.statusCode} on ${log.model}` : `Failover retry (${log.retryCount}x) on ${log.model}`,
         description: log.errorMessage
           ? log.errorMessage.slice(0, 80)
           : `Resolved in ${log.latencyMs}ms via ${log.providerName || 'gateway'}.`,
@@ -251,7 +271,6 @@ export default function DashboardPage() {
         cta: 'View logs',
       });
     }
-
     if (signals.length === 0 && (healthData?.length ?? 0) > 0) {
       const healthyCount = (healthData ?? []).filter((p) => p.status === 'healthy').length;
       signals.push({
@@ -264,93 +283,23 @@ export default function DashboardPage() {
         cta: 'Providers',
       });
     }
-
     const savings = analyticsData?.estimatedSavingsUsd ?? 0;
     if (signals.length < 3 && savings > 0) {
       signals.push({
         id: 'smart-savings',
         severity: 'info',
         title: 'Smart routing cost savings',
-        description: `Estimated savings compared against baseline flagship pricing (${selectedDays}d).`,
+        description: `Estimated savings compared against baseline flagship pricing (${currentRangeLabel}).`,
         chip: `$${savings.toFixed(2)} saved`,
         href: AppRoutes.POLICIES,
         cta: 'Policies',
       });
     }
-
     return signals.slice(0, 3);
-  }, [healthData, logsData, analyticsData, selectedDays]);
-
-  const activityColumns: Column<RecentActivity>[] = [
-    {
-      title: 'Time & Date',
-      dataIndex: 'time',
-      key: 'time',
-      render: (time) => (
-        <span className="font-mono text-muted-foreground whitespace-nowrap text-xs">
-          {String(time ?? '')}
-        </span>
-      ),
-    },
-    {
-      title: 'Client App / Model',
-      dataIndex: 'route',
-      key: 'route',
-      render: (route) => (
-        <span className="font-mono text-foreground font-medium text-xs truncate max-w-[150px] block">
-          {String(route ?? '')}
-        </span>
-      ),
-    },
-    {
-      title: 'Resolved Model',
-      dataIndex: 'model',
-      key: 'model',
-      render: (model) => (
-        <Badge variant="outline" className="font-mono text-[11px]">
-          {String(model ?? '')}
-        </Badge>
-      ),
-    },
-    {
-      title: 'Latency',
-      dataIndex: 'latency',
-      key: 'latency',
-      render: (lat) => (
-        <span className="font-mono text-xs tabular-nums whitespace-nowrap">
-          {String(lat ?? 0)} ms
-        </span>
-      ),
-    },
-    {
-      title: 'Cost',
-      dataIndex: 'cost',
-      key: 'cost',
-      render: (cost) => (
-        <span className="font-mono text-emerald-700 dark:text-emerald-400 text-xs tabular-nums whitespace-nowrap">
-          ${Number(cost || 0).toFixed(4)}
-        </span>
-      ),
-    },
-    {
-      title: 'Status',
-      dataIndex: 'status',
-      key: 'status',
-      render: (status) => (
-        <Badge
-          variant={status === 'success' ? 'success' : 'destructive'}
-          className="text-[10px] uppercase font-bold"
-        >
-          {String(status ?? '').toUpperCase()}
-        </Badge>
-      ),
-    },
-  ];
+  }, [healthData, logsData, analyticsData, currentRangeLabel]);
 
   const tokenSubtitle = stats
-    ? stats.inputTokens != null &&
-      stats.outputTokens != null &&
-      (stats.inputTokens > 0 || stats.outputTokens > 0)
+    ? stats.inputTokens != null && stats.outputTokens != null && (stats.inputTokens > 0 || stats.outputTokens > 0)
       ? `${formatTokens(stats.inputTokens)} in / ${formatTokens(stats.outputTokens)} out`
       : `${formatTokens(stats.totalTokens)} total tokens`
     : undefined;
@@ -363,95 +312,6 @@ export default function DashboardPage() {
     refetchAnalytics();
     refetchPilot();
     toast.info('Refreshing gateway telemetry');
-  };
-
-  const handleDownloadPilotOutcomes = async (format: 'csv' | 'json') => {
-    try {
-      const blob = await apiExportPilotOutcomes(format, selectedDays, activePilotWorkspace);
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `prism-pilot-outcomes-${selectedDays}d.${format}`;
-      link.click();
-      URL.revokeObjectURL(url);
-      toast.success(`Exported pilot outcomes (${format.toUpperCase()})`);
-    } catch {
-      toast.error('Failed to export pilot outcomes');
-    }
-  };
-
-  const escapeHtml = (value: string) =>
-    value
-      .replaceAll('&', '&amp;')
-      .replaceAll('<', '&lt;')
-      .replaceAll('>', '&gt;')
-      .replaceAll('"', '&quot;')
-      .replaceAll("'", '&#39;');
-
-  const handleExportPilotPdf = () => {
-    if (!pilotOutcomes) return;
-    const printWin = window.open('', '_blank', 'width=960,height=720');
-    if (!printWin) {
-      toast.error('Allow popups in your browser to generate the Executive PDF report');
-      return;
-    }
-
-    const wsRows = (pilotOutcomes.workspaces ?? [])
-      .map(
-        (ws) => `
-          <tr>
-            <td>${escapeHtml(ws.workspaceName || ws.workspaceId)}</td>
-            <td>${ws.totalRequests.toLocaleString()}</td>
-            <td>${(ws.errorRatePct ?? 0).toFixed(2)}%</td>
-            <td>$${ws.actualCostUsd.toFixed(2)}</td>
-            <td>$${ws.estimatedSavingsUsd.toFixed(2)}</td>
-            <td>${Math.round(ws.p95LatencyMs ?? ws.avgLatencyMs)} ms</td>
-          </tr>`
-      )
-      .join('');
-
-    const html = `<!doctype html>
-<html>
-<head>
-  <meta charset="utf-8" />
-  <title>RoozyLabs Prism Executive Pilot Outcomes (${pilotOutcomes.windowDays}d)</title>
-  <style>
-    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: #111827; padding: 32px; }
-    h1 { font-size: 20px; margin: 0 0 4px; }
-    p.meta { font-size: 12px; color: #6b7280; margin: 0 0 20px; }
-    .kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 24px; }
-    .kpi { border: 1px solid #e5e7eb; border-radius: 6px; padding: 12px; }
-    .kpi span { display: block; font-size: 10px; text-transform: uppercase; color: #6b7280; }
-    .kpi strong { font-size: 18px; }
-    table { width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 12px; }
-    th, td { border-bottom: 1px solid #e5e7eb; text-align: left; padding: 8px; }
-    th { background: #f9fafb; font-weight: 600; }
-    @media print { body { padding: 12px; } }
-  </style>
-</head>
-<body>
-  <h1>RoozyLabs Prism — Executive Value Attribution Report</h1>
-  <p class="meta">Org: ${escapeHtml(pilotOutcomes.orgId)} · Window: ${pilotOutcomes.windowDays} days · Generated: ${escapeHtml(new Date().toISOString())}</p>
-  <p class="meta">${escapeHtml(pilotOutcomes.methodologyNote)}</p>
-  <div class="kpis">
-    <div class="kpi"><span>Actual Spend</span><strong>$${pilotOutcomes.totals.actualCostUsd.toFixed(2)}</strong></div>
-    <div class="kpi"><span>Smart Routed Savings</span><strong>$${pilotOutcomes.totals.estimatedSavingsUsd.toFixed(2)}</strong></div>
-    <div class="kpi"><span>P95 Latency</span><strong>${Math.round(pilotOutcomes.totals.p95LatencyMs)} ms</strong></div>
-    <div class="kpi"><span>Policy &amp; Quota Blocks</span><strong>${pilotOutcomes.governance.policyDenials403 + pilotOutcomes.governance.budgetQuotaDenials429}</strong></div>
-  </div>
-  <h2>Client Workspace Attribution</h2>
-  <table>
-    <thead><tr><th>Workspace</th><th>Requests</th><th>Error Rate</th><th>Actual Spend</th><th>Savings</th><th>P95 Latency</th></tr></thead>
-    <tbody>${wsRows || '<tr><td colspan="6">No workspace requests recorded in window.</td></tr>'}</tbody>
-  </table>
-</body>
-</html>`;
-
-    printWin.document.open();
-    printWin.document.write(html);
-    printWin.document.close();
-    printWin.focus();
-    printWin.print();
   };
 
   const handleExportReport = () => {
@@ -481,7 +341,6 @@ export default function DashboardPage() {
   return (
     <AppLayout>
       <div className="space-y-6">
-        {/* Page Header + Controls */}
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <h1 className="text-xl sm:text-2xl font-semibold tracking-tight text-foreground">
@@ -538,17 +397,12 @@ export default function DashboardPage() {
           />
         )}
 
-        {/* Row 1: 4 KPI Cards (Hero Card + 3 Supporting KPIs) */}
         <section className="grid gap-4 grid-cols-1 sm:grid-cols-2 xl:grid-cols-4" aria-label="Gateway KPIs">
           <MetricCard
             featured
             liveLabel="LIVE"
             title={`Total Requests (${currentRangeLabel})`}
-            value={
-              stats?.totalRequests != null
-                ? formatCompactCount(stats.totalRequests)
-                : '-'
-            }
+            value={stats?.totalRequests != null ? formatCompactCount(stats.totalRequests) : '-'}
             subtitle={
               stats
                 ? `${stats.activeKeys} active key${stats.activeKeys !== 1 ? 's' : ''} · ${stats.activeProviders} provider${stats.activeProviders !== 1 ? 's' : ''}`
@@ -559,7 +413,6 @@ export default function DashboardPage() {
             actionLabel="Open request logs"
             loading={isLoading}
           />
-
           <MetricCard
             title="Tokens Processed"
             value={
@@ -573,14 +426,9 @@ export default function DashboardPage() {
             icon={<Zap className="h-4 w-4 text-prism-cyan" />}
             loading={isLoading}
           />
-
           <MetricCard
             title="Gateway Spend"
-            value={
-              stats?.totalEstimatedCost != null
-                ? `$${stats.totalEstimatedCost.toFixed(2)}`
-                : '-'
-            }
+            value={stats?.totalEstimatedCost != null ? `$${stats.totalEstimatedCost.toFixed(2)}` : '-'}
             delta={
               analyticsData && analyticsData.estimatedSavingsUsd && analyticsData.estimatedSavingsUsd > 0
                 ? `Saved $${analyticsData.estimatedSavingsUsd.toFixed(2)}`
@@ -591,14 +439,9 @@ export default function DashboardPage() {
             icon={<DollarSign className="h-4 w-4 text-emerald-500" />}
             loading={isLoading}
           />
-
           <MetricCard
             title="Success Rate"
-            value={
-              stats && stats.totalRequests > 0
-                ? `${(100 - stats.errorRate).toFixed(2)}%`
-                : '-'
-            }
+            value={stats && stats.totalRequests > 0 ? `${(100 - stats.errorRate).toFixed(2)}%` : '-'}
             subtitle={
               stats && stats.totalRequests > 0
                 ? `Avg ${Math.round(stats.avgLatency)}ms latency · ${stats.errorRate.toFixed(2)}% errors`
@@ -609,7 +452,6 @@ export default function DashboardPage() {
           />
         </section>
 
-        {/* Row 2: 2:1 Asymmetric Charts (Request Traffic + Traffic by Model Donut) */}
         <section className="grid gap-5 grid-cols-1 lg:grid-cols-3" aria-label="Traffic charts">
           <Card className="lg:col-span-2">
             <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between pb-3">
@@ -618,15 +460,12 @@ export default function DashboardPage() {
                   Request Traffic
                 </CardTitle>
                 <p className="mt-1 font-mono text-sm font-semibold text-foreground tabular-nums">
-                  {stats?.totalRequests != null
-                    ? `${stats.totalRequests.toLocaleString()} requests`
-                    : 'Loading series'}
+                  {stats?.totalRequests != null ? `${stats.totalRequests.toLocaleString()} requests` : 'Loading series'}
                   <span className="ml-2 font-sans text-xs font-normal text-muted-foreground">
                     {dateRange === '24h' ? 'per hour' : 'per day'}
                   </span>
                 </p>
               </div>
-
               <div className="flex items-center gap-2">
                 <div
                   className="inline-flex rounded-lg border border-border bg-muted p-0.5"
@@ -648,7 +487,6 @@ export default function DashboardPage() {
                     </button>
                   ))}
                 </div>
-
                 <Link
                   href={AppRoutes.LOGS}
                   className="inline-flex h-7 items-center gap-1 rounded-md border border-border bg-background px-2.5 text-[11px] font-medium text-muted-foreground transition-colors hover:text-foreground"
@@ -658,7 +496,6 @@ export default function DashboardPage() {
                 </Link>
               </div>
             </CardHeader>
-
             <CardContent>
               <LazyTrafficChart data={trafficData} modelKeys={modelKeys} height={240} />
             </CardContent>
@@ -683,296 +520,28 @@ export default function DashboardPage() {
           </Card>
         </section>
 
-        {/* Row 3: 3-Column Operational Breakdown */}
-        <section className="grid gap-5 grid-cols-1 lg:grid-cols-3" aria-label="Operational breakdown">
-          {/* Col 1: Model Cost & Latency */}
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between pb-3">
-              <CardTitle className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                <Cpu className="h-3.5 w-3.5 text-prism-violet" />
-                <span>Model Cost &amp; Latency</span>
-              </CardTitle>
-              <span className="font-mono text-[11px] text-muted-foreground">{selectedDays}d</span>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              {isAnalyticsLoading ? (
-                <div className="space-y-2.5">
-                  {[1, 2, 3].map((i) => (
-                    <div key={i} className="h-12 animate-pulse rounded-lg bg-muted/40" />
-                  ))}
-                </div>
-              ) : analyticsData?.models && analyticsData.models.length > 0 ? (
-                analyticsData.models.slice(0, 4).map((m, idx) => {
-                  const pct = totalModelReqs > 0 ? Math.round((m.requests / totalModelReqs) * 100) : 0;
-                  const barColor = MODEL_PALETTE[idx % MODEL_PALETTE.length];
-                  return (
-                    <div
-                      key={m.model}
-                      className="rounded-lg border border-border/80 bg-background/50 p-2.5 space-y-1.5"
-                    >
-                      <div className="flex items-center justify-between gap-2 text-xs">
-                        <span className="font-mono font-semibold text-foreground truncate">
-                          {m.model}
-                        </span>
-                        <span className="font-mono text-[11px] font-semibold tabular-nums text-emerald-700 dark:text-emerald-400 shrink-0">
-                          ${m.costUsd.toFixed(3)}
-                        </span>
-                      </div>
-                      <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
-                        <div
-                          className="h-full rounded-full"
-                          style={{ width: `${Math.max(pct, 4)}%`, backgroundColor: barColor }}
-                        />
-                      </div>
-                      <div className="flex items-center justify-between text-[11px] font-mono text-muted-foreground tabular-nums">
-                        <span>{m.requests.toLocaleString()} req</span>
-                        <span>
-                          avg {Math.round(m.avgLatencyMs)}ms
-                          {m.avgTtftMs ? ` · ttft ${Math.round(m.avgTtftMs)}ms` : ''}
-                        </span>
-                      </div>
-                    </div>
-                  );
-                })
-              ) : (
-                <EmptyState
-                  title="No model analytics yet"
-                  description="Per-model latency and USD breakdown populate after requests complete."
-                  className="p-6"
-                />
-              )}
-            </CardContent>
-          </Card>
+        <DashboardOperationalBreakdown
+          selectedDays={selectedDays}
+          isAnalyticsLoading={isAnalyticsLoading}
+          analyticsData={analyticsData}
+          totalModelReqs={totalModelReqs}
+          isHealthLoading={isHealthLoading}
+          healthData={healthData}
+          healthSignals={healthSignals}
+        />
 
-          {/* Col 2: Provider Availability */}
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between pb-3">
-              <CardTitle className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                <Server className="h-3.5 w-3.5 text-prism-cyan" />
-                <span>Provider Availability</span>
-              </CardTitle>
-              <Link
-                href={AppRoutes.PROVIDERS}
-                className="inline-flex h-7 items-center gap-1 rounded-md border border-border bg-background px-2 text-[11px] font-medium text-muted-foreground transition-colors hover:text-foreground"
-              >
-                <span>Manage</span>
-                <ArrowUpRight className="h-3 w-3" />
-              </Link>
-            </CardHeader>
-            <CardContent className="space-y-2.5">
-              {isHealthLoading ? (
-                <div className="space-y-2.5">
-                  {[1, 2, 3].map((i) => (
-                    <div key={i} className="h-11 animate-pulse rounded-lg bg-muted/40" />
-                  ))}
-                </div>
-              ) : healthData && healthData.length > 0 ? (
-                healthData.map((provider: ApiProviderHealth) => (
-                  <div
-                    key={provider.id || provider.name}
-                    className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 rounded-lg border border-border/80 bg-background/50 px-3 py-2.5"
-                  >
-                    <div className="flex items-center gap-2 min-w-0">
-                      <StatusDot status={providerStatusToDot(provider.status)} />
-                      <span className="truncate text-xs font-semibold text-foreground">
-                        {provider.name}
-                      </span>
-                    </div>
-                    <span
-                      className={`font-mono text-[11px] shrink-0 ${
-                        provider.status === 'degraded'
-                          ? 'text-amber-600 dark:text-amber-400'
-                          : 'text-muted-foreground'
-                      }`}
-                    >
-                      {provider.type} ({provider.credCount} cred{provider.credCount !== 1 ? 's' : ''})
-                    </span>
-                  </div>
-                ))
-              ) : (
-                <EmptyState
-                  title="No providers configured"
-                  description="Connect an upstream provider such as OpenAI, Anthropic, or Gemini."
-                  className="p-6"
-                />
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Col 3: Routing & Health Signals */}
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between pb-3">
-              <CardTitle className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                <Activity className="h-3.5 w-3.5 text-prism-violet" />
-                <span>Routing &amp; Health Feed</span>
-              </CardTitle>
-              <Link
-                href={AppRoutes.POLICIES}
-                className="inline-flex h-7 items-center gap-1 rounded-md border border-border bg-background px-2 text-[11px] font-medium text-muted-foreground transition-colors hover:text-foreground"
-              >
-                <span>Policies</span>
-                <ArrowUpRight className="h-3 w-3" />
-              </Link>
-            </CardHeader>
-            <CardContent className="space-y-2.5">
-              {healthSignals.length > 0 ? (
-                healthSignals.map((sig) => (
-                  <div
-                    key={sig.id}
-                    className="rounded-lg border border-border/80 bg-background/50 p-3 space-y-1.5"
-                  >
-                    <div className="flex items-center gap-2 text-xs font-semibold text-foreground">
-                      {sig.severity === 'error' ? (
-                        <AlertCircle className="h-3.5 w-3.5 shrink-0 text-rose-500" />
-                      ) : sig.severity === 'ok' ? (
-                        <ShieldCheck className="h-3.5 w-3.5 shrink-0 text-emerald-500" />
-                      ) : (
-                        <Activity className="h-3.5 w-3.5 shrink-0 text-prism-cyan" />
-                      )}
-                      <span className="truncate">{sig.title}</span>
-                    </div>
-                    <p className="text-[11px] leading-relaxed text-muted-foreground">
-                      {sig.description}
-                    </p>
-                    <div className="flex items-center justify-between pt-0.5">
-                      <Badge
-                        variant={
-                          sig.severity === 'error'
-                            ? 'destructive'
-                            : sig.severity === 'ok'
-                              ? 'success'
-                              : 'violet'
-                        }
-                        className="font-mono text-[10px]"
-                      >
-                        {sig.chip}
-                      </Badge>
-                      <Link
-                        href={sig.href}
-                        className="text-[11px] font-semibold text-prism-violet hover:underline underline-offset-4"
-                      >
-                        {sig.cta} →
-                      </Link>
-                    </div>
-                  </div>
-                ))
-              ) : (
-                <EmptyState
-                  title="No routing events yet"
-                  description="Provider health alerts, failover retries, and savings summaries appear here."
-                  className="p-6"
-                />
-              )}
-            </CardContent>
-          </Card>
-        </section>
-
-        {/* Row 3b: Pilot Outcomes & Client Cost Attribution */}
         {pilotOutcomes && (
-          <Card>
-            <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <CardTitle className="flex items-center gap-2 text-sm font-semibold">
-                  <DollarSign className="h-4 w-4 text-emerald-500" />
-                  <span>Client Value Attribution &amp; Pilot Outcomes ({pilotOutcomes.windowDays}d)</span>
-                </CardTitle>
-                <p className="text-[11px] text-muted-foreground mt-0.5">{pilotOutcomes.methodologyNote}</p>
-              </div>
-              <div className="flex flex-wrap items-center gap-2">
-                <Select value={pilotWorkspaceId} onValueChange={setPilotWorkspaceId}>
-                  <SelectTrigger className="h-8 w-[180px] text-xs bg-card border-border">
-                    <SelectValue placeholder="All Client Workspaces" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all" className="text-xs">All Client Workspaces</SelectItem>
-                    {workspaces.map((ws) => (
-                      <SelectItem key={ws.id} value={ws.id} className="text-xs">
-                        {ws.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <Button variant="outline" size="sm" className="h-8 gap-1 text-xs" onClick={() => setOnboardingOpen(true)}>
-                  <Rocket className="h-3.5 w-3.5 text-prism-violet" /> Onboard Client
-                </Button>
-                <Button variant="outline" size="sm" className="h-8 gap-1 text-xs" onClick={() => handleDownloadPilotOutcomes('csv')}>
-                  <Download className="h-3.5 w-3.5" /> CSV
-                </Button>
-                <Button variant="outline" size="sm" className="h-8 gap-1 text-xs" onClick={() => handleDownloadPilotOutcomes('json')}>
-                  <Download className="h-3.5 w-3.5" /> JSON
-                </Button>
-                <Button variant="prismViolet" size="sm" className="h-8 gap-1 text-xs" onClick={handleExportPilotPdf}>
-                  <FileText className="h-3.5 w-3.5" /> Executive PDF
-                </Button>
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid gap-3 grid-cols-2 lg:grid-cols-4 font-mono text-xs">
-                <div className="rounded border border-border bg-muted/20 p-3">
-                  <span className="text-[10px] text-muted-foreground block">SMART ROUTED SAVINGS</span>
-                  <span className="text-base font-bold text-emerald-600 dark:text-emerald-400">
-                    ${pilotOutcomes.totals.estimatedSavingsUsd.toFixed(2)}
-                  </span>
-                </div>
-                <div className="rounded border border-border bg-muted/20 p-3">
-                  <span className="text-[10px] text-muted-foreground block">P95 LATENCY</span>
-                  <span className="text-base font-bold text-foreground">
-                    {Math.round(pilotOutcomes.totals.p95LatencyMs)}ms
-                  </span>
-                </div>
-                <div className="rounded border border-border bg-muted/20 p-3">
-                  <span className="text-[10px] text-muted-foreground block">POLICY / QUOTA BLOCKS</span>
-                  <span className="text-base font-bold text-foreground">
-                    {pilotOutcomes.governance.policyDenials403 + pilotOutcomes.governance.budgetQuotaDenials429}
-                  </span>
-                </div>
-                <div className="rounded border border-border bg-muted/20 p-3">
-                  <span className="text-[10px] text-muted-foreground block">WORKSPACES TRACKED</span>
-                  <span className="text-base font-bold text-foreground">
-                    {pilotOutcomes.workspaces?.length ?? 0}
-                  </span>
-                </div>
-              </div>
-
-              {pilotOutcomes.workspaces && pilotOutcomes.workspaces.length > 0 && (
-                <div className="overflow-x-auto rounded border border-border">
-                  <table className="w-full text-xs">
-                    <thead className="bg-muted/30 text-[10px] uppercase tracking-wider text-muted-foreground">
-                      <tr>
-                        <th className="px-3 py-2 text-left">Client Workspace</th>
-                        <th className="px-3 py-2 text-right">Requests</th>
-                        <th className="px-3 py-2 text-right">Error %</th>
-                        <th className="px-3 py-2 text-right">Actual Spend</th>
-                        <th className="px-3 py-2 text-right">Estimated Savings</th>
-                        <th className="px-3 py-2 text-right">P95 Latency</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-border font-mono">
-                      {pilotOutcomes.workspaces.map((ws) => (
-                        <tr key={ws.workspaceId} className="hover:bg-muted/10">
-                          <td className="px-3 py-2 font-sans font-medium text-foreground">
-                            {ws.workspaceName || ws.workspaceId}
-                          </td>
-                          <td className="px-3 py-2 text-right tabular-nums">{ws.totalRequests.toLocaleString()}</td>
-                          <td className="px-3 py-2 text-right tabular-nums">{(ws.errorRatePct ?? 0).toFixed(2)}%</td>
-                          <td className="px-3 py-2 text-right tabular-nums">${ws.actualCostUsd.toFixed(2)}</td>
-                          <td className="px-3 py-2 text-right tabular-nums text-emerald-600 dark:text-emerald-400">
-                            ${ws.estimatedSavingsUsd.toFixed(2)}
-                          </td>
-                          <td className="px-3 py-2 text-right tabular-nums">
-                            {Math.round(ws.p95LatencyMs ?? ws.avgLatencyMs)} ms
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </CardContent>
-          </Card>
+          <DashboardPilotOutcomesCard
+            pilotOutcomes={pilotOutcomes}
+            pilotWorkspaceId={pilotWorkspaceId}
+            onPilotWorkspaceChange={setPilotWorkspaceId}
+            workspaces={workspaces}
+            selectedDays={selectedDays}
+            activePilotWorkspace={activePilotWorkspace}
+            onOpenOnboarding={() => setOnboardingOpen(true)}
+          />
         )}
 
-        {/* Row 4: Recent AI Activity Table */}
         <Card>
           <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle className="flex items-center gap-2 text-sm font-semibold">
@@ -990,7 +559,7 @@ export default function DashboardPage() {
           <CardContent className="overflow-x-auto">
             <DataTable
               dataSource={activities}
-              columns={activityColumns}
+              columns={ACTIVITY_COLUMNS}
               rowKey="id"
               pageSize={10}
               searchPlaceholder="Filter activity logs..."
@@ -998,6 +567,7 @@ export default function DashboardPage() {
             />
           </CardContent>
         </Card>
+
         <ClientOnboardingModal
           open={onboardingOpen}
           onOpenChange={setOnboardingOpen}

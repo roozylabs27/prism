@@ -16,11 +16,11 @@ interface PermissionContextType {
 }
 
 const PermissionContext = createContext<PermissionContextType>({
-  role: UserRole.OWNER,
+  role: UserRole.VIEWER,
   permissions: [],
-  hasPermission: () => true,
-  isLoading: false,
-  isOnboarded: true,
+  hasPermission: () => false,
+  isLoading: true,
+  isOnboarded: false,
 });
 
 export function PermissionProvider({

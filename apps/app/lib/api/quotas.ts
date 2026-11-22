@@ -8,6 +8,10 @@ export async function apiGetQuotas(): Promise<ApiTenantQuota[]> {
 }
 
 export async function apiUpdateQuota(targetType: string, targetId: string, data: Partial<ApiTenantQuota>): Promise<ApiTenantQuota> {
-  const response = await api.put<ApiTenantQuota>(`/quotas/${targetType}/${targetId}`, data);
-  return response.data;
+  const response = await api.put<ApiTenantQuota | { quota?: ApiTenantQuota }>(`/quotas/${targetType}/${targetId}`, data);
+  const body = response.data;
+  if (body && typeof body === 'object' && 'quota' in body && body.quota) {
+    return body.quota;
+  }
+  return body as ApiTenantQuota;
 }

@@ -5,6 +5,7 @@ import {
   apiGetDashboardHealth,
   apiGetPilotOutcomes,
 } from '@/lib/api';
+import { useTenantScopeKey } from './useTenantScopeKey';
 
 export function dateRangeToParams(dateRange?: string): { days?: number } | undefined {
   if (!dateRange || dateRange === '30d') return { days: 30 };
@@ -16,31 +17,35 @@ export function dateRangeToParams(dateRange?: string): { days?: number } | undef
 }
 
 export function useDashboardStatsQuery(dateRange?: string) {
+  const scope = useTenantScopeKey();
   const params = dateRangeToParams(dateRange);
   return useQuery({
-    queryKey: ['dashboard-stats', dateRange || '30d'],
-    queryFn: () => apiGetDashboardStats(params),
+    queryKey: ['dashboard-stats', ...scope, dateRange || '30d'],
+    queryFn: ({ signal }) => apiGetDashboardStats(params, signal),
   });
 }
 
 export function useUsageChartQuery(dateRange?: string) {
+  const scope = useTenantScopeKey();
   const params = dateRangeToParams(dateRange);
   return useQuery({
-    queryKey: ['dashboard-usage-chart', dateRange || '30d'],
-    queryFn: () => apiGetDashboardUsage(params),
+    queryKey: ['dashboard-usage-chart', ...scope, dateRange || '30d'],
+    queryFn: ({ signal }) => apiGetDashboardUsage(params, signal),
   });
 }
 
 export function useDashboardHealthQuery() {
+  const scope = useTenantScopeKey();
   return useQuery({
-    queryKey: ['dashboard-health'],
-    queryFn: apiGetDashboardHealth,
+    queryKey: ['dashboard-health', ...scope],
+    queryFn: ({ signal }) => apiGetDashboardHealth(signal),
   });
 }
 
 export function usePilotOutcomesQuery(days = 30, workspaceId?: string) {
+  const scope = useTenantScopeKey();
   return useQuery({
-    queryKey: ['pilot-outcomes', days, workspaceId || 'all'],
-    queryFn: () => apiGetPilotOutcomes(days, workspaceId || undefined),
+    queryKey: ['pilot-outcomes', ...scope, days, workspaceId || 'all'],
+    queryFn: ({ signal }) => apiGetPilotOutcomes(days, workspaceId || undefined, signal),
   });
 }

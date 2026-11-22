@@ -1,47 +1,46 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import {
-  apiAcknowledgeBudgetAlert,
   apiGetBudgetAlerts,
   apiGetBudgets,
   apiGetBudgetStatus,
   apiGetFinOpsAnomalies,
 } from '@/lib/api';
-export { useCreateBudgetMutation as useCreateBudget, useUpdateBudgetMutation as useUpdateBudget, useDeleteBudgetMutation as useDeleteBudget } from '@/hooks/mutations/useBudgetMutations';
+import { useTenantScopeKey } from './useTenantScopeKey';
+export {
+  useCreateBudgetMutation as useCreateBudget,
+  useUpdateBudgetMutation as useUpdateBudget,
+  useDeleteBudgetMutation as useDeleteBudget,
+  useAcknowledgeBudgetAlertMutation,
+} from '@/hooks/mutations/useBudgetMutations';
 
 export function useBudgetsQuery() {
+  const scope = useTenantScopeKey();
   return useQuery({
-    queryKey: ['budgets'],
+    queryKey: ['budgets', ...scope],
     queryFn: apiGetBudgets,
   });
 }
 
 export function useBudgetStatusQuery() {
+  const scope = useTenantScopeKey();
   return useQuery({
-    queryKey: ['budget-status'],
+    queryKey: ['budget-status', ...scope],
     queryFn: apiGetBudgetStatus,
   });
 }
 
 export function useFinOpsAnomaliesQuery() {
+  const scope = useTenantScopeKey();
   return useQuery({
-    queryKey: ['finops-anomalies'],
+    queryKey: ['finops-anomalies', ...scope],
     queryFn: () => apiGetFinOpsAnomalies(),
   });
 }
 
 export function useBudgetAlertsQuery() {
+  const scope = useTenantScopeKey();
   return useQuery({
-    queryKey: ['budget-alerts'],
+    queryKey: ['budget-alerts', ...scope],
     queryFn: () => apiGetBudgetAlerts(),
-  });
-}
-
-export function useAcknowledgeBudgetAlertMutation() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (id: string) => apiAcknowledgeBudgetAlert(id),
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: ['budget-alerts'] });
-    },
   });
 }

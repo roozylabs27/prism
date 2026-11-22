@@ -4,8 +4,31 @@ import {
   apiUpdatePolicy,
   apiDeletePolicy,
   apiSetDefaultPolicy,
+  apiCreateRoutingRule,
+  apiDeleteRoutingRule,
   ApiRoutingPolicy,
 } from '@/lib/api';
+
+export function useCreateRoutingRuleMutation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: { modelPattern: string; providerId?: string; priority?: number; enabled?: boolean }) =>
+      apiCreateRoutingRule(data),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['routing-rules'] });
+    },
+  });
+}
+
+export function useDeleteRoutingRuleMutation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => apiDeleteRoutingRule(id),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['routing-rules'] });
+    },
+  });
+}
 
 export function useCreatePolicyMutation() {
   const queryClient = useQueryClient();

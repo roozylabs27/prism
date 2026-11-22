@@ -5,9 +5,10 @@ import { PageParams, PaginatedResult } from './types/common';
 export async function apiGetCredentials(
   providerId?: string,
   params?: PageParams,
+  signal?: AbortSignal,
 ): Promise<PaginatedResult<ApiCredential>> {
   const url = providerId && providerId !== 'all' ? `/providers/${providerId}/credentials` : '/credentials';
-  const response = await api.get<PaginatedResult<ApiCredential>>(url, { params });
+  const response = await api.get<PaginatedResult<ApiCredential>>(url, { params, signal });
   return response.data;
 }
 

@@ -14,8 +14,20 @@ import { Button } from '@/components/atoms/Button';
 import { useTenantStore } from '@/stores/useTenantStore';
 import { useOrganizationsQuery } from '@/hooks/queries/useOrganizationsQuery';
 import { useWorkspacesQuery, useProjectsQuery } from '@/hooks/queries/useWorkspacesQuery';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { apiGetUserPermissions, ApiUserPermissionsResponse } from '@/lib/api/auth';
+
+const PRESERVED_GLOBAL_QUERY_ROOTS = new Set(['organizations', 'feature-flags']);
+
+export function purgeTenantQueries(queryClient: QueryClient) {
+  const isTenantScoped = (query: { queryKey: readonly unknown[] }) => {
+    const root = typeof query.queryKey[0] === 'string' ? query.queryKey[0] : '';
+    return !PRESERVED_GLOBAL_QUERY_ROOTS.has(root);
+  };
+  void queryClient.cancelQueries({ predicate: isTenantScoped });
+  queryClient.removeQueries({ predicate: isTenantScoped });
+  void queryClient.invalidateQueries({ queryKey: ['user-permissions'] });
+}
 
 export function TenantSelector() {
   const queryClient = useQueryClient();
@@ -35,8 +47,8 @@ export function TenantSelector() {
     queryFn: apiGetUserPermissions,
     staleTime: 60 * 1000,
   });
-  const { data: workspaces = [] } = useWorkspacesQuery(selectedOrgId);
-  const { data: projects = [] } = useProjectsQuery(selectedWorkspaceId);
+  const { data: workspaces = [], isSuccess: isWorkspacesLoaded } = useWorkspacesQuery(selectedOrgId);
+  const { data: projects = [], isSuccess: isProjectsLoaded } = useProjectsQuery(selectedWorkspaceId);
 
   const isLoading = isLoadingOrgs || isLoadingPerms;
 
@@ -58,33 +70,33 @@ export function TenantSelector() {
 
   // Clear stale workspace/project IDs when they no longer exist under the active org/workspace
   useEffect(() => {
-    if (selectedWorkspaceId && workspaces.length > 0 && !workspaces.some((w) => w.id === selectedWorkspaceId)) {
+    if (selectedWorkspaceId && isWorkspacesLoaded && !workspaces.some((w) => w.id === selectedWorkspaceId)) {
       setSelectedWorkspaceId(null);
     }
-  }, [selectedWorkspaceId, workspaces, setSelectedWorkspaceId]);
+  }, [selectedWorkspaceId, isWorkspacesLoaded, workspaces, setSelectedWorkspaceId]);
 
   useEffect(() => {
-    if (selectedProjectId && projects.length > 0 && !projects.some((p) => p.id === selectedProjectId)) {
+    if (selectedProjectId && isProjectsLoaded && !projects.some((p) => p.id === selectedProjectId)) {
       setSelectedProjectId(null);
     }
-  }, [selectedProjectId, projects, setSelectedProjectId]);
+  }, [selectedProjectId, isProjectsLoaded, projects, setSelectedProjectId]);
 
   const handleSelectOrg = (orgId: string, orgName: string) => {
     if (orgId === selectedOrgId) return;
     setSelectedOrg(orgId, orgName);
-    queryClient.invalidateQueries();
+    purgeTenantQueries(queryClient);
   };
 
   const handleSelectWorkspace = (workspaceId: string | null) => {
     if (workspaceId === selectedWorkspaceId) return;
     setSelectedWorkspaceId(workspaceId);
-    queryClient.invalidateQueries();
+    purgeTenantQueries(queryClient);
   };
 
   const handleSelectProject = (projectId: string | null) => {
     if (projectId === selectedProjectId) return;
     setSelectedProjectId(projectId);
-    queryClient.invalidateQueries();
+    purgeTenantQueries(queryClient);
   };
 
   const currentDisplayName = selectedOrgName || orgs?.find((o) => o.id === selectedOrgId)?.name || null;
@@ -146,10 +158,15 @@ export function TenantSelector() {
       {workspaces.length > 0 && (
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="outline" size="sm" className="hidden lg:inline-flex h-8 gap-1.5 rounded-lg border-border/80 bg-card px-2.5 text-xs font-medium hover:bg-accent">
-              <Layers className="h-3.5 w-3.5 text-prism-cyan" />
-              <span className="max-w-[120px] truncate">{activeWorkspace ? activeWorkspace.name : 'All Workspaces'}</span>
-              <ChevronDown className="h-3 w-3 opacity-60" />
+            <Button
+              variant="outline"
+              size="sm"
+              aria-label="Select Workspace"
+              className="inline-flex h-8 gap-1.5 rounded-lg border-border/80 bg-card px-2 sm:px-2.5 text-xs font-medium hover:bg-accent"
+            >
+              <Layers className="h-3.5 w-3.5 text-prism-cyan shrink-0" />
+              <span className="max-w-[88px] sm:max-w-[120px] truncate">{activeWorkspace ? activeWorkspace.name : 'All Workspaces'}</span>
+              <ChevronDown className="h-3 w-3 opacity-60 shrink-0" />
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start" className="w-56">
@@ -181,10 +198,15 @@ export function TenantSelector() {
       {selectedWorkspaceId && projects.length > 0 && (
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="outline" size="sm" className="hidden xl:inline-flex h-8 gap-1.5 rounded-lg border-border/80 bg-card px-2.5 text-xs font-medium hover:bg-accent">
-              <FolderKanban className="h-3.5 w-3.5 text-emerald-500" />
-              <span className="max-w-[120px] truncate">{activeProject ? activeProject.name : 'All Projects'}</span>
-              <ChevronDown className="h-3 w-3 opacity-60" />
+            <Button
+              variant="outline"
+              size="sm"
+              aria-label="Select Project"
+              className="inline-flex h-8 gap-1.5 rounded-lg border-border/80 bg-card px-2 sm:px-2.5 text-xs font-medium hover:bg-accent"
+            >
+              <FolderKanban className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
+              <span className="max-w-[80px] sm:max-w-[120px] truncate">{activeProject ? activeProject.name : 'All Projects'}</span>
+              <ChevronDown className="h-3 w-3 opacity-60 shrink-0" />
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start" className="w-56">

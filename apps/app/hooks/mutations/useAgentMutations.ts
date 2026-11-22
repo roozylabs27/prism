@@ -1,5 +1,22 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { apiCreateAgent, apiUpdateAgent, apiDeleteAgent, ApiCreateAgentRequest } from '@/lib/api';
+import {
+  apiCreateAgent,
+  apiUpdateAgent,
+  apiDeleteAgent,
+  apiInstantiateAgentTemplate,
+  ApiCreateAgentRequest,
+} from '@/lib/api';
+
+export function useInstantiateAgentTemplateMutation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ templateId, name }: { templateId: string; name?: string }) =>
+      apiInstantiateAgentTemplate(templateId, name),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['agents'] });
+    },
+  });
+}
 
 export function useCreateAgentMutation() {
   const queryClient = useQueryClient();

@@ -1,6 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
 import { useQueryClient } from '@tanstack/react-query';
 import {
   Dialog,
@@ -20,6 +22,10 @@ import {
   apiCreateWorkspace,
   apiUpdateQuota,
 } from '@/lib/api';
+import {
+  clientOnboardingSchema,
+  type ClientOnboardingFormValues,
+} from '@/features/onboarding/schemas/client-onboarding.schema';
 import { getErrorMessage } from '@/types/ui';
 import { Check, Copy, Rocket } from 'lucide-react';
 import { toast } from 'sonner';
@@ -39,30 +45,49 @@ interface ProvisionedResult {
   rawKey: string;
 }
 
+interface PartialStepProgress {
+  clientName: string;
+  workspace?: { id: string; name: string };
+  project?: { id: string; name: string };
+}
+
+const DEFAULT_VALUES: ClientOnboardingFormValues = {
+  clientName: '',
+  projectName: 'Default Workflow',
+  monthlyLimitUsd: 200,
+  dailyLimitUsd: 10,
+  dailyRequestLimit: 2000,
+  rateLimitRpm: 120,
+};
+
 export function ClientOnboardingModal({
   open,
   onOpenChange,
   onCompleted,
 }: ClientOnboardingModalProps) {
   const queryClient = useQueryClient();
-  const [clientName, setClientName] = useState('');
-  const [projectName, setProjectName] = useState('Default Workflow');
-  const [monthlyLimitUsd, setMonthlyLimitUsd] = useState('200');
-  const [dailyLimitUsd, setDailyLimitUsd] = useState('10');
-  const [dailyRequestLimit, setDailyRequestLimit] = useState('2000');
-  const [rateLimitRpm, setRateLimitRpm] = useState('120');
-  const [submitting, setSubmitting] = useState(false);
   const [provisioned, setProvisioned] = useState<ProvisionedResult | null>(null);
   const [copiedKey, setCopiedKey] = useState(false);
   const [copiedSnippet, setCopiedSnippet] = useState(false);
+  // Tracks partially created resources so retrying after a mid-flow error reuses them instead of duplicating
+  const progressRef = useRef<PartialStepProgress | null>(null);
+
+  const {
+    register,
+    handleSubmit,
+    reset,
+    watch,
+    formState: { errors, isSubmitting },
+  } = useForm<ClientOnboardingFormValues>({
+    resolver: zodResolver(clientOnboardingSchema),
+    defaultValues: DEFAULT_VALUES,
+  });
+
+  const clientNameVal = watch('clientName');
 
   const resetForm = () => {
-    setClientName('');
-    setProjectName('Default Workflow');
-    setMonthlyLimitUsd('200');
-    setDailyLimitUsd('10');
-    setDailyRequestLimit('2000');
-    setRateLimitRpm('120');
+    reset(DEFAULT_VALUES);
+    progressRef.current = null;
     setProvisioned(null);
     setCopiedKey(false);
     setCopiedSnippet(false);
@@ -75,33 +100,36 @@ export function ClientOnboardingModal({
     onOpenChange(nextOpen);
   };
 
-  const handleProvision = async () => {
-    if (!clientName.trim()) {
-      toast.error('Client workspace name is required');
-      return;
-    }
-
-    const monthly = Math.max(0, Number(monthlyLimitUsd) || 0);
-    const daily = Math.max(0, Number(dailyLimitUsd) || 0);
-    const reqs = Math.max(0, Number(dailyRequestLimit) || 0);
-    const rpm = Math.max(1, Number(rateLimitRpm) || 120);
-
-    setSubmitting(true);
+  const onSubmit = async (values: ClientOnboardingFormValues) => {
     try {
-      const ws = await apiCreateWorkspace({ name: clientName.trim() });
-      const proj = await apiCreateProject(ws.id, {
-        name: projectName.trim() || 'Default Workflow',
-      });
+      if (!progressRef.current || progressRef.current.clientName !== values.clientName) {
+        progressRef.current = { clientName: values.clientName };
+      }
+      const progress = progressRef.current;
+
+      const ws =
+        progress.workspace ??
+        (await apiCreateWorkspace({ name: values.clientName }));
+      progress.workspace = { id: ws.id, name: ws.name };
+
+      const proj =
+        progress.project ??
+        (await apiCreateProject(ws.id, {
+          name: values.projectName || 'Default Workflow',
+        }));
+      progress.project = { id: proj.id, name: proj.name };
+
       await apiUpdateQuota('workspace', ws.id, {
-        monthlySpendLimitUsd: monthly,
-        dailySpendLimitUsd: daily,
-        dailyRequestLimit: reqs,
+        monthlySpendLimitUsd: values.monthlyLimitUsd,
+        dailySpendLimitUsd: values.dailyLimitUsd,
+        dailyRequestLimit: values.dailyRequestLimit,
       });
+
       const createdKey = await apiCreateGatewayKey({
         name: `${ws.name} - ${proj.name}`,
         workspaceId: ws.id,
         projectId: proj.id,
-        rateLimit: rpm,
+        rateLimit: values.rateLimitRpm,
       });
 
       await Promise.all([
@@ -112,6 +140,7 @@ export function ClientOnboardingModal({
         queryClient.invalidateQueries({ queryKey: ['pilot-outcomes'] }),
       ]);
 
+      progressRef.current = null;
       setProvisioned({
         workspaceId: ws.id,
         workspaceName: ws.name,
@@ -128,8 +157,6 @@ export function ClientOnboardingModal({
       toast.success(`Client "${ws.name}" provisioned with pinned key ${createdKey.keyPrefix}`);
     } catch (err) {
       toast.error(`Onboarding failed: ${getErrorMessage(err)}`);
-    } finally {
-      setSubmitting(false);
     }
   };
 
@@ -180,27 +207,31 @@ export function ClientOnboardingModal({
         </DialogHeader>
 
         {!provisioned ? (
-          <div className="space-y-3 py-1">
+          <form id="client-onboarding-form" onSubmit={handleSubmit(onSubmit)} className="space-y-3 py-1">
             <div className="grid gap-3 sm:grid-cols-2">
               <div className="space-y-1">
                 <Label className="text-xs" htmlFor="onboard-client-name">Client Workspace Name</Label>
                 <Input
                   id="onboard-client-name"
                   placeholder="Acme Corp"
-                  value={clientName}
-                  onChange={(e) => setClientName(e.target.value)}
+                  {...register('clientName')}
                   className="h-8 text-xs"
                 />
+                {errors.clientName && (
+                  <p className="text-[11px] text-destructive">{errors.clientName.message}</p>
+                )}
               </div>
               <div className="space-y-1">
                 <Label className="text-xs" htmlFor="onboard-project-name">Initial Project Name</Label>
                 <Input
                   id="onboard-project-name"
                   placeholder="Default Workflow"
-                  value={projectName}
-                  onChange={(e) => setProjectName(e.target.value)}
+                  {...register('projectName')}
                   className="h-8 text-xs"
                 />
+                {errors.projectName && (
+                  <p className="text-[11px] text-destructive">{errors.projectName.message}</p>
+                )}
               </div>
             </div>
 
@@ -212,10 +243,12 @@ export function ClientOnboardingModal({
                   type="number"
                   min={0}
                   step="1"
-                  value={monthlyLimitUsd}
-                  onChange={(e) => setMonthlyLimitUsd(e.target.value)}
+                  {...register('monthlyLimitUsd')}
                   className="h-8 text-xs font-mono"
                 />
+                {errors.monthlyLimitUsd && (
+                  <p className="text-[11px] text-destructive">{errors.monthlyLimitUsd.message}</p>
+                )}
               </div>
               <div className="space-y-1">
                 <Label className="text-xs" htmlFor="onboard-daily-usd">Daily Spend Cap (USD)</Label>
@@ -224,10 +257,12 @@ export function ClientOnboardingModal({
                   type="number"
                   min={0}
                   step="0.5"
-                  value={dailyLimitUsd}
-                  onChange={(e) => setDailyLimitUsd(e.target.value)}
+                  {...register('dailyLimitUsd')}
                   className="h-8 text-xs font-mono"
                 />
+                {errors.dailyLimitUsd && (
+                  <p className="text-[11px] text-destructive">{errors.dailyLimitUsd.message}</p>
+                )}
               </div>
             </div>
 
@@ -238,10 +273,12 @@ export function ClientOnboardingModal({
                   id="onboard-daily-reqs"
                   type="number"
                   min={0}
-                  value={dailyRequestLimit}
-                  onChange={(e) => setDailyRequestLimit(e.target.value)}
+                  {...register('dailyRequestLimit')}
                   className="h-8 text-xs font-mono"
                 />
+                {errors.dailyRequestLimit && (
+                  <p className="text-[11px] text-destructive">{errors.dailyRequestLimit.message}</p>
+                )}
               </div>
               <div className="space-y-1">
                 <Label className="text-xs" htmlFor="onboard-rpm">Key Rate Limit (RPM)</Label>
@@ -249,13 +286,15 @@ export function ClientOnboardingModal({
                   id="onboard-rpm"
                   type="number"
                   min={1}
-                  value={rateLimitRpm}
-                  onChange={(e) => setRateLimitRpm(e.target.value)}
+                  {...register('rateLimitRpm')}
                   className="h-8 text-xs font-mono"
                 />
+                {errors.rateLimitRpm && (
+                  <p className="text-[11px] text-destructive">{errors.rateLimitRpm.message}</p>
+                )}
               </div>
             </div>
-          </div>
+          </form>
         ) : (
           <div className="space-y-3 py-1 text-xs">
             <div className="rounded-md border border-emerald-500/30 bg-emerald-500/5 p-3 space-y-1.5">
@@ -315,13 +354,13 @@ export function ClientOnboardingModal({
                 Cancel
               </Button>
               <Button
-                type="button"
+                type="submit"
+                form="client-onboarding-form"
                 variant="prismViolet"
                 size="sm"
-                disabled={submitting || !clientName.trim()}
-                onClick={handleProvision}
+                disabled={isSubmitting || !clientNameVal?.trim()}
               >
-                {submitting ? 'Provisioning...' : 'Provision Client'}
+                {isSubmitting ? 'Provisioning...' : 'Provision Client'}
               </Button>
             </>
           ) : (

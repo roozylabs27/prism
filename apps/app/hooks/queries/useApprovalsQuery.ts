@@ -1,37 +1,16 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import {
-  apiApproveRequest,
-  apiDenyRequest,
-  apiGetApprovals,
-  type ApiApprovalDecisionReq,
-} from '@/lib/api';
+import { useQuery } from '@tanstack/react-query';
+import { apiGetApprovals } from '@/lib/api';
+import { useTenantScopeKey } from './useTenantScopeKey';
+export {
+  useApproveRequestMutation,
+  useDenyRequestMutation,
+} from '@/hooks/mutations/useApprovalMutations';
 
 export function useApprovalsQuery(status = 'pending') {
+  const scope = useTenantScopeKey();
   return useQuery({
-    queryKey: ['approvals', status],
+    queryKey: ['approvals', ...scope, status],
     queryFn: () => apiGetApprovals(status),
     refetchInterval: 15_000,
-  });
-}
-
-export function useApproveRequestMutation() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: ({ id, note }: { id: string; note?: string }) =>
-      apiApproveRequest(id, { note } as ApiApprovalDecisionReq),
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: ['approvals'] });
-    },
-  });
-}
-
-export function useDenyRequestMutation() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: ({ id, note }: { id: string; note?: string }) =>
-      apiDenyRequest(id, { note } as ApiApprovalDecisionReq),
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: ['approvals'] });
-    },
   });
 }

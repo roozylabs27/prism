@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { apiGetTools, apiGetTool } from '@/lib/api';
+import { useTenantScopeKey } from './useTenantScopeKey';
 export {
   useCreateToolMutation as useCreateTool,
   useUpdateToolMutation as useUpdateTool,
@@ -8,15 +9,17 @@ export {
 } from '@/hooks/mutations/useToolMutations';
 
 export function useToolsQuery() {
+  const scope = useTenantScopeKey();
   return useQuery({
-    queryKey: ['tools'],
+    queryKey: ['tools', ...scope],
     queryFn: apiGetTools,
   });
 }
 
 export function useToolDetailQuery(toolId?: string) {
+  const scope = useTenantScopeKey();
   return useQuery({
-    queryKey: ['tools', toolId],
+    queryKey: ['tools', ...scope, toolId],
     queryFn: () => apiGetTool(toolId!),
     enabled: Boolean(toolId),
   });

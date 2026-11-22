@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { apiGetResource, apiGetResources } from '@/lib/api';
+import { useTenantScopeKey } from './useTenantScopeKey';
 export {
   useCreateResourceMutation as useCreateResource,
   useUpdateResourceMutation as useUpdateResource,
@@ -8,15 +9,17 @@ export {
 } from '@/hooks/mutations/useResourceMutations';
 
 export function useResourcesQuery() {
+  const scope = useTenantScopeKey();
   return useQuery({
-    queryKey: ['resources'],
+    queryKey: ['resources', ...scope],
     queryFn: apiGetResources,
   });
 }
 
 export function useResourceDetailQuery(resourceId?: string) {
+  const scope = useTenantScopeKey();
   return useQuery({
-    queryKey: ['resources', resourceId],
+    queryKey: ['resources', ...scope, resourceId],
     queryFn: () => apiGetResource(resourceId!),
     enabled: Boolean(resourceId),
   });

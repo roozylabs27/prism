@@ -1,49 +1,47 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import {
   apiGetAgents,
   apiGetAgent,
   apiGetAgentStats,
   apiGetAgentTemplates,
-  apiInstantiateAgentTemplate,
 } from '@/lib/api';
-export { useCreateAgentMutation as useCreateAgent, useUpdateAgentMutation as useUpdateAgent, useDeleteAgentMutation as useDeleteAgent } from '@/hooks/mutations/useAgentMutations';
+import { useTenantScopeKey } from './useTenantScopeKey';
+export {
+  useCreateAgentMutation as useCreateAgent,
+  useUpdateAgentMutation as useUpdateAgent,
+  useDeleteAgentMutation as useDeleteAgent,
+  useInstantiateAgentTemplateMutation,
+} from '@/hooks/mutations/useAgentMutations';
 
 export function useAgentsQuery() {
+  const scope = useTenantScopeKey();
   return useQuery({
-    queryKey: ['agents'],
+    queryKey: ['agents', ...scope],
     queryFn: apiGetAgents,
   });
 }
 
 export function useAgentTemplatesQuery() {
+  const scope = useTenantScopeKey();
   return useQuery({
-    queryKey: ['agent-templates'],
+    queryKey: ['agent-templates', ...scope],
     queryFn: apiGetAgentTemplates,
   });
 }
 
-export function useInstantiateAgentTemplateMutation() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: ({ templateId, name }: { templateId: string; name?: string }) =>
-      apiInstantiateAgentTemplate(templateId, name),
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: ['agents'] });
-    },
-  });
-}
-
 export function useAgentDetailQuery(id: string | null | undefined) {
+  const scope = useTenantScopeKey();
   return useQuery({
-    queryKey: ['agent', id],
+    queryKey: ['agent', ...scope, id],
     queryFn: () => (id ? apiGetAgent(id) : Promise.reject('No agent id')),
     enabled: Boolean(id),
   });
 }
 
 export function useAgentStatsQuery(id: string | null | undefined, days = 30) {
+  const scope = useTenantScopeKey();
   return useQuery({
-    queryKey: ['agent-stats', id, days],
+    queryKey: ['agent-stats', ...scope, id, days],
     queryFn: () => (id ? apiGetAgentStats(id, days) : Promise.reject('No agent id')),
     enabled: Boolean(id),
   });

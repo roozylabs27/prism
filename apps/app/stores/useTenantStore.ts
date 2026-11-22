@@ -46,6 +46,15 @@ const getInitialItem = (key: string): string | null => {
   return storage ? storage.getItem(key) : null;
 };
 
+function syncActiveOrgCookie(orgId: string | null) {
+  if (typeof document === 'undefined') return;
+  if (orgId) {
+    document.cookie = `prism_active_org=${encodeURIComponent(orgId)}; Path=/; Max-Age=2592000; SameSite=Lax`;
+  } else {
+    document.cookie = 'prism_active_org=; Path=/; Max-Age=0; SameSite=Lax';
+  }
+}
+
 export const useTenantStore = create<TenantState>()(
   persist(
     (set, get) => ({
@@ -56,6 +65,7 @@ export const useTenantStore = create<TenantState>()(
       setSelectedOrg: (orgId: string | null, orgName: string | null = null) => {
         const storage = getSafeStorage();
         const orgChanged = orgId !== get().selectedOrgId;
+        syncActiveOrgCookie(orgId);
         if (storage) {
           if (orgId) {
             storage.setItem('org_id', orgId);
@@ -105,6 +115,7 @@ export const useTenantStore = create<TenantState>()(
       },
       resetTenant: () => {
         const storage = getSafeStorage();
+        syncActiveOrgCookie(null);
         if (storage) {
           storage.removeItem('org_id');
           storage.removeItem('workspace_id');

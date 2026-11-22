@@ -25,6 +25,8 @@ export interface ApiProviderHealth {
   type: string;
   status: 'healthy' | 'degraded' | 'down';
   credCount: number;
+  health_score?: number;
+  healthScore?: number;
 }
 
 export interface ApiActiveStreams {

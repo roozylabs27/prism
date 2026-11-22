@@ -3,8 +3,11 @@ import { ApiGatewayKey } from './types/gateway-key';
 import { PageParams, PaginatedResult } from './types/common';
 import { fetchAllPages } from './pagination';
 
-export async function apiGetGatewayKeys(params?: PageParams): Promise<PaginatedResult<ApiGatewayKey>> {
-  const response = await api.get<PaginatedResult<ApiGatewayKey>>('/gateway-keys', { params });
+export async function apiGetGatewayKeys(
+  params?: PageParams,
+  signal?: AbortSignal,
+): Promise<PaginatedResult<ApiGatewayKey>> {
+  const response = await api.get<PaginatedResult<ApiGatewayKey>>('/gateway-keys', { params, signal });
   return response.data;
 }
 

@@ -124,4 +124,64 @@ describe('SSEProvider (HttpOnly session support)', () => {
     expect(MockEventSource.instances[0].closed).toBe(true);
     expect(latestConnected).toBe(false);
   });
+
+  it('coalesces burst events within 250ms and maps approval, budget, and anomaly events', async () => {
+    mockUseAuth.mockReturnValue({ isAuthenticated: true });
+    const qc = new QueryClient();
+    const invalidateSpy = vi.spyOn(qc, 'invalidateQueries');
+
+    render(
+      <QueryClientProvider client={qc}>
+        <SSEProvider>
+          <div />
+        </SSEProvider>
+      </QueryClientProvider>
+    );
+
+    await act(async () => {
+      vi.advanceTimersByTime(10);
+    });
+    const es = MockEventSource.instances[0];
+    expect(es).toBeDefined();
+
+    // Emit a burst of 5 request_log_created + 1 APPROVAL_REQUIRED + 1 budget_alert + 1 cost_anomaly
+    await act(async () => {
+      for (let i = 0; i < 5; i++) {
+        es.onmessage?.(
+          new MessageEvent('message', {
+            data: JSON.stringify({ id: `evt-${i}`, type: 'request_log_created', data: {} }),
+          })
+        );
+      }
+      es.onmessage?.(
+        new MessageEvent('message', {
+          data: JSON.stringify({ id: 'evt-app', type: 'APPROVAL_REQUIRED', data: {} }),
+        })
+      );
+      es.onmessage?.(
+        new MessageEvent('message', {
+          data: JSON.stringify({ id: 'evt-bud', type: 'budget_alert', data: {} }),
+        })
+      );
+      es.onmessage?.(
+        new MessageEvent('message', {
+          data: JSON.stringify({ id: 'evt-anom', type: 'cost_anomaly', data: {} }),
+        })
+      );
+    });
+
+    // Before the 250ms coalesce window expires, no invalidations have fired yet
+    expect(invalidateSpy).not.toHaveBeenCalled();
+
+    await act(async () => {
+      vi.advanceTimersByTime(260);
+    });
+
+    const invalidatedKeys = invalidateSpy.mock.calls.map((c) => (c[0] as { queryKey: string[] }).queryKey[0]);
+    // Each unique queryKey is invalidated once despite 5 request_log_created events
+    expect(invalidatedKeys.filter((k) => k === 'request-logs')).toHaveLength(1);
+    expect(invalidatedKeys).toContain('approvals');
+    expect(invalidatedKeys).toContain('budget-alerts');
+    expect(invalidatedKeys).toContain('cost-anomalies');
+  });
 });

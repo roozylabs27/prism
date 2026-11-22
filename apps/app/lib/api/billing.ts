@@ -17,7 +17,10 @@ export async function apiGetActiveSubscription(): Promise<ApiSubscriptionStatus>
 }
 
 export async function apiUpgradeSubscription(planId: string): Promise<ApiSubscriptionStatus> {
-  const response = await api.post<ApiSubscriptionStatus>('/billing/subscription', { planId });
+  const response = await api.post<ApiSubscriptionStatus>('/billing/subscription/upgrade', {
+    planSlug: planId,
+    planId,
+  });
   return response.data;
 }
 
