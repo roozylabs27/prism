@@ -11,7 +11,7 @@ This guide will walk you through setting up Prism, acquiring API keys, and makin
 Prism sits between your client applications, AI agents, and upstream LLM providers (OpenAI, Anthropic, Google Gemini, OpenCode, etc.):
 
 ```text
-[Your App / Agent] ──(Bearer prism_sk_*)──> [Prism Gateway] ──(Smart Router)──> [Upstream Provider]
+[Your App / Agent] ──(Bearer prism_sk_YOUR_KEY)──> [Prism Gateway] ──(Smart Router)──> [Upstream Provider]
 ```
 
 ### Base Endpoints
@@ -88,7 +88,7 @@ All core services (`postgres`, `redis`, `migrator` completed cleanly, `api`, `ap
 
 ```bash
 curl -X POST http://localhost:8080/v1/chat/completions \
-  -H "Authorization: Bearer prism_sk_your_key" \
+  -H "Authorization: Bearer prism_sk_YOUR_KEY" \
   -H "Content-Type: application/json" \
   -d '{
     "model": "prism-auto",
@@ -164,7 +164,7 @@ pnpm add -g @roozylabs/prism-cli
 
 ```bash
 # 1. Login & save config
-prism login --key prism_sk_12345 --url http://localhost:8080
+prism login --key prism_sk_YOUR_KEY --url http://localhost:8080
 
 # 2. Check Gateway Health
 prism health

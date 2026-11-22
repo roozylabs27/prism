@@ -1,13 +1,15 @@
 ---
 import Section from '../ui/Section.astro';
+import Icon from '../ui/Icon.astro';
 import { capabilities, agentPolicyExample } from '../../data/content';
+import { links } from '../../data/site';
 ---
 
 <Section
 	id="capabilities"
 	label="02 · Capabilities"
 	title="Routing, isolation, and visibility in one control plane."
-	intro="Built for engineering teams and agencies running multiple providers, workspaces, and autonomous agents without scattering raw keys."
+	intro="Built for engineering teams and agencies operating multiple providers, workspaces, and autonomous agents without scattering raw keys."
 	layout="stacked"
 	class="bg-raised/40"
 >
@@ -26,11 +28,20 @@ import { capabilities, agentPolicyExample } from '../../data/content';
 				</div>
 
 				<div class="lg:col-span-8 min-w-0 space-y-6">
-					<div class="grid grid-cols-1 gap-6 sm:grid-cols-2">
-						{pillar.points.map((point) => (
-							<p class="text-muted text-sm sm:text-base leading-relaxed">{point}</p>
-						))}
-					</div>
+					<dl class="divide-y divide-rule border-t border-rule lg:border-t-0">
+						<div class="py-3.5 lg:pt-0 grid grid-cols-1 gap-1.5 sm:grid-cols-[11rem_minmax(0,1fr)] sm:gap-6">
+							<dt class="font-mono text-xs uppercase tracking-wider text-muted pt-0.5">What Prism controls</dt>
+							<dd class="text-sm sm:text-base text-ink/90 leading-relaxed">{pillar.controls}</dd>
+						</div>
+						<div class="py-3.5 grid grid-cols-1 gap-1.5 sm:grid-cols-[11rem_minmax(0,1fr)] sm:gap-6">
+							<dt class="font-mono text-xs uppercase tracking-wider text-muted pt-0.5">How it behaves</dt>
+							<dd class="text-sm sm:text-base text-muted leading-relaxed">{pillar.behavior}</dd>
+						</div>
+						<div class="py-3.5 pb-0 grid grid-cols-1 gap-1.5 sm:grid-cols-[11rem_minmax(0,1fr)] sm:gap-6">
+							<dt class="font-mono text-xs uppercase tracking-wider text-muted pt-0.5">Boundary</dt>
+							<dd class="text-sm sm:text-base text-muted leading-relaxed">{pillar.boundary}</dd>
+						</div>
+					</dl>
 
 					{pillar.hasAgentExample && (
 						<figure class="border border-rule rounded-sm bg-paper">
@@ -45,4 +56,12 @@ import { capabilities, agentPolicyExample } from '../../data/content';
 			</div>
 		))}
 	</div>
+
+	<p class="mt-6 text-sm text-muted">
+		Full configuration options, quota scopes, and audit verification details are in the{' '}
+		<a href={links.docs} target="_blank" rel="noopener noreferrer" class="link inline-flex items-center gap-1">
+			documentation
+			<Icon name="external" class="h-3.5 w-3.5" />
+		</a>.
+	</p>
 </Section>

@@ -48,7 +48,9 @@ export interface CapabilityPillar {
   index: string;
   title: string;
   summary: string;
-  points: string[];
+  controls: string;
+  behavior: string;
+  boundary: string;
   meta: string[];
   hasAgentExample?: boolean;
 }
@@ -58,35 +60,41 @@ export const capabilities: CapabilityPillar[] = [
     index: '01',
     title: 'Routing & failover',
     summary:
-      'Control how requests pick models and recover from upstream provider errors without scattering retry loops across apps.',
-    points: [
-      'Pin wildcard model patterns (such as claude-* or gpt-4o*) to specific providers via routing rules, or send model: "prism-auto" to score candidates by task, cost, latency, and credential health.',
-      'Override policy per request with X-Routing-Policy (unknown or disabled policies return 404). On 429 or 5xx before the first token, Prism places the credential in a Redis Retry-After cooldown and retries the next candidate, recording spend only for the final completed response.',
-    ],
-    meta: ['/api/routing-rules', 'model: "prism-auto"', 'X-Routing-Policy', 'Retry-After cooldown'],
+      'Choose which provider handles each request and recover from upstream rate limits without scattering retry loops across apps.',
+    controls:
+      'Wildcard routing rules (such as claude-* or gpt-4o*) pinned to specific providers, or model: "prism-auto" scoring candidates by task, cost, latency, and health.',
+    behavior:
+      'Omitting X-Routing-Policy uses the built-in balanced policy; passing a named policy selects an owner-scoped saved policy (or returns 404). On 429 or 5xx before the first token, Prism places the credential in a Redis Retry-After cooldown and tries the next candidate.',
+    boundary:
+      "Streaming failover stops once the first SSE token is flushed; mid-stream upstream failures emit stream_error instead of restarting. Failed attempts record zero spend in Prism's ledger, which does not change upstream provider billing.",
+    meta: ['/api/routing-rules', 'model: "prism-auto"', 'Retry-After cooldown'],
   },
   {
     index: '02',
     title: 'Governance & isolation',
     summary:
-      'Separate workspaces, keys, spend limits, and tool permissions across client accounts or internal teams.',
-    points: [
-      'Isolate traffic into organizations, workspaces, and projects with role-based member invitations. Upstream keys stay encrypted with AES-256-GCM while callers use prism_sk_* keys that drop from the lookup cache immediately upon revocation.',
-      'Set daily and monthly spend, request, and concurrent stream quotas at org, workspace, and project scopes, paired with org budgets and per-agent allowlists where !deny rules always override * wildcards.',
-    ],
-    meta: ['AES-256-GCM vault', 'prism_sk_* keys', 'Quotas & Budgets', '!deny > *'],
+      'Separate client workspaces, upstream credentials, spend caps, and agent permissions from one control plane.',
+    controls:
+      'Organizations, workspaces, and projects with role-based member invites; encrypted upstream provider credentials (AES-256-GCM); and revocable prism_sk_* caller keys.',
+    behavior:
+      'Daily and monthly spend, request, and concurrent-stream quotas apply per org, workspace, or project alongside org-level budgets. Agent policies restrict models, MCP servers, and tools, with !deny rules overriding * wildcards.',
+    boundary:
+      'Revoked keys drop from the lookup cache immediately, while budget reservations are scoped at the organization level in Redis. Runtime PostgreSQL RLS requires running the API under the non-superuser prism_app role.',
+    meta: ['AES-256-GCM vault', 'Quotas & Budgets', '!deny > *'],
     hasAgentExample: true,
   },
   {
     index: '03',
     title: 'Visibility & security',
     summary:
-      'Trace every request across providers, export usage without spreadsheets, and keep production secrets fail-closed.',
-    points: [
-      'Responses return X-Request-ID, X-Prism-Model, and X-Prism-Provider (plus X-Prism-Routing-Policy and non-stream X-Prism-Failovers). Export per-workspace usage, spend, and policy denials as CSV or JSON.',
-      'Structured JSON logs redact secrets, Prometheus /metrics is guarded by METRICS_TOKEN, AI audit trails support HMAC verification, admin changes are logged, and REDIS_FAIL_CLOSED refuses traffic outside development when Redis is down.',
-    ],
-    meta: ['X-Request-ID', '/metrics', 'CSV / JSON export', 'HMAC audit trail', 'SSRF dial guard'],
+      'Trace routed requests across providers, export workspace usage without manual spreadsheets, and fail closed on missing runtime state.',
+    controls:
+      'Per-request correlation and routing headers, structured JSON access logs with secret redaction, admin action logs, and HMAC-verifiable AI audit trails.',
+    behavior:
+      'Responses return X-Request-ID, X-Prism-Model, and X-Prism-Provider (plus non-stream X-Prism-Failovers). Per-workspace usage, spend, and policy denials export as CSV or JSON; Prometheus /metrics is bearer-guarded.',
+    boundary:
+      'Outside development, /metrics returns 404 until METRICS_TOKEN is set, and REDIS_FAIL_CLOSED refuses gateway traffic if Redis is unavailable. Paid hosted billing tiers remain disabled behind a feature flag.',
+    meta: ['X-Request-ID', 'CSV / JSON export', 'HMAC audit trail'],
   },
 ];
 

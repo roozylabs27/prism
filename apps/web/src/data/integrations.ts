@@ -20,7 +20,7 @@ export const integrations: IntegrationExample[] = [
 
 const prism = new OpenAI({
   baseURL: "${base}/v1",
-  apiKey: process.env.PRISM_API_KEY ?? "YOUR_PRISM_API_KEY",
+  apiKey: process.env.PRISM_API_KEY ?? "prism_sk_YOUR_KEY",
   defaultHeaders: {
     "X-Prism-Agent-ID": "support-bot-acme", // optional: registered agent
   },
@@ -39,7 +39,7 @@ console.log(completion.choices[0]?.message?.content);`,
     label: 'cURL',
     note: 'Direct request to /v1/chat/completions using the built-in balanced default policy. Pass X-Routing-Policy only after creating a custom policy.',
     code: `curl -i ${base}/v1/chat/completions \\
-  -H "Authorization: Bearer YOUR_PRISM_API_KEY" \\
+  -H "Authorization: Bearer prism_sk_YOUR_KEY" \\
   -H "Content-Type: application/json" \\
   -d '{
     "model": "prism-auto",
@@ -53,7 +53,7 @@ console.log(completion.choices[0]?.message?.content);`,
     label: 'MCP (Claude Code)',
     note: 'Registers Prism as a governed HTTP MCP server at /v1/mcp (Anthropic /v1/messages endpoint also exists in apps/api as experimental for Claude Code inference).',
     code: `claude mcp add --transport http prism ${base}/v1/mcp \\
-  --header "Authorization: Bearer YOUR_PRISM_API_KEY" \\
+  --header "Authorization: Bearer prism_sk_YOUR_KEY" \\
   --header "X-Prism-Agent-ID: claude-code"`,
     expectedResponse:
       'JSON-RPC 2.0 tools/list returns only tools permitted for agent claude-code plus delegate_ai_task (-32001 on denial).',
