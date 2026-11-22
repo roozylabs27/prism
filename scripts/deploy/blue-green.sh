@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # Blue/green deploy of one Prism component on the VPS.
 #
-#   scripts/deploy/blue-green.sh <api|app|web> <image-tag>   deploy that tag
-#   scripts/deploy/blue-green.sh <api|app|web> --rollback    switch back to the
-#                                                           previous colour
+#   scripts/deploy/blue-green.sh <api|console|app|web> <image-tag>   deploy that tag
+#   scripts/deploy/blue-green.sh <api|console|app|web> --rollback    switch back to the
+#                                                                   previous colour
 #
 # Run from the directory holding docker-compose.yml. The new colour is
 # started next to the live one, checked, and only then does nginx switch to
@@ -14,7 +14,7 @@ set -euo pipefail
 component="${1:-}"
 arg="${2:-}"
 if [[ -z "$component" || -z "$arg" ]]; then
-  echo "usage: $0 <api|app|web> <image-tag|--rollback>" >&2
+  echo "usage: $0 <api|console|app|web> <image-tag|--rollback>" >&2
   exit 2
 fi
 
@@ -22,16 +22,19 @@ case "$component" in
   api)
     blue_svc=api blue_port=8080 green_port=8085
     tag_var=API_IMAGE_TAG image=ghcr.io/roozylabs/prism-api
+    container_prefix=prism-api state_key=api
     health_path=/ready health_codes='^200$'
     upstream=prism_api_backend ;;
-  app)
+  app|console)
     blue_svc=app blue_port=3000 green_port=3005
-    tag_var=APP_IMAGE_TAG image=ghcr.io/roozylabs/prism-app
+    tag_var=APP_IMAGE_TAG image=ghcr.io/roozylabs/prism-console
+    container_prefix=prism-console state_key=app
     health_path=/api/health health_codes='^(200|30[1278])$'
     upstream=prism_app_backend ;;
   web)
     blue_svc=web blue_port=3001 green_port=3006
     tag_var=WEB_IMAGE_TAG image=ghcr.io/roozylabs/prism-web
+    container_prefix=prism-web state_key=web
     health_path=/ health_codes='^(200|30[1278])$'
     upstream=prism_web_backend ;;
   *)
@@ -42,12 +45,12 @@ green_svc="${blue_svc}-green"
 
 state_dir="${DEPLOY_STATE_DIR:-.deploy}"
 nginx_conf_dir="${NGINX_CONF_DIR:-/etc/nginx/conf.d}"
-upstream_file="$nginx_conf_dir/upstream_${component}.conf"
+upstream_file="$nginx_conf_dir/upstream_${state_key}.conf"
 health_attempts="${HEALTH_ATTEMPTS:-30}"
 health_interval="${HEALTH_INTERVAL:-3}"
 mkdir -p "$state_dir"
 
-container_of() { if [[ "$1" == "$blue_svc" ]]; then echo "prism-$component"; else echo "prism-$component-green"; fi; }
+container_of() { if [[ "$1" == "$blue_svc" ]]; then echo "$container_prefix"; else echo "${container_prefix}-green"; fi; }
 port_of() { if [[ "$1" == "$blue_svc" ]]; then echo "$blue_port"; else echo "$green_port"; fi; }
 
 # The live colour is the one nginx points at; without an upstream file yet,
@@ -57,7 +60,7 @@ live_svc() {
     echo "$green_svc"
   elif [[ -f "$upstream_file" ]] && grep -q "127.0.0.1:$blue_port;" "$upstream_file"; then
     echo "$blue_svc"
-  elif grep -qx "prism-$component-green" <<< "$(docker ps --format '{{.Names}}')"; then
+  elif grep -qx "${container_prefix}-green" <<< "$(docker ps --format '{{.Names}}')"; then
     echo "$green_svc"
   else
     echo "$blue_svc"
@@ -121,8 +124,8 @@ switch_nginx() {
 # Removes this component's sha- images except the live and previous ones.
 prune_images() {
   local keep_current keep_previous
-  keep_current="$(cat "$state_dir/$component.tag" 2>/dev/null || true)"
-  keep_previous="$(cat "$state_dir/$component.previous" 2>/dev/null || true)"
+  keep_current="$(cat "$state_dir/$state_key.tag" 2>/dev/null || true)"
+  keep_previous="$(cat "$state_dir/$state_key.previous" 2>/dev/null || true)"
   local tags
   tags="$(docker images "$image" --format '{{.Tag}}' | grep '^sha-' || true)"
   for tag in $tags; do
@@ -150,10 +153,10 @@ if [[ "$arg" == "--rollback" ]]; then
   fi
   switch_nginx "$target" || { docker stop "$(container_of "$target")" > /dev/null || true; exit 1; }
   docker stop "$(container_of "$live")" > /dev/null
-  if [[ -f "$state_dir/$component.previous" ]]; then
-    current="$(cat "$state_dir/$component.tag" 2>/dev/null || true)"
-    mv "$state_dir/$component.previous" "$state_dir/$component.tag"
-    [[ -n "$current" ]] && echo "$current" > "$state_dir/$component.previous"
+  if [[ -f "$state_dir/$state_key.previous" ]]; then
+    current="$(cat "$state_dir/$state_key.tag" 2>/dev/null || true)"
+    mv "$state_dir/$state_key.previous" "$state_dir/$state_key.tag"
+    [[ -n "$current" ]] && echo "$current" > "$state_dir/$state_key.previous"
   fi
   echo "=== $component rolled back to $target ==="
   exit 0
@@ -194,10 +197,10 @@ if ! switch_nginx "$target"; then
   exit 1
 fi
 
-if [[ -f "$state_dir/$component.tag" ]]; then
-  cp "$state_dir/$component.tag" "$state_dir/$component.previous"
+if [[ -f "$state_dir/$state_key.tag" ]]; then
+  cp "$state_dir/$state_key.tag" "$state_dir/$state_key.previous"
 fi
-echo "$tag" > "$state_dir/$component.tag"
+echo "$tag" > "$state_dir/$state_key.tag"
 
 echo "stopping $live (kept for rollback)"
 docker compose --profile green stop "$live"

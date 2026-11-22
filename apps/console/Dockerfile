@@ -4,7 +4,10 @@ RUN apk add --no-cache libc6-compat
 WORKDIR /app
 RUN npm install -g pnpm@9
 COPY package.json pnpm-lock.yaml* ./
-RUN pnpm i
+RUN pnpm config set fetch-retries 5 && \
+    pnpm config set fetch-retry-maxtimeout 180000 && \
+    pnpm config set network-timeout 300000 && \
+    pnpm i --frozen-lockfile
 
 # Stage 2: Builder
 FROM node:20-alpine AS builder

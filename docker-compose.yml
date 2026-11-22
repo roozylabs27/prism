@@ -208,13 +208,13 @@ services:
 
   # Next.js Frontend Dashboard (Blue - Default)
   app:
-    image: ghcr.io/roozylabs/prism-app:${APP_IMAGE_TAG:-latest}
+    image: ghcr.io/roozylabs/prism-console:${APP_IMAGE_TAG:-latest}
     build:
       context: ./apps/console
       dockerfile: Dockerfile
       args:
         NEXT_PUBLIC_CLOUDFLARE_SITE_KEY: ${NEXT_PUBLIC_CLOUDFLARE_SITE_KEY:-}
-    container_name: prism-app
+    container_name: prism-console
     restart: unless-stopped
     deploy:
       resources:
@@ -250,13 +250,13 @@ services:
   # Next.js Frontend Dashboard (Green)
   app-green:
     profiles: ["green"]
-    image: ghcr.io/roozylabs/prism-app:${APP_IMAGE_TAG:-latest}
+    image: ghcr.io/roozylabs/prism-console:${APP_IMAGE_TAG:-latest}
     build:
       context: ./apps/console
       dockerfile: Dockerfile
       args:
         NEXT_PUBLIC_CLOUDFLARE_SITE_KEY: ${NEXT_PUBLIC_CLOUDFLARE_SITE_KEY:-}
-    container_name: prism-app-green
+    container_name: prism-console-green
     restart: unless-stopped
     deploy:
       resources:

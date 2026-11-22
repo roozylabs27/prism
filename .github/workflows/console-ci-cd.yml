@@ -182,14 +182,14 @@ jobs:
           NEXT_PUBLIC_BETTER_AUTH_URL: "http://127.0.0.1:3000"
         run: |
           pnpm build
-          nohup pnpm exec next start -H 127.0.0.1 -p 3000 > /tmp/prism-app.log 2>&1 &
+          nohup pnpm exec next start -H 127.0.0.1 -p 3000 > /tmp/prism-console.log 2>&1 &
           for i in $(seq 1 30); do
             if curl -sf http://127.0.0.1:3000/api/health; then
               exit 0
             fi
             sleep 1
           done
-          cat /tmp/prism-app.log
+          cat /tmp/prism-console.log
           exit 1
 
       - name: Run Playwright E2E tests
@@ -205,8 +205,8 @@ jobs:
         run: |
           echo "=== /tmp/prism-api.log ==="
           cat /tmp/prism-api.log || true
-          echo "=== /tmp/prism-app.log ==="
-          cat /tmp/prism-app.log || true
+          echo "=== /tmp/prism-console.log ==="
+          cat /tmp/prism-console.log || true
 
   build-and-push:
     name: Build & Push App Docker Image to GHCR
@@ -232,7 +232,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
         with:
-          images: ghcr.io/${{ github.repository_owner }}/prism-app
+          images: ghcr.io/${{ github.repository_owner }}/prism-console
           tags: |
             type=raw,value=latest
             type=sha,prefix=sha-

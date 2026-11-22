@@ -6,7 +6,7 @@ export async function GET() {
   return NextResponse.json(
     {
       status: 'ok',
-      service: 'prism-app',
+      service: 'prism-console',
     },
     { status: 200 }
   );

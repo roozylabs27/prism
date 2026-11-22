@@ -15,6 +15,13 @@ cat > "$bin/docker" <<'STUB'
 set -euo pipefail
 f="$FAKE"
 echo "docker $*" >> "$f/calls"
+container_for() {
+  case "$1" in
+    app) echo "prism-console" ;;
+    app-green) echo "prism-console-green" ;;
+    *) echo "prism-$1" ;;
+  esac
+}
 remove() { grep -vx "$1" "$f/running" > "$f/r.tmp" || true; mv "$f/r.tmp" "$f/running"; }
 case "$1" in
   ps) if [[ "${2:-}" == "-a" ]]; then cat "$f/running" "$f/stopped"; else cat "$f/running"; fi ;;
@@ -24,8 +31,8 @@ case "$1" in
     case "$1" in
       pull) [[ -e "$f/pull_fails" ]] && exit 1; true ;;
       run) echo "migrator ran with API_IMAGE_TAG=${API_IMAGE_TAG:-}" >> "$f/calls" ;;
-      up) svc="${@: -1}"; echo "prism-$svc" >> "$f/running"; echo "up $svc with ${API_IMAGE_TAG:-}${APP_IMAGE_TAG:-}" >> "$f/calls" ;;
-      stop) svc="$2"; remove "prism-$svc"; echo "prism-$svc" >> "$f/stopped" ;;
+      up) svc="${@: -1}"; echo "$(container_for "$svc")" >> "$f/running"; echo "up $svc with ${API_IMAGE_TAG:-}${APP_IMAGE_TAG:-}" >> "$f/calls" ;;
+      stop) svc="$2"; c="$(container_for "$svc")"; remove "$c"; echo "$c" >> "$f/stopped" ;;
     esac ;;
   start) echo "$2" >> "$f/running" ;;
   stop) remove "$2"; echo "$2" >> "$f/stopped" ;;
@@ -97,9 +104,12 @@ check "rollback restarts green and switches to it" '[[ "$(upstream)" == *"127.0.
 check "rollback pulls nothing" '! grep -q "compose pull\|compose up" "$fake/calls"'
 check "rollback swaps the tags" '[[ "$(cat "$DEPLOY_STATE_DIR/api.tag")" == sha-aaa && "$(cat "$DEPLOY_STATE_DIR/api.previous")" == sha-bbb ]]'
 
-: > "$fake/stopped"; echo prism-app > "$fake/running"
+: > "$fake/stopped"; echo prism-console > "$fake/running"
 reset
-check "app deploy uses --profile green and /api/health" '"$script" app sha-app1 > /dev/null && grep -q "up app-green with sha-app1" "$fake/calls"'
+check "app deploy uses --profile green and /api/health" '"$script" app sha-app1 > /dev/null && grep -q "up app-green with sha-app1" "$fake/calls" && running prism-console-green && ! running prism-console'
+
+reset
+check "console alias deploys blue prism-console with upstream_app.conf" '"$script" console sha-app2 > /dev/null && grep -q "up app with sha-app2" "$fake/calls" && running prism-console && ! running prism-console-green && grep -q "127.0.0.1:3000;" "$NGINX_CONF_DIR/upstream_app.conf" && [[ "$(cat "$DEPLOY_STATE_DIR/app.tag")" == sha-app2 ]]'
 
 if ((fails > 0)); then echo "$fails check(s) failed"; exit 1; fi
 echo "all checks passed"
