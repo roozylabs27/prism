@@ -1,8 +1,10 @@
-import { QueryClient } from '@tanstack/react-query';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render } from '@testing-library/react';
+import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
-import { purgeTenantQueries } from './TenantSelector';
+import { purgeTenantQueries, TenantSelector } from './TenantSelector';
 import { usePermission } from './PermissionProvider';
+import { useTenantStore } from '@/stores/useTenantStore';
 import { UserRole } from '@/types/roles';
 
 function PermissionProbe({ onCapture }: { onCapture: (p: ReturnType<typeof usePermission>) => void }) {
@@ -35,5 +37,21 @@ describe('Tenant cache purge & fail-closed PermissionContext', () => {
     expect(captured!.role).toBe(UserRole.VIEWER);
     expect(captured!.hasPermission('credential:delete')).toBe(false);
     expect(captured!.hasPermission('organization:update')).toBe(false);
+  });
+
+  it('renders identical initial markup on SSR and client even when persisted tenant exists (DEF-003)', () => {
+    localStorage.setItem('org_id', 'org_persisted');
+    localStorage.setItem('workspace_id', 'ws_persisted');
+    useTenantStore.getState().setSelectedOrg('org_persisted', 'Persisted Org');
+    useTenantStore.getState().setSelectedWorkspaceId('ws_persisted');
+
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const ssrHtml = renderToStaticMarkup(
+      <QueryClientProvider client={qc}>
+        <TenantSelector />
+      </QueryClientProvider>
+    );
+    expect(ssrHtml).toContain('Loading tenant...');
+    expect(ssrHtml).not.toContain('Persisted Org');
   });
 });

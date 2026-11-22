@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/molecules/Card';
@@ -42,8 +42,12 @@ export function WorkspacesProjectsSection({
   onSelectWsId: (id: string) => void;
   onOpenOnboarding: () => void;
 }) {
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => {
+    setMounted(true);
+  }, []);
   const { selectedOrgId } = useTenantStore();
-  const { data: workspaces = [], isLoading: wsLoading } = useWorkspacesQuery(selectedOrgId);
+  const { data: workspaces = [], isLoading: wsLoading } = useWorkspacesQuery(mounted ? selectedOrgId : null);
 
   const activeWsId =
     (selectedWsId && workspaces.some((w) => w.id === selectedWsId) ? selectedWsId : '') ||

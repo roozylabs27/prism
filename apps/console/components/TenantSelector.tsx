@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { Building2, ChevronDown, Check, Loader2, FolderKanban, Layers } from 'lucide-react';
 import {
   DropdownMenu,
@@ -31,6 +31,11 @@ export function purgeTenantQueries(queryClient: QueryClient) {
 
 export function TenantSelector() {
   const queryClient = useQueryClient();
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
   const {
     selectedOrgId,
     selectedOrgName,
@@ -41,69 +46,78 @@ export function TenantSelector() {
     setSelectedProjectId,
   } = useTenantStore();
 
+  // Defer persisted localStorage tenant state until after hydration so SSR and initial client markup match.
+  const effectiveOrgId = mounted ? selectedOrgId : null;
+  const effectiveOrgName = mounted ? selectedOrgName : null;
+  const effectiveWsId = mounted ? selectedWorkspaceId : null;
+  const effectiveProjId = mounted ? selectedProjectId : null;
+
   const { data: orgs, isLoading: isLoadingOrgs } = useOrganizationsQuery();
   const { data: userPerms, isLoading: isLoadingPerms } = useQuery<ApiUserPermissionsResponse>({
     queryKey: ['user-permissions'],
     queryFn: ({ signal }) => apiGetUserPermissions(signal),
     staleTime: 60 * 1000,
   });
-  const { data: workspaces = [], isSuccess: isWorkspacesLoaded } = useWorkspacesQuery(selectedOrgId);
-  const { data: projects = [], isSuccess: isProjectsLoaded } = useProjectsQuery(selectedWorkspaceId);
+  const { data: workspaces = [], isSuccess: isWorkspacesLoaded, isError: isWorkspacesError } = useWorkspacesQuery(effectiveOrgId);
+  const { data: projects = [], isSuccess: isProjectsLoaded } = useProjectsQuery(effectiveWsId);
 
   const isLoading = isLoadingOrgs || isLoadingPerms;
 
   // Authoritatively sync org from user token / API response
   useEffect(() => {
+    if (!mounted) return;
     if (!isLoading && orgs && orgs.length > 0) {
-      const isSelectedValid = selectedOrgId && orgs.some((o) => o.id === selectedOrgId);
+      const isSelectedValid = effectiveOrgId && orgs.some((o) => o.id === effectiveOrgId);
       if (!isSelectedValid) {
         const targetOrg = (userPerms?.organizationId && orgs.find((o) => o.id === userPerms.organizationId)) || orgs[0];
         setSelectedOrg(targetOrg.id, targetOrg.name);
       } else {
-        const currentOrg = orgs.find((o) => o.id === selectedOrgId);
-        if (currentOrg && currentOrg.name !== selectedOrgName) {
+        const currentOrg = orgs.find((o) => o.id === effectiveOrgId);
+        if (currentOrg && currentOrg.name !== effectiveOrgName) {
           setSelectedOrg(currentOrg.id, currentOrg.name);
         }
       }
     }
-  }, [isLoading, orgs, userPerms, selectedOrgId, selectedOrgName, setSelectedOrg]);
+  }, [mounted, isLoading, orgs, userPerms, effectiveOrgId, effectiveOrgName, setSelectedOrg]);
 
-  // Clear stale workspace/project IDs when they no longer exist under the active org/workspace
+  // Clear stale or unauthorized workspace/project IDs to prevent deadlocked 403 loops.
   useEffect(() => {
-    if (selectedWorkspaceId && isWorkspacesLoaded && !workspaces.some((w) => w.id === selectedWorkspaceId)) {
+    if (!mounted || !effectiveWsId) return;
+    if (isWorkspacesError || (isWorkspacesLoaded && !workspaces.some((w) => w.id === effectiveWsId))) {
       setSelectedWorkspaceId(null);
+      purgeTenantQueries(queryClient);
     }
-  }, [selectedWorkspaceId, isWorkspacesLoaded, workspaces, setSelectedWorkspaceId]);
+  }, [mounted, effectiveWsId, isWorkspacesError, isWorkspacesLoaded, workspaces, setSelectedWorkspaceId, queryClient]);
 
   useEffect(() => {
-    if (selectedProjectId && isProjectsLoaded && !projects.some((p) => p.id === selectedProjectId)) {
+    if (mounted && effectiveProjId && isProjectsLoaded && !projects.some((p) => p.id === effectiveProjId)) {
       setSelectedProjectId(null);
     }
-  }, [selectedProjectId, isProjectsLoaded, projects, setSelectedProjectId]);
+  }, [mounted, effectiveProjId, isProjectsLoaded, projects, setSelectedProjectId]);
 
   const handleSelectOrg = (orgId: string, orgName: string) => {
-    if (orgId === selectedOrgId) return;
+    if (orgId === effectiveOrgId) return;
     setSelectedOrg(orgId, orgName);
     purgeTenantQueries(queryClient);
   };
 
   const handleSelectWorkspace = (workspaceId: string | null) => {
-    if (workspaceId === selectedWorkspaceId) return;
+    if (workspaceId === effectiveWsId) return;
     setSelectedWorkspaceId(workspaceId);
     purgeTenantQueries(queryClient);
   };
 
   const handleSelectProject = (projectId: string | null) => {
-    if (projectId === selectedProjectId) return;
+    if (projectId === effectiveProjId) return;
     setSelectedProjectId(projectId);
     purgeTenantQueries(queryClient);
   };
 
-  const currentDisplayName = selectedOrgName || orgs?.find((o) => o.id === selectedOrgId)?.name || null;
-  const activeWorkspace = workspaces.find((w) => w.id === selectedWorkspaceId) ?? null;
-  const activeProject = projects.find((p) => p.id === selectedProjectId) ?? null;
+  const currentDisplayName = effectiveOrgName || orgs?.find((o) => o.id === effectiveOrgId)?.name || null;
+  const activeWorkspace = workspaces.find((w) => w.id === effectiveWsId) ?? null;
+  const activeProject = projects.find((p) => p.id === effectiveProjId) ?? null;
 
-  if (isLoading && !currentDisplayName) {
+  if (!mounted || (isLoading && !currentDisplayName)) {
     return (
       <Button variant="outline" size="sm" className="h-8 gap-2 px-2.5 text-xs font-medium opacity-70" disabled>
         <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
@@ -137,7 +151,7 @@ export function TenantSelector() {
           </DropdownMenuLabel>
           <DropdownMenuSeparator />
           {orgs.map((org) => {
-            const isSelected = org.id === selectedOrgId;
+            const isSelected = org.id === effectiveOrgId;
             return (
               <DropdownMenuItem
                 key={org.id}
@@ -155,7 +169,7 @@ export function TenantSelector() {
         </DropdownMenuContent>
       </DropdownMenu>
 
-      {workspaces.length > 0 && (
+      {(workspaces.length > 0 || Boolean(effectiveWsId)) && (
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button
@@ -176,7 +190,7 @@ export function TenantSelector() {
             <DropdownMenuSeparator />
             <DropdownMenuItem onClick={() => handleSelectWorkspace(null)} className="flex items-center justify-between cursor-pointer">
               <span className="text-xs">All Workspaces</span>
-              {!selectedWorkspaceId && <Check className="h-3.5 w-3.5 text-primary" />}
+              {!effectiveWsId && <Check className="h-3.5 w-3.5 text-primary" />}
             </DropdownMenuItem>
             {workspaces.map((ws) => (
               <DropdownMenuItem
@@ -188,14 +202,14 @@ export function TenantSelector() {
                   <span className="truncate text-xs font-medium">{ws.name}</span>
                   <span className="truncate text-[10px] text-muted-foreground font-mono">{ws.slug}</span>
                 </div>
-                {ws.id === selectedWorkspaceId && <Check className="h-3.5 w-3.5 text-primary shrink-0 ml-2" />}
+                {ws.id === effectiveWsId && <Check className="h-3.5 w-3.5 text-primary shrink-0 ml-2" />}
               </DropdownMenuItem>
             ))}
           </DropdownMenuContent>
         </DropdownMenu>
       )}
 
-      {selectedWorkspaceId && projects.length > 0 && (
+      {effectiveWsId && projects.length > 0 && (
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button
@@ -216,7 +230,7 @@ export function TenantSelector() {
             <DropdownMenuSeparator />
             <DropdownMenuItem onClick={() => handleSelectProject(null)} className="flex items-center justify-between cursor-pointer">
               <span className="text-xs">All Projects</span>
-              {!selectedProjectId && <Check className="h-3.5 w-3.5 text-primary" />}
+              {!effectiveProjId && <Check className="h-3.5 w-3.5 text-primary" />}
             </DropdownMenuItem>
             {projects.map((proj) => (
               <DropdownMenuItem
@@ -228,7 +242,7 @@ export function TenantSelector() {
                   <span className="truncate text-xs font-medium">{proj.name}</span>
                   <span className="truncate text-[10px] text-muted-foreground font-mono">{proj.slug}</span>
                 </div>
-                {proj.id === selectedProjectId && <Check className="h-3.5 w-3.5 text-primary shrink-0 ml-2" />}
+                {proj.id === effectiveProjId && <Check className="h-3.5 w-3.5 text-primary shrink-0 ml-2" />}
               </DropdownMenuItem>
             ))}
           </DropdownMenuContent>

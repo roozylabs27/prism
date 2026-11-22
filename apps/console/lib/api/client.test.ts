@@ -82,4 +82,49 @@ describe('api client', () => {
     stubAdapter(429);
     await expect(api.get('/logs')).rejects.toMatchObject({ code: 'RATE_LIMITED', status: 429, retryable: true });
   });
+
+  it('omits workspace and project headers on org discovery endpoints (DEF-010)', async () => {
+    const seen = stubAdapter();
+    useTenantStore.getState().setSelectedOrg('org_1', 'Org One');
+    useTenantStore.getState().setSelectedWorkspaceId('ws_forbidden');
+    useTenantStore.getState().setSelectedProjectId('proj_forbidden');
+
+    await api.get('/workspaces');
+    await api.get('/user/permissions');
+    await api.get('/gateway-keys');
+
+    expect(seen).toHaveLength(3);
+    expect(seen[0].headers['X-Prism-Org-ID']).toBe('org_1');
+    expect(seen[0].headers['X-Prism-Workspace-ID']).toBeUndefined();
+    expect(seen[0].headers['X-Prism-Project-ID']).toBeUndefined();
+
+    expect(seen[1].headers['X-Prism-Org-ID']).toBe('org_1');
+    expect(seen[1].headers['X-Prism-Workspace-ID']).toBeUndefined();
+    expect(seen[1].headers['X-Prism-Project-ID']).toBeUndefined();
+
+    expect(seen[2].headers['X-Prism-Workspace-ID']).toBe('ws_forbidden');
+    expect(seen[2].headers['X-Prism-Project-ID']).toBe('proj_forbidden');
+  });
+
+  it('extracts JSON error messages from Blob error responses (DEF-013)', async () => {
+    api.defaults.adapter = async (config) => {
+      const blob = new Blob(
+        [JSON.stringify({ error: { message: 'Forbidden: insufficient permissions for action audit:export' } })],
+        { type: 'application/json' }
+      );
+      throw new AxiosError('forbidden', '403', config, null, {
+        data: blob,
+        status: 403,
+        statusText: 'Forbidden',
+        headers: {},
+        config,
+      });
+    };
+
+    await expect(api.get('/audit-trail/export', { responseType: 'blob' })).rejects.toMatchObject({
+      code: 'FORBIDDEN',
+      status: 403,
+      message: 'Forbidden: insufficient permissions for action audit:export',
+    });
+  });
 });
