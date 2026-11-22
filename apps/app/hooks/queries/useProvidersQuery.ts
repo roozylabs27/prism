@@ -7,6 +7,6 @@ export function useProvidersQuery() {
   const scope = useTenantScopeKey();
   return useQuery({
     queryKey: ['providers', ...scope],
-    queryFn: apiGetProviders,
+    queryFn: ({ signal }) => apiGetProviders(signal),
   });
 }

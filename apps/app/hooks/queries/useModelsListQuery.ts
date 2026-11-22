@@ -6,6 +6,6 @@ export function useModelsListQuery() {
   const scope = useTenantScopeKey();
   return useQuery({
     queryKey: ['all-models', ...scope],
-    queryFn: apiGetAllModels,
+    queryFn: ({ signal }) => apiGetAllModels(signal),
   });
 }

@@ -14,7 +14,7 @@ export function usePoliciesQuery() {
   const scope = useTenantScopeKey();
   return useQuery({
     queryKey: ['policies', ...scope],
-    queryFn: apiGetPolicies,
+    queryFn: ({ signal }) => apiGetPolicies(signal),
   });
 }
 
@@ -22,6 +22,6 @@ export function useRoutingRulesQuery() {
   const scope = useTenantScopeKey();
   return useQuery({
     queryKey: ['routing-rules', ...scope],
-    queryFn: apiGetRoutingRules,
+    queryFn: ({ signal }) => apiGetRoutingRules(signal),
   });
 }

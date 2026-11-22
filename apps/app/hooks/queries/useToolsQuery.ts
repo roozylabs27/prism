@@ -12,7 +12,7 @@ export function useToolsQuery() {
   const scope = useTenantScopeKey();
   return useQuery({
     queryKey: ['tools', ...scope],
-    queryFn: apiGetTools,
+    queryFn: ({ signal }) => apiGetTools(signal),
   });
 }
 
@@ -20,7 +20,7 @@ export function useToolDetailQuery(toolId?: string) {
   const scope = useTenantScopeKey();
   return useQuery({
     queryKey: ['tools', ...scope, toolId],
-    queryFn: () => apiGetTool(toolId!),
+    queryFn: ({ signal }) => apiGetTool(toolId!, signal),
     enabled: Boolean(toolId),
   });
 }

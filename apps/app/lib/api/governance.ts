@@ -1,4 +1,4 @@
-import { api } from './client';
+import { api, resolveSignal, ApiSignal } from './client';
 import {
   ApiGovernancePolicy,
   ApiCreateGovernancePolicyRequest,
@@ -6,13 +6,17 @@ import {
   ApiRBACEvaluationResult,
 } from './types/governance';
 
-export async function apiGetGovernancePolicies(): Promise<ApiGovernancePolicy[]> {
-  const response = await api.get<ApiGovernancePolicy[]>('/governance/policies');
+export async function apiGetGovernancePolicies(signal?: ApiSignal): Promise<ApiGovernancePolicy[]> {
+  const response = await api.get<ApiGovernancePolicy[]>('/governance/policies', {
+    signal: resolveSignal(signal),
+  });
   return response.data;
 }
 
-export async function apiGetGovernancePolicy(id: string): Promise<ApiGovernancePolicy> {
-  const response = await api.get<ApiGovernancePolicy>(`/governance/policies/${id}`);
+export async function apiGetGovernancePolicy(id: string, signal?: ApiSignal): Promise<ApiGovernancePolicy> {
+  const response = await api.get<ApiGovernancePolicy>(`/governance/policies/${id}`, {
+    signal: resolveSignal(signal),
+  });
   return response.data;
 }
 

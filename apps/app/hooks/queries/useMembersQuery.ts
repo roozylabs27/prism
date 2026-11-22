@@ -7,6 +7,6 @@ export function useMembersQuery() {
   const scope = useTenantScopeKey();
   return useQuery<ApiOrganizationMember[]>({
     queryKey: ['organization-members', ...scope],
-    queryFn: apiGetOrganizationMembers,
+    queryFn: ({ signal }) => apiGetOrganizationMembers(signal),
   });
 }

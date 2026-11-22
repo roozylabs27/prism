@@ -17,6 +17,6 @@ export function useAllGatewayKeysQuery() {
   const scope = useTenantScopeKey();
   return useQuery({
     queryKey: ['gateway-keys', 'all', ...scope],
-    queryFn: apiGetAllGatewayKeys,
+    queryFn: ({ signal }) => apiGetAllGatewayKeys(signal),
   });
 }

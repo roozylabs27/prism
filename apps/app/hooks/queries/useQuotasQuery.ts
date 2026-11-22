@@ -7,6 +7,6 @@ export function useQuotasQuery() {
   const scope = useTenantScopeKey();
   return useQuery({
     queryKey: ['quotas', ...scope],
-    queryFn: () => apiGetQuotas(),
+    queryFn: ({ signal }) => apiGetQuotas(signal),
   });
 }

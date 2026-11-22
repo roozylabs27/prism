@@ -1,4 +1,4 @@
-import { api } from './client';
+import { api, resolveSignal, ApiSignal } from './client';
 import type {
   ApiApprovalDecisionReq,
   ApiApprovalRequest,
@@ -8,7 +8,8 @@ import type {
 export async function apiGetApprovals(
   status?: string,
   page = 1,
-  limit = 50
+  limit = 50,
+  signal?: ApiSignal
 ): Promise<ApiApprovalsListRes> {
   const response = await api.get<ApiApprovalsListRes>('/approvals', {
     params: {
@@ -16,12 +17,15 @@ export async function apiGetApprovals(
       page,
       limit,
     },
+    signal: resolveSignal(signal),
   });
   return response.data;
 }
 
-export async function apiGetApproval(id: string): Promise<ApiApprovalRequest> {
-  const response = await api.get<ApiApprovalRequest>(`/approvals/${id}`);
+export async function apiGetApproval(id: string, signal?: ApiSignal): Promise<ApiApprovalRequest> {
+  const response = await api.get<ApiApprovalRequest>(`/approvals/${id}`, {
+    signal: resolveSignal(signal),
+  });
   return response.data;
 }
 

@@ -12,7 +12,7 @@ export function useGovernancePoliciesQuery() {
   const scope = useTenantScopeKey();
   return useQuery({
     queryKey: ['governance-policies', ...scope],
-    queryFn: apiGetGovernancePolicies,
+    queryFn: ({ signal }) => apiGetGovernancePolicies(signal),
   });
 }
 

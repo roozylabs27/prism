@@ -44,7 +44,7 @@ export function TenantSelector() {
   const { data: orgs, isLoading: isLoadingOrgs } = useOrganizationsQuery();
   const { data: userPerms, isLoading: isLoadingPerms } = useQuery<ApiUserPermissionsResponse>({
     queryKey: ['user-permissions'],
-    queryFn: apiGetUserPermissions,
+    queryFn: ({ signal }) => apiGetUserPermissions(signal),
     staleTime: 60 * 1000,
   });
   const { data: workspaces = [], isSuccess: isWorkspacesLoaded } = useWorkspacesQuery(selectedOrgId);

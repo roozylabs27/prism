@@ -7,9 +7,9 @@ import { FeatureFlagKey, ApiFeaturesResponse, DEFAULT_FEATURE_FLAGS } from '@/li
 export function useFeatureFlagsQuery() {
   return useQuery<ApiFeaturesResponse>({
     queryKey: ['features'],
-    queryFn: async () => {
+    queryFn: async ({ signal }) => {
       try {
-        const res = await api.get<ApiFeaturesResponse>('/features');
+        const res = await api.get<ApiFeaturesResponse>('/features', { signal });
         return res.data;
       } catch {
         return {

@@ -7,6 +7,6 @@ export function useAuditTrailsQuery(params?: { limit?: number; page?: number }) 
   const scope = useTenantScopeKey();
   return useQuery({
     queryKey: ['audit-trails', ...scope, params],
-    queryFn: () => apiGetAuditTrails(params),
+    queryFn: ({ signal }) => apiGetAuditTrails(params, signal),
   });
 }

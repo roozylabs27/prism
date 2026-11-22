@@ -17,7 +17,7 @@ export function useAgentsQuery() {
   const scope = useTenantScopeKey();
   return useQuery({
     queryKey: ['agents', ...scope],
-    queryFn: apiGetAgents,
+    queryFn: ({ signal }) => apiGetAgents(signal),
   });
 }
 
@@ -25,7 +25,7 @@ export function useAgentTemplatesQuery() {
   const scope = useTenantScopeKey();
   return useQuery({
     queryKey: ['agent-templates', ...scope],
-    queryFn: apiGetAgentTemplates,
+    queryFn: ({ signal }) => apiGetAgentTemplates(signal),
   });
 }
 
@@ -33,7 +33,7 @@ export function useAgentDetailQuery(id: string | null | undefined) {
   const scope = useTenantScopeKey();
   return useQuery({
     queryKey: ['agent', ...scope, id],
-    queryFn: () => (id ? apiGetAgent(id) : Promise.reject('No agent id')),
+    queryFn: ({ signal }) => (id ? apiGetAgent(id, signal) : Promise.reject('No agent id')),
     enabled: Boolean(id),
   });
 }
@@ -42,7 +42,7 @@ export function useAgentStatsQuery(id: string | null | undefined, days = 30) {
   const scope = useTenantScopeKey();
   return useQuery({
     queryKey: ['agent-stats', ...scope, id, days],
-    queryFn: () => (id ? apiGetAgentStats(id, days) : Promise.reject('No agent id')),
+    queryFn: ({ signal }) => (id ? apiGetAgentStats(id, days, signal) : Promise.reject('No agent id')),
     enabled: Boolean(id),
   });
 }

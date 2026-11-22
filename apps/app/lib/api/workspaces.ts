@@ -1,4 +1,4 @@
-import { api } from './client';
+import { api, resolveSignal, ApiSignal } from './client';
 import type { ApiWorkspace } from './types';
 
 export interface ApiProject {
@@ -10,8 +10,10 @@ export interface ApiProject {
   updatedAt: string;
 }
 
-export async function apiGetWorkspaces(): Promise<ApiWorkspace[]> {
-  const response = await api.get<ApiWorkspace[] | { data?: ApiWorkspace[] }>('/workspaces');
+export async function apiGetWorkspaces(signal?: ApiSignal): Promise<ApiWorkspace[]> {
+  const response = await api.get<ApiWorkspace[] | { data?: ApiWorkspace[] }>('/workspaces', {
+    signal: resolveSignal(signal),
+  });
   if (response.data && typeof response.data === 'object' && 'data' in response.data && Array.isArray(response.data.data)) {
     return response.data.data;
   }
@@ -33,8 +35,10 @@ export async function apiDeleteWorkspace(workspaceId: string): Promise<{ message
   return response.data;
 }
 
-export async function apiGetProjects(workspaceId: string): Promise<ApiProject[]> {
-  const response = await api.get<ApiProject[] | { data?: ApiProject[] }>(`/workspaces/${workspaceId}/projects`);
+export async function apiGetProjects(workspaceId: string, signal?: ApiSignal): Promise<ApiProject[]> {
+  const response = await api.get<ApiProject[] | { data?: ApiProject[] }>(`/workspaces/${workspaceId}/projects`, {
+    signal: resolveSignal(signal),
+  });
   if (response.data && typeof response.data === 'object' && 'data' in response.data && Array.isArray(response.data.data)) {
     return response.data.data;
   }

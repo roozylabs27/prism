@@ -2,6 +2,16 @@ import axios from 'axios';
 import { parseApiError } from '@/lib/http/errors';
 import { getTenantHeaders } from '@/stores/useTenantStore';
 
+export type ApiSignal = AbortSignal | { signal?: AbortSignal };
+
+export function resolveSignal(signal?: ApiSignal): AbortSignal | undefined {
+  if (!signal) return undefined;
+  if ('signal' in signal && (signal as { signal?: AbortSignal }).signal) {
+    return (signal as { signal?: AbortSignal }).signal;
+  }
+  return signal as AbortSignal;
+}
+
 export const api = axios.create({
   baseURL: '/api',
   timeout: 30_000,
@@ -33,6 +43,7 @@ api.interceptors.response.use(
         typeof window !== 'undefined' &&
         !['/signin', '/signup', '/accept-invite'].includes(window.location.pathname)
       ) {
+        // eslint-disable-next-line @next/next/no-location-assign-relative-destination -- Intentional full navigation outside React tree on 401 session expiry
         window.location.assign('/signin');
       }
     }

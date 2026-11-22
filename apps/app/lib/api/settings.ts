@@ -1,10 +1,12 @@
-import { api } from './client';
+import { api, resolveSignal, ApiSignal } from './client';
 import { ApiHealthResponse, ApiSetting } from './types/common';
 
 // The current organization's settings: its own values plus the platform
 // defaults it has not overridden.
-export async function apiGetSettings(): Promise<ApiSetting[]> {
-  const response = await api.get<{ value: ApiSetting[] }>('/settings');
+export async function apiGetSettings(signal?: ApiSignal): Promise<ApiSetting[]> {
+  const response = await api.get<{ value: ApiSetting[] }>('/settings', {
+    signal: resolveSignal(signal),
+  });
   return response.data.value ?? [];
 }
 
@@ -13,7 +15,9 @@ export async function apiUpdateSettings(data: Record<string, string>): Promise<v
   await api.put('/settings', { settings: data });
 }
 
-export async function apiGetHealth(): Promise<ApiHealthResponse> {
-  const response = await api.get<ApiHealthResponse>('/health');
+export async function apiGetHealth(signal?: ApiSignal): Promise<ApiHealthResponse> {
+  const response = await api.get<ApiHealthResponse>('/health', {
+    signal: resolveSignal(signal),
+  });
   return response.data;
 }

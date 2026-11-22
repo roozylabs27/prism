@@ -8,6 +8,6 @@ export function usePendingInvitesQuery() {
   const scope = useTenantScopeKey();
   return useQuery<ApiMemberInvite[]>({
     queryKey: [...PENDING_INVITES_QUERY_KEY, ...scope],
-    queryFn: apiGetPendingInvites,
+    queryFn: ({ signal }) => apiGetPendingInvites(signal),
   });
 }

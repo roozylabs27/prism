@@ -6,7 +6,7 @@ export function useUserPermissionsQuery(options?: Partial<UseQueryOptions<ApiUse
   const selectedOrgId = useTenantStore((s) => s.selectedOrgId);
   return useQuery<ApiUserPermissionsResponse>({
     queryKey: ['user-permissions', selectedOrgId ?? 'default'],
-    queryFn: apiGetUserPermissions,
+    queryFn: ({ signal }) => apiGetUserPermissions(signal),
     staleTime: 60 * 1000,
     retry: 1,
     ...options,

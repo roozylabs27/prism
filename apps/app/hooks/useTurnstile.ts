@@ -28,7 +28,7 @@ export function useTurnstile(): UseTurnstileReturn {
 
   const { data: turnstileConfig } = useQuery({
     queryKey: ['turnstile-config'],
-    queryFn: apiGetTurnstileConfig,
+    queryFn: ({ signal }) => apiGetTurnstileConfig(signal),
     staleTime: 10 * 60 * 1000,
   });
 

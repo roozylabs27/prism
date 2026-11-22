@@ -17,7 +17,7 @@ export function useBudgetsQuery() {
   const scope = useTenantScopeKey();
   return useQuery({
     queryKey: ['budgets', ...scope],
-    queryFn: apiGetBudgets,
+    queryFn: ({ signal }) => apiGetBudgets(signal),
   });
 }
 
@@ -25,7 +25,7 @@ export function useBudgetStatusQuery() {
   const scope = useTenantScopeKey();
   return useQuery({
     queryKey: ['budget-status', ...scope],
-    queryFn: apiGetBudgetStatus,
+    queryFn: ({ signal }) => apiGetBudgetStatus(signal),
   });
 }
 
@@ -33,7 +33,7 @@ export function useFinOpsAnomaliesQuery() {
   const scope = useTenantScopeKey();
   return useQuery({
     queryKey: ['finops-anomalies', ...scope],
-    queryFn: () => apiGetFinOpsAnomalies(),
+    queryFn: ({ signal }) => apiGetFinOpsAnomalies(50, signal),
   });
 }
 
@@ -41,6 +41,6 @@ export function useBudgetAlertsQuery() {
   const scope = useTenantScopeKey();
   return useQuery({
     queryKey: ['budget-alerts', ...scope],
-    queryFn: () => apiGetBudgetAlerts(),
+    queryFn: ({ signal }) => apiGetBudgetAlerts(50, signal),
   });
 }

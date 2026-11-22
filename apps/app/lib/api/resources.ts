@@ -1,4 +1,4 @@
-import { api } from './client';
+import { api, resolveSignal, ApiSignal } from './client';
 import {
   ApiResource,
   ApiResourceWithBackends,
@@ -6,13 +6,17 @@ import {
   ApiResourceExecutionResult,
 } from './types/resource';
 
-export async function apiGetResources(): Promise<ApiResource[]> {
-  const response = await api.get<ApiResource[]>('/resources');
+export async function apiGetResources(signal?: ApiSignal): Promise<ApiResource[]> {
+  const response = await api.get<ApiResource[]>('/resources', {
+    signal: resolveSignal(signal),
+  });
   return response.data;
 }
 
-export async function apiGetResource(id: string): Promise<ApiResourceWithBackends> {
-  const response = await api.get<ApiResourceWithBackends>(`/resources/${id}`);
+export async function apiGetResource(id: string, signal?: ApiSignal): Promise<ApiResourceWithBackends> {
+  const response = await api.get<ApiResourceWithBackends>(`/resources/${id}`, {
+    signal: resolveSignal(signal),
+  });
   return response.data;
 }
 

@@ -1,4 +1,4 @@
-import { api } from './client';
+import { api, resolveSignal, ApiSignal } from './client';
 import { ApiOrganization, ApiOrganizationMember } from './types/common';
 
 export interface ApiMemberInvite {
@@ -29,16 +29,20 @@ export interface ApiInvitePreview {
   expiresAt: string;
 }
 
-export async function apiGetOrganizations(): Promise<ApiOrganization[]> {
-  const response = await api.get<ApiOrganization[] | { data: ApiOrganization[] }>('/user/organizations');
+export async function apiGetOrganizations(signal?: ApiSignal): Promise<ApiOrganization[]> {
+  const response = await api.get<ApiOrganization[] | { data: ApiOrganization[] }>('/user/organizations', {
+    signal: resolveSignal(signal),
+  });
   if (response.data && typeof response.data === 'object' && 'data' in response.data && Array.isArray(response.data.data)) {
     return response.data.data;
   }
   return (response.data as ApiOrganization[]) || [];
 }
 
-export async function apiGetOrganizationMembers(): Promise<ApiOrganizationMember[]> {
-  const response = await api.get<{ data: ApiOrganizationMember[] } | ApiOrganizationMember[]>('/organizations/members');
+export async function apiGetOrganizationMembers(signal?: ApiSignal): Promise<ApiOrganizationMember[]> {
+  const response = await api.get<{ data: ApiOrganizationMember[] } | ApiOrganizationMember[]>('/organizations/members', {
+    signal: resolveSignal(signal),
+  });
   if (response.data && typeof response.data === 'object' && 'data' in response.data && Array.isArray(response.data.data)) {
     return response.data.data;
   }
@@ -50,8 +54,10 @@ export async function apiInviteMember(data: { email: string; role: string }): Pr
   return response.data;
 }
 
-export async function apiGetPendingInvites(): Promise<ApiMemberInvite[]> {
-  const response = await api.get<{ data: ApiMemberInvite[] }>('/organizations/invites');
+export async function apiGetPendingInvites(signal?: ApiSignal): Promise<ApiMemberInvite[]> {
+  const response = await api.get<{ data: ApiMemberInvite[] }>('/organizations/invites', {
+    signal: resolveSignal(signal),
+  });
   return response.data?.data || [];
 }
 
@@ -60,8 +66,10 @@ export async function apiRevokeInvite(inviteId: string): Promise<void> {
 }
 
 /** Public: describes an invitation link before the holder signs in. */
-export async function apiGetInvitePreview(token: string): Promise<ApiInvitePreview> {
-  const response = await api.get<ApiInvitePreview>(`/auth/invites/${encodeURIComponent(token)}`);
+export async function apiGetInvitePreview(token: string, signal?: ApiSignal): Promise<ApiInvitePreview> {
+  const response = await api.get<ApiInvitePreview>(`/auth/invites/${encodeURIComponent(token)}`, {
+    signal: resolveSignal(signal),
+  });
   return response.data;
 }
 

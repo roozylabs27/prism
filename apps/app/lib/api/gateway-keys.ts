@@ -1,19 +1,22 @@
-import { api } from './client';
+import { api, resolveSignal, ApiSignal } from './client';
 import { ApiGatewayKey } from './types/gateway-key';
 import { PageParams, PaginatedResult } from './types/common';
 import { fetchAllPages } from './pagination';
 
 export async function apiGetGatewayKeys(
   params?: PageParams,
-  signal?: AbortSignal,
+  signal?: ApiSignal,
 ): Promise<PaginatedResult<ApiGatewayKey>> {
-  const response = await api.get<PaginatedResult<ApiGatewayKey>>('/gateway-keys', { params, signal });
+  const response = await api.get<PaginatedResult<ApiGatewayKey>>('/gateway-keys', {
+    params,
+    signal: resolveSignal(signal),
+  });
   return response.data;
 }
 
 /** Every gateway key of the user, for pickers. */
-export async function apiGetAllGatewayKeys(): Promise<ApiGatewayKey[]> {
-  return fetchAllPages((page, limit) => apiGetGatewayKeys({ page, limit }));
+export async function apiGetAllGatewayKeys(signal?: ApiSignal): Promise<ApiGatewayKey[]> {
+  return fetchAllPages((page, limit) => apiGetGatewayKeys({ page, limit }, signal));
 }
 
 /** A new key with its secret; the API returns the secret only this once. */

@@ -12,7 +12,7 @@ export function useResourcesQuery() {
   const scope = useTenantScopeKey();
   return useQuery({
     queryKey: ['resources', ...scope],
-    queryFn: apiGetResources,
+    queryFn: ({ signal }) => apiGetResources(signal),
   });
 }
 
@@ -20,7 +20,7 @@ export function useResourceDetailQuery(resourceId?: string) {
   const scope = useTenantScopeKey();
   return useQuery({
     queryKey: ['resources', ...scope, resourceId],
-    queryFn: () => apiGetResource(resourceId!),
+    queryFn: ({ signal }) => apiGetResource(resourceId!, signal),
     enabled: Boolean(resourceId),
   });
 }

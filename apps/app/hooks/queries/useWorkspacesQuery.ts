@@ -12,7 +12,7 @@ export {
 export function useWorkspacesQuery(orgId?: string | null) {
   return useQuery({
     queryKey: ['workspaces', orgId ?? 'default'],
-    queryFn: apiGetWorkspaces,
+    queryFn: ({ signal }) => apiGetWorkspaces(signal),
     enabled: orgId !== null,
   });
 }
@@ -20,7 +20,7 @@ export function useWorkspacesQuery(orgId?: string | null) {
 export function useProjectsQuery(workspaceId?: string | null) {
   return useQuery({
     queryKey: ['projects', workspaceId],
-    queryFn: () => apiGetProjects(workspaceId!),
+    queryFn: ({ signal }) => apiGetProjects(workspaceId!, signal),
     enabled: Boolean(workspaceId),
   });
 }

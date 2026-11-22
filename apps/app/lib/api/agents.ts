@@ -1,4 +1,4 @@
-import { api } from './client';
+import { api, resolveSignal, ApiSignal } from './client';
 import {
   ApiAgentTemplate,
   ApiAgent,
@@ -6,8 +6,10 @@ import {
   ApiAgentStats,
 } from './types/agent';
 
-export async function apiGetAgentTemplates(): Promise<ApiAgentTemplate[]> {
-  const response = await api.get<ApiAgentTemplate[] | { data?: ApiAgentTemplate[] }>('/agent-templates');
+export async function apiGetAgentTemplates(signal?: ApiSignal): Promise<ApiAgentTemplate[]> {
+  const response = await api.get<ApiAgentTemplate[] | { data?: ApiAgentTemplate[] }>('/agent-templates', {
+    signal: resolveSignal(signal),
+  });
   if (response.data && typeof response.data === 'object' && 'data' in response.data && Array.isArray(response.data.data)) {
     return response.data.data;
   }
@@ -22,19 +24,24 @@ export async function apiInstantiateAgentTemplate(templateId: string, name?: str
   return response.data as ApiAgent;
 }
 
-export async function apiGetAgents(): Promise<ApiAgent[]> {
-  const response = await api.get<ApiAgent[]>('/agents');
+export async function apiGetAgents(signal?: ApiSignal): Promise<ApiAgent[]> {
+  const response = await api.get<ApiAgent[]>('/agents', {
+    signal: resolveSignal(signal),
+  });
   return response.data;
 }
 
-export async function apiGetAgent(id: string): Promise<ApiAgent> {
-  const response = await api.get<ApiAgent>(`/agents/${id}`);
+export async function apiGetAgent(id: string, signal?: ApiSignal): Promise<ApiAgent> {
+  const response = await api.get<ApiAgent>(`/agents/${id}`, {
+    signal: resolveSignal(signal),
+  });
   return response.data;
 }
 
-export async function apiGetAgentStats(id: string, days = 30): Promise<ApiAgentStats> {
+export async function apiGetAgentStats(id: string, days = 30, signal?: ApiSignal): Promise<ApiAgentStats> {
   const response = await api.get<{ data: ApiAgentStats } | ApiAgentStats>(`/agents/${id}/stats`, {
     params: { days },
+    signal: resolveSignal(signal),
   });
   if (response.data && typeof response.data === 'object' && 'data' in response.data) {
     return response.data.data;

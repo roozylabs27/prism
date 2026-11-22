@@ -1,4 +1,4 @@
-import { api } from './client';
+import { api, resolveSignal, ApiSignal } from './client';
 import {
   ApiMCPServer,
   ApiMCPServerWithTools,
@@ -10,13 +10,17 @@ import {
   ApiRegisterMCPRegistryRequest,
 } from './types/mcp';
 
-export async function apiGetMCPServers(): Promise<ApiMCPServer[]> {
-  const response = await api.get<ApiMCPServer[]>('/mcp/servers');
+export async function apiGetMCPServers(signal?: ApiSignal): Promise<ApiMCPServer[]> {
+  const response = await api.get<ApiMCPServer[]>('/mcp/servers', {
+    signal: resolveSignal(signal),
+  });
   return response.data;
 }
 
-export async function apiGetMCPServer(id: string): Promise<ApiMCPServerWithTools> {
-  const response = await api.get<ApiMCPServerWithTools>(`/mcp/servers/${id}`);
+export async function apiGetMCPServer(id: string, signal?: ApiSignal): Promise<ApiMCPServerWithTools> {
+  const response = await api.get<ApiMCPServerWithTools>(`/mcp/servers/${id}`, {
+    signal: resolveSignal(signal),
+  });
   return response.data;
 }
 
@@ -49,14 +53,17 @@ export async function apiTestMCPTool(serverId: string, toolName: string, args: R
   return response.data;
 }
 
-export async function apiGetMCPServerTools(serverId: string): Promise<ApiMCPTool[]> {
-  const response = await api.get<ApiMCPTool[]>(`/mcp/servers/${serverId}/tools`);
+export async function apiGetMCPServerTools(serverId: string, signal?: ApiSignal): Promise<ApiMCPTool[]> {
+  const response = await api.get<ApiMCPTool[]>(`/mcp/servers/${serverId}/tools`, {
+    signal: resolveSignal(signal),
+  });
   return response.data;
 }
 
-export async function apiGetMCPServerStats(id: string, days?: number): Promise<ApiMCPServerStats> {
+export async function apiGetMCPServerStats(id: string, days?: number, signal?: ApiSignal): Promise<ApiMCPServerStats> {
   const response = await api.get<ApiMCPServerStats | { data: ApiMCPServerStats }>(`/mcp/servers/${id}/stats`, {
     params: days ? { days } : undefined,
+    signal: resolveSignal(signal),
   });
   if (response.data && typeof response.data === 'object' && 'data' in response.data) {
     return response.data.data;
@@ -64,8 +71,10 @@ export async function apiGetMCPServerStats(id: string, days?: number): Promise<A
   return response.data as ApiMCPServerStats;
 }
 
-export async function apiGetMCPRegistryCatalog(): Promise<ApiMCPRegistryServer[]> {
-  const response = await api.get<ApiMCPRegistryServer[] | { data?: ApiMCPRegistryServer[] }>('/mcp/registry');
+export async function apiGetMCPRegistryCatalog(signal?: ApiSignal): Promise<ApiMCPRegistryServer[]> {
+  const response = await api.get<ApiMCPRegistryServer[] | { data?: ApiMCPRegistryServer[] }>('/mcp/registry', {
+    signal: resolveSignal(signal),
+  });
   if (response.data && typeof response.data === 'object' && 'data' in response.data && Array.isArray(response.data.data)) {
     return response.data.data;
   }

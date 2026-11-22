@@ -1,4 +1,4 @@
-import { api } from './client';
+import { api, resolveSignal, ApiSignal } from './client';
 import {
   ApiRoutingPolicy,
   ApiRoutingDecision,
@@ -9,8 +9,10 @@ import {
   ApiFinOpsSummary,
 } from './types/policy';
 
-export async function apiGetPolicies(): Promise<ApiRoutingPolicy[]> {
-  const response = await api.get<ApiRoutingPolicy[]>('/policies');
+export async function apiGetPolicies(signal?: ApiSignal): Promise<ApiRoutingPolicy[]> {
+  const response = await api.get<ApiRoutingPolicy[]>('/policies', {
+    signal: resolveSignal(signal),
+  });
   return response.data;
 }
 
@@ -34,9 +36,10 @@ export async function apiDeletePolicy(id: string): Promise<{ message: string }> 
   return response.data;
 }
 
-export async function apiGetRoutingDecisions(limit?: number): Promise<ApiRoutingDecision[]> {
+export async function apiGetRoutingDecisions(limit?: number, signal?: ApiSignal): Promise<ApiRoutingDecision[]> {
   const response = await api.get<ApiRoutingDecision[]>('/routing/decisions', {
     params: limit ? { limit } : undefined,
+    signal: resolveSignal(signal),
   });
   return response.data;
 }
@@ -65,8 +68,10 @@ export interface ApiRoutingRule {
   updatedAt: string;
 }
 
-export async function apiGetRoutingRules(): Promise<ApiRoutingRule[]> {
-  const response = await api.get<ApiRoutingRule[]>('/routing-rules');
+export async function apiGetRoutingRules(signal?: ApiSignal): Promise<ApiRoutingRule[]> {
+  const response = await api.get<ApiRoutingRule[]>('/routing-rules', {
+    signal: resolveSignal(signal),
+  });
   return Array.isArray(response.data) ? response.data : [];
 }
 

@@ -10,7 +10,7 @@ export function useApprovalsQuery(status = 'pending') {
   const scope = useTenantScopeKey();
   return useQuery({
     queryKey: ['approvals', ...scope, status],
-    queryFn: () => apiGetApprovals(status),
+    queryFn: ({ signal }) => apiGetApprovals(status, 1, 50, signal),
     refetchInterval: 15_000,
   });
 }

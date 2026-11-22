@@ -1,13 +1,17 @@
-import { api } from './client';
+import { api, resolveSignal, ApiSignal } from './client';
 import { ApiBudget, ApiBudgetStatus } from './types/budget';
 
-export async function apiGetBudgets(): Promise<ApiBudget[]> {
-  const response = await api.get<ApiBudget[]>('/budgets');
+export async function apiGetBudgets(signal?: ApiSignal): Promise<ApiBudget[]> {
+  const response = await api.get<ApiBudget[]>('/budgets', {
+    signal: resolveSignal(signal),
+  });
   return response.data;
 }
 
-export async function apiGetBudgetStatus(): Promise<ApiBudgetStatus[]> {
-  const response = await api.get<ApiBudgetStatus[]>('/budgets/status');
+export async function apiGetBudgetStatus(signal?: ApiSignal): Promise<ApiBudgetStatus[]> {
+  const response = await api.get<ApiBudgetStatus[]>('/budgets/status', {
+    signal: resolveSignal(signal),
+  });
   return response.data;
 }
 
@@ -44,16 +48,18 @@ export interface ApiBudgetAlert {
   created_at: string;
 }
 
-export async function apiGetFinOpsAnomalies(limit = 50): Promise<ApiCostAnomaly[]> {
+export async function apiGetFinOpsAnomalies(limit = 50, signal?: ApiSignal): Promise<ApiCostAnomaly[]> {
   const response = await api.get<{ anomalies?: ApiCostAnomaly[] }>('/analytics/finops/anomalies', {
     params: { limit },
+    signal: resolveSignal(signal),
   });
   return response.data?.anomalies ?? [];
 }
 
-export async function apiGetBudgetAlerts(limit = 50): Promise<ApiBudgetAlert[]> {
+export async function apiGetBudgetAlerts(limit = 50, signal?: ApiSignal): Promise<ApiBudgetAlert[]> {
   const response = await api.get<{ alerts?: ApiBudgetAlert[] }>('/analytics/finops/budget-alerts', {
     params: { limit },
+    signal: resolveSignal(signal),
   });
   return response.data?.alerts ?? [];
 }

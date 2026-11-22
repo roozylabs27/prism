@@ -7,6 +7,6 @@ export function useOrganizationQuery() {
   const scope = useTenantScopeKey();
   return useQuery({
     queryKey: ['settings', ...scope],
-    queryFn: apiGetSettings,
+    queryFn: ({ signal }) => apiGetSettings(signal),
   });
 }

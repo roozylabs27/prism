@@ -18,7 +18,7 @@ export function useMCPServersQuery() {
   const scope = useTenantScopeKey();
   return useQuery({
     queryKey: ['mcp-servers', ...scope],
-    queryFn: apiGetMCPServers,
+    queryFn: ({ signal }) => apiGetMCPServers(signal),
   });
 }
 
@@ -26,7 +26,7 @@ export function useMCPServerToolsQuery(serverId?: string | null) {
   const scope = useTenantScopeKey();
   return useQuery({
     queryKey: ['mcp-servers', ...scope, serverId, 'tools'],
-    queryFn: () => (serverId ? apiGetMCPServerTools(serverId) : Promise.resolve([])),
+    queryFn: ({ signal }) => (serverId ? apiGetMCPServerTools(serverId, signal) : Promise.resolve([])),
     enabled: Boolean(serverId),
   });
 }
@@ -35,7 +35,7 @@ export function useMCPServerEditQuery(id: string) {
   const scope = useTenantScopeKey();
   return useQuery({
     queryKey: ['mcp-servers', ...scope, id, 'edit'],
-    queryFn: () => apiGetMCPServer(id),
+    queryFn: ({ signal }) => apiGetMCPServer(id, signal),
     enabled: Boolean(id),
   });
 }
@@ -44,7 +44,7 @@ export function useMCPServerStatsQuery(id: string, days: number = 30) {
   const scope = useTenantScopeKey();
   return useQuery({
     queryKey: ['mcp-servers', ...scope, id, 'stats', days],
-    queryFn: () => apiGetMCPServerStats(id, days),
+    queryFn: ({ signal }) => apiGetMCPServerStats(id, days, signal),
     enabled: Boolean(id),
   });
 }

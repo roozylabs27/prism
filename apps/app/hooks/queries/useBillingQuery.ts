@@ -7,7 +7,7 @@ export function useBillingPlansQuery() {
   const scope = useTenantScopeKey();
   return useQuery({
     queryKey: ['billing-plans', ...scope],
-    queryFn: apiGetBillingPlans,
+    queryFn: ({ signal }) => apiGetBillingPlans(signal),
   });
 }
 
@@ -15,7 +15,7 @@ export function useActiveSubscriptionQuery() {
   const scope = useTenantScopeKey();
   return useQuery({
     queryKey: ['billing-subscription', ...scope],
-    queryFn: apiGetActiveSubscription,
+    queryFn: ({ signal }) => apiGetActiveSubscription(signal),
   });
 }
 
@@ -23,7 +23,7 @@ export function useInvoicesQuery() {
   const scope = useTenantScopeKey();
   return useQuery({
     queryKey: ['billing-invoices', ...scope],
-    queryFn: apiGetInvoices,
+    queryFn: ({ signal }) => apiGetInvoices(signal),
   });
 }
 

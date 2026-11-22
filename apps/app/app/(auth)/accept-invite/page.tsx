@@ -30,7 +30,7 @@ function AcceptInviteForm() {
     isError: previewError,
   } = useQuery({
     queryKey: ['invite-preview', token],
-    queryFn: () => apiGetInvitePreview(token),
+    queryFn: ({ signal }) => apiGetInvitePreview(token, signal),
     enabled: token.length > 0,
     retry: false,
   });

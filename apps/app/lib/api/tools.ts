@@ -1,4 +1,4 @@
-import { api } from './client';
+import { api, resolveSignal, ApiSignal } from './client';
 import {
   ApiTool,
   ApiToolWithBackends,
@@ -6,13 +6,17 @@ import {
   ApiToolExecutionResult,
 } from './types/tool';
 
-export async function apiGetTools(): Promise<ApiTool[]> {
-  const response = await api.get<ApiTool[]>('/tools');
+export async function apiGetTools(signal?: ApiSignal): Promise<ApiTool[]> {
+  const response = await api.get<ApiTool[]>('/tools', {
+    signal: resolveSignal(signal),
+  });
   return response.data;
 }
 
-export async function apiGetTool(id: string): Promise<ApiToolWithBackends> {
-  const response = await api.get<ApiToolWithBackends>(`/tools/${id}`);
+export async function apiGetTool(id: string, signal?: ApiSignal): Promise<ApiToolWithBackends> {
+  const response = await api.get<ApiToolWithBackends>(`/tools/${id}`, {
+    signal: resolveSignal(signal),
+  });
   return response.data;
 }
 

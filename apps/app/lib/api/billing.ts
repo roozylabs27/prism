@@ -1,4 +1,4 @@
-import { api } from './client';
+import { api, resolveSignal, ApiSignal } from './client';
 import {
   ApiBillingPlan,
   ApiSubscriptionStatus,
@@ -6,13 +6,17 @@ import {
 } from './types/billing';
 import { listData } from './envelope';
 
-export async function apiGetBillingPlans(): Promise<ApiBillingPlan[]> {
-  const response = await api.get<ApiBillingPlan[] | { data?: ApiBillingPlan[] }>('/billing/plans');
+export async function apiGetBillingPlans(signal?: ApiSignal): Promise<ApiBillingPlan[]> {
+  const response = await api.get<ApiBillingPlan[] | { data?: ApiBillingPlan[] }>('/billing/plans', {
+    signal: resolveSignal(signal),
+  });
   return listData(response.data);
 }
 
-export async function apiGetActiveSubscription(): Promise<ApiSubscriptionStatus> {
-  const response = await api.get<ApiSubscriptionStatus>('/billing/subscription');
+export async function apiGetActiveSubscription(signal?: ApiSignal): Promise<ApiSubscriptionStatus> {
+  const response = await api.get<ApiSubscriptionStatus>('/billing/subscription', {
+    signal: resolveSignal(signal),
+  });
   return response.data;
 }
 
@@ -24,7 +28,9 @@ export async function apiUpgradeSubscription(planId: string): Promise<ApiSubscri
   return response.data;
 }
 
-export async function apiGetInvoices(): Promise<ApiBillingInvoice[]> {
-  const response = await api.get<ApiBillingInvoice[] | { data?: ApiBillingInvoice[] }>('/billing/invoices');
+export async function apiGetInvoices(signal?: ApiSignal): Promise<ApiBillingInvoice[]> {
+  const response = await api.get<ApiBillingInvoice[] | { data?: ApiBillingInvoice[] }>('/billing/invoices', {
+    signal: resolveSignal(signal),
+  });
   return listData(response.data);
 }

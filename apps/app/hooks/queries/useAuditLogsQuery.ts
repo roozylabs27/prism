@@ -6,6 +6,6 @@ export function useAuditLogsQuery(params?: { page?: number; limit?: number }) {
   const scope = useTenantScopeKey();
   return useQuery({
     queryKey: ['audit-logs', ...scope, params],
-    queryFn: () => apiGetAuditLogs(params),
+    queryFn: ({ signal }) => apiGetAuditLogs(params, signal),
   });
 }

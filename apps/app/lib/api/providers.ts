@@ -1,8 +1,10 @@
-import { api } from './client';
+import { api, resolveSignal, ApiSignal } from './client';
 import { ApiProvider } from './types/provider';
 
-export async function apiGetProviders(): Promise<ApiProvider[]> {
-  const response = await api.get<ApiProvider[]>('/providers');
+export async function apiGetProviders(signal?: ApiSignal): Promise<ApiProvider[]> {
+  const response = await api.get<ApiProvider[]>('/providers', {
+    signal: resolveSignal(signal),
+  });
   return response.data;
 }
 

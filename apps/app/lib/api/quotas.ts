@@ -1,9 +1,11 @@
-import { api } from './client';
+import { api, resolveSignal, ApiSignal } from './client';
 import { ApiTenantQuota } from './types/billing';
 import { listData } from './envelope';
 
-export async function apiGetQuotas(): Promise<ApiTenantQuota[]> {
-  const response = await api.get<ApiTenantQuota[] | { data?: ApiTenantQuota[] }>('/quotas');
+export async function apiGetQuotas(signal?: ApiSignal): Promise<ApiTenantQuota[]> {
+  const response = await api.get<ApiTenantQuota[] | { data?: ApiTenantQuota[] }>('/quotas', {
+    signal: resolveSignal(signal),
+  });
   return listData(response.data);
 }
 
