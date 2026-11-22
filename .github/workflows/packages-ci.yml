@@ -52,6 +52,9 @@ jobs:
       - name: Typecheck packages
         run: pnpm --recursive --filter "./packages/*" run lint
 
+      - name: Test packages
+        run: pnpm --recursive --filter "./packages/*" run test
+
   python:
     name: Test Python SDK (${{ matrix.python-version }})
     runs-on: ubuntu-latest

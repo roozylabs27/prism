@@ -113,6 +113,8 @@ jobs:
           DATABASE_URL: "postgres://postgres:postgrespassword@localhost:5432/prism_test?sslmode=disable"
           REDIS_URL: "redis://localhost:6379"
           ENCRYPTION_KEY: "test-encryption-key-32-bytes!!"
+          AUDIT_HMAC_KEY: "test-audit-hmac-key-32-bytes-ok!"
+          REDIS_FAIL_CLOSED: "true"
         run: |
           go test ./... -v -race -coverprofile=coverage.out
 
@@ -172,6 +174,8 @@ jobs:
           APP_ENV: test
           DATABASE_URL: "postgres://postgres:postgrespassword@localhost:5432/prism_test?sslmode=disable"
           ENCRYPTION_KEY: "test-encryption-key-32-bytes!!"
+          AUDIT_HMAC_KEY: "test-audit-hmac-key-32-bytes-ok!"
+          REDIS_FAIL_CLOSED: "true"
           RUN_MIGRATIONS: "true"
         run: go run ./cmd/server --migrate-only
 

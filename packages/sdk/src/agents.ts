@@ -5,7 +5,8 @@ export class AgentsModule {
   constructor(private client: HttpClient) {}
 
   public async list(): Promise<Agent[]> {
-    return this.client.request<Agent[]>("/api/agents");
+    const res = await this.client.request<{ data?: Agent[] } | Agent[]>("/api/agents");
+    return Array.isArray(res) ? res : (res.data ?? []);
   }
 
   public async get(id: string): Promise<Agent> {
