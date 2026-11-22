@@ -32,6 +32,7 @@ import { cn } from '@/lib/utils';
 import { DEFAULT_FEATURE_FLAGS, type FeatureFlagKey } from '@/lib/features/features';
 import { useFeatureFlagsQuery } from '@/hooks/queries/useFeatureFlags';
 import { Button } from '@/components/atoms/Button';
+import { PrismLogo } from '@/components/icons';
 import {
   Dialog,
   DialogContent,
@@ -111,14 +112,7 @@ const navGroups: NavGroup[] = [
 ];
 
 function PrismBrandMark() {
-  return (
-    <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-violet-500/35 bg-violet-500/15 text-prism-violet">
-      <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-        <polygon points="12 3 21 19 3 19" />
-        <line x1="12" y1="3" x2="12" y2="19" className="text-prism-cyan" stroke="currentColor" />
-      </svg>
-    </div>
-  );
+  return <PrismLogo className="h-6 w-6 shrink-0 text-[#6D28D9] dark:text-[#B49CFB]" />;
 }
 
 export function DashboardSidebar() {

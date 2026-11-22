@@ -7,7 +7,8 @@ import { ThemeToggle } from '@/components/molecules/ThemeToggle';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/molecules/Card';
 import { Button } from '@/components/atoms/Button';
 import { Badge } from '@/components/atoms/Badge';
-import { Shield, AlertTriangle, RefreshCw, Home, ChevronDown, ChevronUp, Activity } from 'lucide-react';
+import { PrismLogo } from '@/components/icons';
+import { AlertTriangle, RefreshCw, Home, ChevronDown, ChevronUp, Activity } from 'lucide-react';
 
 export default function ErrorBoundaryPage({
   error,
@@ -35,9 +36,7 @@ export default function ErrorBoundaryPage({
 
       {/* Brand Header */}
       <div className="relative z-10 mb-6 flex items-center gap-2.5">
-        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-rose-600 text-white shadow-sm border border-rose-400/30">
-          <Shield className="h-5 w-5" />
-        </div>
+        <PrismLogo className="h-7 w-7 shrink-0 text-[#6D28D9] dark:text-[#B49CFB]" />
         <div className="flex flex-col">
           <span className="font-mono text-lg font-bold tracking-tight text-foreground">
             RoozyLabs <span className="text-red-400">Prism</span>

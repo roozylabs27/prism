@@ -2,7 +2,8 @@
 
 import { useEffect } from 'react';
 import Link from 'next/link';
-import { Shield, AlertOctagon, RefreshCw } from 'lucide-react';
+import { PrismLogo } from '@/components/icons';
+import { AlertOctagon, RefreshCw } from 'lucide-react';
 
 export default function GlobalError({
   error,
@@ -17,13 +18,14 @@ export default function GlobalError({
 
   return (
     <html lang="en">
+      <head>
+        <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+      </head>
       <body className="min-h-screen bg-[#090B0D] text-[#F8FAFC] font-sans antialiased flex flex-col items-center justify-center p-4">
         <div className="relative z-10 w-full max-w-md rounded-xl border border-rose-500/30 bg-[#0E1113] p-6 shadow-2xl space-y-6">
           {/* Brand Header */}
           <div className="flex items-center gap-3 border-b border-white/10 pb-4">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-rose-600 text-white shadow-sm">
-              <Shield className="h-5 w-5" />
-            </div>
+            <PrismLogo className="h-7 w-7 shrink-0 text-[#B49CFB]" />
             <div className="flex flex-col">
               <span className="font-mono text-lg font-bold tracking-tight text-white">
                 RoozyLabs <span className="text-rose-400">Prism</span>

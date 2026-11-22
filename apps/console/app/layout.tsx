@@ -22,6 +22,10 @@ const jetbrainsMono = JetBrains_Mono({
 export const metadata: Metadata = {
   title: 'RoozyLabs Prism: Universal AI Control Plane',
   description: 'AI Infrastructure Control Plane, Model Gateway, Credential Rotation & Governance',
+  icons: {
+    icon: [{ url: '/favicon.svg', type: 'image/svg+xml' }],
+    shortcut: '/favicon.svg',
+  },
 };
 
 export default function RootLayout({

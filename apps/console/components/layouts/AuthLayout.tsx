@@ -3,7 +3,7 @@
 import type { ReactNode } from 'react';
 import { ThemeToggle } from '@/components/molecules/ThemeToggle';
 import { AuthBackgroundAnimation } from '@/components/molecules/AuthBackgroundAnimation';
-import { Shield } from 'lucide-react';
+import { PrismLogo } from '@/components/icons';
 
 export function AuthLayout({ children }: { children: ReactNode }) {
   return (
@@ -18,9 +18,7 @@ export function AuthLayout({ children }: { children: ReactNode }) {
 
       {/* Brand Header */}
       <div className="relative z-10 mb-6 flex items-center gap-3">
-        <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-violet-500/35 bg-violet-500/15 text-prism-violet shadow-sm">
-          <Shield className="h-5 w-5" />
-        </div>
+        <PrismLogo className="h-7 w-7 shrink-0 text-[#6D28D9] dark:text-[#B49CFB]" />
         <div className="flex flex-col">
           <span className="font-mono text-lg font-bold tracking-tight text-foreground">
             RoozyLabs <span className="text-prism-violet">Prism</span>

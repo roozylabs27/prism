@@ -4,6 +4,24 @@ export interface IconProps extends React.SVGProps<SVGSVGElement> {
   className?: string;
 }
 
+export function PrismLogo({ className = 'h-6 w-6', ...props }: IconProps) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      className={className}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.75"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      {...props}
+    >
+      <path d="M12 3 21 19H3Z" />
+      <path d="M12 3v16" />
+    </svg>
+  );
+}
+
 export function GoogleIcon({ className = 'h-4 w-4', ...props }: IconProps) {
   return (
     <svg className={className} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" {...props}>

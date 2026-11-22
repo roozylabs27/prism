@@ -6,7 +6,8 @@ import { ThemeToggle } from '@/components/molecules/ThemeToggle';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/molecules/Card';
 import { Button } from '@/components/atoms/Button';
 import { Badge } from '@/components/atoms/Badge';
-import { ShieldAlert, Home, ArrowLeft, Lock } from 'lucide-react';
+import { PrismLogo } from '@/components/icons';
+import { Home, ArrowLeft, Lock } from 'lucide-react';
 
 export default function ForbiddenPage() {
   return (
@@ -21,9 +22,7 @@ export default function ForbiddenPage() {
 
       {/* Brand Header */}
       <div className="relative z-10 mb-6 flex items-center gap-2.5">
-        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-600 text-white shadow-sm border border-amber-400/30">
-          <ShieldAlert className="h-5 w-5" />
-        </div>
+        <PrismLogo className="h-7 w-7 shrink-0 text-[#6D28D9] dark:text-[#B49CFB]" />
         <div className="flex flex-col">
           <span className="font-mono text-lg font-bold tracking-tight text-foreground">
             RoozyLabs <span className="text-amber-400">Prism</span>
