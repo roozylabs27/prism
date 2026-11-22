@@ -29,18 +29,20 @@ export function useBudgetStatusQuery() {
   });
 }
 
-export function useFinOpsAnomaliesQuery() {
+export function useFinOpsAnomaliesQuery(enabled = true) {
   const scope = useTenantScopeKey();
   return useQuery({
     queryKey: ['finops-anomalies', ...scope],
     queryFn: ({ signal }) => apiGetFinOpsAnomalies(50, signal),
+    enabled,
   });
 }
 
-export function useBudgetAlertsQuery() {
+export function useBudgetAlertsQuery(enabled = true) {
   const scope = useTenantScopeKey();
   return useQuery({
     queryKey: ['budget-alerts', ...scope],
     queryFn: ({ signal }) => apiGetBudgetAlerts(50, signal),
+    enabled,
   });
 }

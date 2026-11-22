@@ -51,14 +51,17 @@ export function BudgetFormSheet({ open, onOpenChange }: BudgetFormSheetProps) {
   }, [open, reset]);
 
   const onSubmit = (values: BudgetFormValues) => {
+    const warnPct = parseFloat(values.warningThreshold);
+    const critPct = parseFloat(values.criticalThreshold);
     createMutation.mutate(
       {
         name: values.name.trim(),
         monthlyLimit: parseFloat(values.monthlyLimit),
         dailyLimit: values.dailyLimit ? parseFloat(values.dailyLimit) : 0,
         hardLimit: values.hardLimit,
-        warningThreshold: parseFloat(values.warningThreshold) || 80,
-        criticalThreshold: parseFloat(values.criticalThreshold) || 95,
+        // Backend stores thresholds as 0..1 fractions while the UI presents 1..100%.
+        warningThreshold: (Number.isFinite(warnPct) ? warnPct : 80) / 100,
+        criticalThreshold: (Number.isFinite(critPct) ? critPct : 95) / 100,
         enabled: true,
       },
       {
@@ -174,8 +177,9 @@ export function BudgetFormSheet({ open, onOpenChange }: BudgetFormSheetProps) {
                       <Input
                         {...field}
                         type="number"
-                        min="0"
+                        min="1"
                         max="100"
+                        step="1"
                         placeholder="80"
                         disabled={createMutation.isPending}
                       />
@@ -194,8 +198,9 @@ export function BudgetFormSheet({ open, onOpenChange }: BudgetFormSheetProps) {
                       <Input
                         {...field}
                         type="number"
-                        min="0"
+                        min="1"
                         max="100"
+                        step="1"
                         placeholder="95"
                         disabled={createMutation.isPending}
                       />

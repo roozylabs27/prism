@@ -23,7 +23,7 @@ import { ErrorState, EmptyState } from '@/components/molecules/StateAlerts';
 import { Wallet, Plus, Trash2, Pencil } from 'lucide-react';
 import { toast } from 'sonner';
 import { ConfirmDialog } from '@/components/molecules/ConfirmDialog';
-import { PermissionGuard } from '@/components/PermissionProvider';
+import { PermissionGuard, usePermission } from '@/components/PermissionProvider';
 import { getErrorMessage } from '@/types/ui';
 import { BudgetFormSheet } from './_components/BudgetFormSheet';
 import { QuotaFormSheet } from './_components/QuotaFormSheet';
@@ -33,12 +33,20 @@ function toMoney(val: unknown): string {
   return `$${(Number.isFinite(n) ? n : 0).toFixed(2)}`;
 }
 
+function formatThresholdPct(val: number | undefined, fallback: number): number {
+  if (val == null || !Number.isFinite(val)) return fallback;
+  if (val > 0 && val <= 1) return Math.round(val * 100);
+  return Math.round(val);
+}
+
 export default function BudgetsPage() {
+  const { hasPermission, isLoading: permsLoading } = usePermission();
+  const canReadFinOps = !permsLoading && hasPermission('finops:read');
   const { data: budgets, isLoading: budgetsLoading, isError: budgetsError, refetch: refetchBudgets } = useBudgetsQuery();
   const { data: budgetStatus, isLoading: statusLoading, isError: statusError, refetch: refetchStatus } = useBudgetStatusQuery();
   const { data: quotasData, isLoading: quotasLoading, isError: quotasError, refetch: refetchQuotas } = useQuotasQuery();
-  const { data: alertsList = [] } = useBudgetAlertsQuery();
-  const { data: anomaliesList = [] } = useFinOpsAnomaliesQuery();
+  const { data: alertsList = [], isError: alertsError, refetch: refetchAlerts } = useBudgetAlertsQuery(canReadFinOps);
+  const { data: anomaliesList = [], isError: anomaliesError, refetch: refetchAnomalies } = useFinOpsAnomaliesQuery(canReadFinOps);
   const ackMutation = useAcknowledgeBudgetAlertMutation();
   const deleteMutation = useDeleteBudget();
 
@@ -158,7 +166,7 @@ export default function BudgetsPage() {
       key: 'thresholds',
       render: (_, record) => (
         <span className="text-xs text-muted-foreground">
-          {record.warningThreshold ?? record.alertThresholdPct ?? 80}% / {record.criticalThreshold ?? 100}%
+          {formatThresholdPct(record.warningThreshold ?? record.alertThresholdPct, 80)}% / {formatThresholdPct(record.criticalThreshold, 95)}%
         </span>
       ),
     },
@@ -334,13 +342,29 @@ export default function BudgetsPage() {
         </TabsContent>
 
         <TabsContent value="alerts" className="space-y-4">
+          {!permsLoading && !canReadFinOps ? (
+            <Card>
+              <CardContent className="pt-6">
+                <EmptyState
+                  title="FinOps Access Required"
+                  description="Your role does not include finops:read permission to view budget alerts and spend anomalies."
+                />
+              </CardContent>
+            </Card>
+          ) : (
           <div className="grid gap-6 lg:grid-cols-2">
             <Card>
               <CardHeader>
                 <CardTitle className="text-sm font-semibold">Unacknowledged Budget Alerts</CardTitle>
               </CardHeader>
               <CardContent>
-                {alertsList.length === 0 ? (
+                {alertsError ? (
+                  <ErrorState
+                    title="Failed to load budget alerts"
+                    description="Could not retrieve FinOps budget alerts."
+                    onRetry={refetchAlerts}
+                  />
+                ) : alertsList.length === 0 ? (
                   <EmptyState
                     title="No Active Budget Alerts"
                     description="All budgets are currently below threshold or alerts have been acknowledged."
@@ -383,7 +407,13 @@ export default function BudgetsPage() {
                 <CardTitle className="text-sm font-semibold">Spend &amp; Spike Anomalies</CardTitle>
               </CardHeader>
               <CardContent>
-                {anomaliesList.length === 0 ? (
+                {anomaliesError ? (
+                  <ErrorState
+                    title="Failed to load cost anomalies"
+                    description="Could not retrieve FinOps spend anomaly telemetry."
+                    onRetry={refetchAnomalies}
+                  />
+                ) : anomaliesList.length === 0 ? (
                   <EmptyState
                     title="No Cost Anomalies Detected"
                     description="Automated hourly anomaly detection has not flagged unusual spend deviations."
@@ -409,6 +439,7 @@ export default function BudgetsPage() {
               </CardContent>
             </Card>
           </div>
+          )}
         </TabsContent>
       </Tabs>
 
